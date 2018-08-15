@@ -41,14 +41,17 @@ class DatasetFeaturesProvider():
         """Return whether dataset is read-only."""
         return not self.writable
 
-    def index(self, bbox, filterexpr):
+    def index(self, bbox, client_srid, filterexpr):
         """Find features inside bounding box.
 
         :param list[float] bbox: Bounding box as [<minx>,<miny>,<maxx>,<maxy>]
                                  or None for no bounding box
+        :param int client_srid: Client SRID or None for dataset SRID
         :param (sql, params) filterexpr: A filter expression as a tuple
                                          (sql_expr, bind_params)
         """
+        srid = client_srid or self.srid
+
         # build query SQL
 
         # select id and permitted attributes
@@ -59,13 +62,20 @@ class DatasetFeaturesProvider():
 
         if bbox is not None:
             # bbox filter
-            where_clauses.append("""
-                ST_Intersects({geom},
-                    ST_SetSRID(
-                        'BOX3D(:minx :miny, :maxx :maxy)'::box3d, {srid}
-                    )
+            bbox_geom_sql = self.transform_geom_sql("""
+                ST_SetSRID(
+                    'BOX3D(:minx :miny, :maxx :maxy)'::box3d,
+                    {bbox_srid}
                 )
-            """.format(geom=self.geometry_column, srid=self.srid))
+            """, srid, self.srid)
+            where_clauses.append(("""
+                ST_Intersects({geom},
+                    %s
+                )
+            """ % bbox_geom_sql).format(
+                geom=self.geometry_column, bbox_srid=srid,
+                srid=self.srid
+            ))
             params.update({
                 "minx": bbox[0],
                 "miny": bbox[1],
@@ -81,13 +91,16 @@ class DatasetFeaturesProvider():
         if where_clauses:
             where_clause = "WHERE " + " AND ".join(where_clauses)
 
-        sql = sql_text("""
+        geom_sql = self.transform_geom_sql("{geom}", self.srid, srid)
+        sql = sql_text(("""
             SELECT {columns},
-                ST_AsGeoJSON({geom}) AS json_geom
+                ST_AsGeoJSON(%s) AS json_geom
             FROM {table}
             {where_clause};
-        """.format(columns=columns, geom=self.geometry_column,
-                   table=self.table_name, where_clause=where_clause))
+        """ % geom_sql).format(
+            columns=columns, geom=self.geometry_column, table=self.table_name,
+            where_clause=where_clause
+        ))
 
         # connect to database and start transaction (for read-only access)
         conn = self.db.connect()
@@ -99,7 +112,7 @@ class DatasetFeaturesProvider():
 
         for row in result:
             # NOTE: feature CRS removed by marshalling
-            features.append(self.feature_from_query(row))
+            features.append(self.feature_from_query(row, srid))
 
         # roll back transaction and close database connection
         trans.rollback()
@@ -110,30 +123,36 @@ class DatasetFeaturesProvider():
             'crs': {
                 'type': 'name',
                 'properties': {
-                    'name': 'urn:ogc:def:crs:EPSG::2056'
+                    'name': 'urn:ogc:def:crs:EPSG::%s' % srid
                 }
             },
             'features': features
         }
 
-    def show(self, id):
+    def show(self, id, client_srid):
         """Get a feature.
 
         :param int id: Dataset feature ID
+        :param int client_srid: Client SRID or None for dataset SRID
         """
+        srid = client_srid or self.srid
+
         # build query SQL
 
         # select id and permitted attributes
         columns = (', ').join([self.primary_key] + self.attributes)
 
-        sql = sql_text("""
+        geom_sql = self.transform_geom_sql("{geom}", self.srid, srid)
+        sql = sql_text(("""
             SELECT {columns},
-                ST_AsGeoJSON({geom}) AS json_geom
+                ST_AsGeoJSON(%s) AS json_geom
             FROM {table}
             WHERE {pkey} = :id
             LIMIT 1;
-        """.format(columns=columns, geom=self.geometry_column,
-                   table=self.table_name, pkey=self.primary_key))
+        """ % geom_sql).format(
+            columns=columns, geom=self.geometry_column, table=self.table_name,
+            pkey=self.primary_key
+        ))
 
         # connect to database and start transaction (for read-only access)
         conn = self.db.connect()
@@ -144,7 +163,7 @@ class DatasetFeaturesProvider():
         result = conn.execute(sql, id=id)
         for row in result:
             # NOTE: result is empty if not found
-            feature = self.feature_from_query(row)
+            feature = self.feature_from_query(row, srid)
 
         # roll back transaction and close database connection
         trans.rollback()
@@ -159,16 +178,20 @@ class DatasetFeaturesProvider():
         """
         # build query SQL
         sql_params = self.sql_params_for_feature(feature)
+        srid = sql_params['client_srid']
 
-        sql = sql_text("""
+        geom_sql = self.transform_geom_sql("{geom}", self.srid, srid)
+        sql = sql_text(("""
             INSERT INTO {table} ({columns})
                 VALUES ({values_sql})
             RETURNING {return_columns},
-                ST_AsGeoJSON({geom}) AS json_geom;
-        """.format(table=self.table_name, columns=sql_params['columns'],
-                   values_sql=sql_params['values_sql'],
-                   return_columns=sql_params['return_columns'],
-                   geom=self.geometry_column))
+                ST_AsGeoJSON(%s) AS json_geom;
+        """ % geom_sql).format(
+            table=self.table_name, columns=sql_params['columns'],
+            values_sql=sql_params['values_sql'],
+            return_columns=sql_params['return_columns'],
+            geom=self.geometry_column
+        ))
 
         # connect to database
         conn = self.db.connect()
@@ -178,7 +201,7 @@ class DatasetFeaturesProvider():
         feature = None
         result = conn.execute(sql, **(sql_params['bound_values']))
         for row in result:
-            feature = self.feature_from_query(row)
+            feature = self.feature_from_query(row, srid)
 
         # close database connection
         conn.close()
@@ -193,17 +216,21 @@ class DatasetFeaturesProvider():
         """
         # build query SQL
         sql_params = self.sql_params_for_feature(feature)
+        srid = sql_params['client_srid']
 
-        sql = sql_text("""
+        geom_sql = self.transform_geom_sql("{geom}", self.srid, srid)
+        sql = sql_text(("""
             UPDATE {table} SET ({columns}) =
                 ({values_sql})
             WHERE {pkey} = :{pkey}
             RETURNING {return_columns},
-                ST_AsGeoJSON({geom}) AS json_geom;
-        """.format(table=self.table_name, columns=sql_params['columns'],
-                   values_sql=sql_params['values_sql'], pkey=self.primary_key,
-                   return_columns=sql_params['return_columns'],
-                   geom=self.geometry_column))
+                ST_AsGeoJSON(%s) AS json_geom;
+        """ % geom_sql).format(
+            table=self.table_name, columns=sql_params['columns'],
+            values_sql=sql_params['values_sql'], pkey=self.primary_key,
+            return_columns=sql_params['return_columns'],
+            geom=self.geometry_column
+        ))
 
         update_values = sql_params['bound_values']
         update_values[self.primary_key] = id
@@ -217,7 +244,7 @@ class DatasetFeaturesProvider():
         result = conn.execute(sql, **update_values)
         for row in result:
             # NOTE: result is empty if not found
-            feature = self.feature_from_query(row)
+            feature = self.feature_from_query(row, srid)
 
         # close database connection
         conn.close()
@@ -270,6 +297,23 @@ class DatasetFeaturesProvider():
                 pass
 
         # invalid bbox
+        return None
+
+    def parse_crs(self, crs):
+        """Parse and validate a CRS and return its SRID.
+
+        :param str crs: Coordinate reference system as 'EPSG:<srid>'
+        """
+        if crs.startswith('EPSG:'):
+            try:
+                # extract SRID
+                srid = int(crs.split(':')[1])
+                return srid
+            except ValueError:
+                # conversion failed
+                pass
+
+        # invalid CRS
         return None
 
     def parse_filter(self, filterexpr):
@@ -466,11 +510,31 @@ class DatasetFeaturesProvider():
 
         return errors
 
-    def feature_from_query(self, row):
+    def transform_geom_sql(self, geom_sql, geom_srid, target_srid):
+        """Generate SQL fragment for transforming input geometry geom_sql
+        from geom_srid to target_srid.
+
+        :param str geom_sql: SQL fragment for input geometry
+        :param str geom_srid: SRID of input geometry
+        :param str target_srid: target SRID
+        """
+        if geom_sql is None or geom_srid is None or geom_srid == target_srid:
+            # no transformation
+            pass
+        else:
+            # transform to target SRID
+            geom_sql = "ST_Transform(%s, %s)" % (geom_sql, target_srid)
+
+        return geom_sql
+
+    def feature_from_query(self, row, client_srid):
         """Build GeoJSON Feature from query result row.
 
         :param obj row: Row result from query
+        :param int client_srid: Client SRID or None for dataset SRID
         """
+        srid = client_srid or self.srid
+
         props = OrderedDict()
         for attr in self.attributes:
             props[attr] = row[attr]
@@ -483,13 +547,14 @@ class DatasetFeaturesProvider():
             'crs': {
                 'type': 'name',
                 'properties': {
-                    'name': 'urn:ogc:def:crs:EPSG::%d' % self.srid
+                    'name': 'urn:ogc:def:crs:EPSG::%d' % srid
                 }
             }
         }
 
     def sql_params_for_feature(self, feature):
-        """Build SQL fragments and values for feature INSERT or UPDATE.
+        """Build SQL fragments and values for feature INSERT or UPDATE and
+        get client SRID from GeoJSON CRS.
 
         :param object feature: GeoJSON Feature
         """
@@ -503,6 +568,17 @@ class DatasetFeaturesProvider():
         # get geometry value as GeoJSON string
         bound_values[self.geometry_column] = json.dumps(feature['geometry'])
 
+        # get client SRID from GeoJSON CRS
+        if 'crs' not in feature:
+            srid = self.srid
+        else:
+            srid = feature['crs']['properties']['name'].split(':')[-1]
+            if srid == 'CRS84':
+                # use EPSG:4326 for 'urn:ogc:def:crs:OGC:1.3:CRS84'
+                srid = 4326
+            else:
+                srid = int(srid)
+
         # columns for permitted attributes and geometry
         columns = (', ').join(attribute_columns + [self.geometry_column])
 
@@ -511,10 +587,10 @@ class DatasetFeaturesProvider():
         #     ==>
         #      ":name, ST_SetSRID(ST_GeomFromGeoJSON(:geom), 2056)"
         bound_columns = [":%s" % attr for attr in attribute_columns]
-        # build geometry from GeoJSON
-        geometry_value = "ST_SetSRID(ST_GeomFromGeoJSON(:{geom}), {srid})"
-        geometry_value = geometry_value.format(geom=self.geometry_column,
-                                               srid=self.srid)
+        # build geometry from GeoJSON, transformed to dataset CRS
+        geometry_value = self.transform_geom_sql(
+            "ST_SetSRID(ST_GeomFromGeoJSON(:{geom}), {srid})", srid, self.srid
+        ).format(geom=self.geometry_column, srid=srid)
         values_sql = (', ').join(bound_columns + [geometry_value])
 
         # return id and permitted attributes
@@ -524,5 +600,6 @@ class DatasetFeaturesProvider():
             'columns': columns,
             'values_sql': values_sql,
             'return_columns': return_columns,
-            'bound_values': bound_values
+            'bound_values': bound_values,
+            'client_srid': srid
         }

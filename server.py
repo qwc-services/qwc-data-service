@@ -162,7 +162,11 @@ feature_validation_response = create_model(api, 'Feature validation error', [
 # request parser
 index_parser = reqparse.RequestParser(argument_class=CaseInsensitiveArgument)
 index_parser.add_argument('bbox')
+index_parser.add_argument('crs')
 index_parser.add_argument('filter')
+
+show_parser = reqparse.RequestParser(argument_class=CaseInsensitiveArgument)
+show_parser.add_argument('crs')
 
 
 # routes
@@ -173,6 +177,7 @@ index_parser.add_argument('filter')
 class DataCollection(Resource):
     @api.doc('index')
     @api.param('bbox', 'Bounding box')
+    @api.param('crs', 'Client coordinate reference system')
     @api.param('filter', 'Comma-separated list of filter expressions of the '
                'form "a = b" and "c like d"')
     @api.expect(index_parser)
@@ -184,18 +189,21 @@ class DataCollection(Resource):
         Return dataset features inside bounding box as a
         GeoJSON FeatureCollection.
 
-        Query parameter:
+        Query parameters:
 
         <b>bbox</b>: Bounding box as
                      <b>&lt;minx>,&lt;miny>,&lt;maxx>,&lt;maxy></b>,
-                     e.g. <b>2607000,1228000,2608000,1229000</b>
+                     e.g. <b>950700,6003900,950800,6004000</b>
+
+        <b>crs</b>: Client CRS, e.g. <b>EPSG:3857<b>
         """
         args = index_parser.parse_args()
         bbox = args['bbox']
+        crs = args['crs']
         filterexpr = args['filter']
 
         result = data_service.index(
-            get_jwt_identity(), dataset, bbox, filterexpr
+            get_jwt_identity(), dataset, bbox, crs, filterexpr
         )
         if 'error' not in result:
             return result['feature_collection']
@@ -239,14 +247,23 @@ class DataCollection(Resource):
 @api.param('id', 'Feature ID')
 class DataMember(Resource):
     @api.doc('show')
+    @api.param('crs', 'Client coordinate reference system')
+    @api.expect(show_parser)
     @api.marshal_with(geojson_feature_response)
     @jwt_optional
     def get(self, dataset, id):
         """Get a dataset feature
 
         Return dataset feature with ID as a GeoJSON Feature.
+
+        Query parameter:
+
+        <b>crs</b>: Client CRS, e.g. <b>EPSG:3857<b>
         """
-        result = data_service.show(get_jwt_identity(), dataset, id)
+        args = show_parser.parse_args()
+        crs = args['crs']
+
+        result = data_service.show(get_jwt_identity(), dataset, id, crs)
         if 'error' not in result:
             return result['feature']
         else:

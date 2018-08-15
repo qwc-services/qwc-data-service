@@ -19,12 +19,13 @@ class DataService():
         # Cache for DatasetFeaturesProvider instances
         self.dataset_features_providers = Cache()
 
-    def index(self, username, dataset, bbox, filterexpr):
+    def index(self, username, dataset, bbox, crs, filterexpr):
         """Find dataset features inside bounding box.
 
         :param str username: User name
         :param str dataset: Dataset ID
         :param str bbox: Bounding box as '<minx>,<miny>,<maxx>,<maxy>' or None
+        :param str crs: Client CRS as 'EPSG:<srid>' or None
         :param str filterexpr: Comma-separated filter expressions as
                                '<k1> = <v1>, <k2> like <v2>, ...'
         """
@@ -40,6 +41,15 @@ class DataService():
                         'error': "Invalid bounding box",
                         'error_code': 400
                     }
+            srid = None
+            if crs is not None:
+                # parse and validate unput CRS
+                srid = dataset_features_provider.parse_crs(crs)
+                if srid is None:
+                    return {
+                        'error': "Invalid CRS",
+                        'error_code': 400
+                    }
             if filterexpr is not None:
                 # parse and validate input filter
                 filterexpr = dataset_features_provider.parse_filter(filterexpr)
@@ -50,24 +60,34 @@ class DataService():
                     }
 
             feature_collection = dataset_features_provider.index(
-                bbox, filterexpr
+                bbox, srid, filterexpr
             )
             return {'feature_collection': feature_collection}
         else:
             return {'error': "Dataset not found or permission error"}
 
-    def show(self, username, dataset, id):
+    def show(self, username, dataset, id, crs):
         """Get a dataset feature.
 
         :param str username: User name
         :param str dataset: Dataset ID
         :param int id: Dataset feature ID
+        :param str crs: Client CRS as 'EPSG:<srid>' or None
         """
         dataset_features_provider = self.dataset_features_provider(
             username, dataset
         )
+        srid = None
+        if crs is not None:
+            # parse and validate unput CRS
+            srid = dataset_features_provider.parse_crs(crs)
+            if srid is None:
+                return {
+                    'error': "Invalid CRS",
+                    'error_code': 400
+                }
         if dataset_features_provider is not None:
-            feature = dataset_features_provider.show(id)
+            feature = dataset_features_provider.show(id, srid)
             if feature is not None:
                 return {'feature': feature}
             else:
