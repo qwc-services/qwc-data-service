@@ -2,7 +2,6 @@ from collections import OrderedDict
 
 from qwc_services_core.database import DatabaseEngine
 from qwc_services_core.permission import PermissionClient
-from qwc_services_core.cache import Cache
 from dataset_features_provider import DatasetFeaturesProvider
 
 
@@ -16,8 +15,6 @@ class DataService():
         """Constructor"""
         self.db_engine = DatabaseEngine()
         self.permission = PermissionClient()
-        # Cache for DatasetFeaturesProvider instances
-        self.dataset_features_providers = Cache()
 
     def index(self, username, dataset, bbox, crs, filterexpr):
         """Find dataset features inside bounding box.
@@ -196,28 +193,16 @@ class DataService():
         :param str username: User name
         :param str dataset: Dataset ID
         """
-        dataset_features_provider = self.dataset_features_providers.read(
-            dataset, username, [])
-        if dataset_features_provider is None:
-            # dataset not yet cached
-            # check permissions (NOTE: returns None on error)
-            permissions = self.permission.dataset_edit_permissions(
-                dataset, username
+        dataset_features_provider = None
+
+        # check permissions (NOTE: returns None on error)
+        permissions = self.permission.dataset_edit_permissions(
+            dataset, username
+        )
+        if permissions is not None and permissions:
+            # create DatasetFeaturesProvider
+            dataset_features_provider = DatasetFeaturesProvider(
+                permissions, self.db_engine
             )
-            if permissions is not None:
-                if permissions:
-                    # create DatasetFeaturesProvider
-                    dataset_features_provider = DatasetFeaturesProvider(
-                        permissions, self.db_engine
-                    )
-                else:
-                    dataset_features_provider = False
 
-                # add to cache
-                # NOTE: False if not available or not permitted
-                self.dataset_features_providers.write(
-                    dataset, username, [], dataset_features_provider, 300)
-
-        if dataset_features_provider is False:
-            dataset_features_provider = None
         return dataset_features_provider
