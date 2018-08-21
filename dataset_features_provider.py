@@ -2,7 +2,7 @@ from collections import OrderedDict
 import re
 
 from flask import json
-from sqlalchemy.exc import InternalError
+from sqlalchemy.exc import DataError, InternalError, ProgrammingError
 from sqlalchemy.sql import text as sql_text
 
 
@@ -31,6 +31,8 @@ class DatasetFeaturesProvider():
         self.primary_key = config['primary_key']
         # permitted attributes only
         self.attributes = config['attributes']
+        # field constraints
+        self.fields = config.get('fields', {})
         self.geometry_column = config['geometry_column']
         self.geometry_type = config['geometry_type']
         self.srid = config['srid']
@@ -359,6 +361,10 @@ class DatasetFeaturesProvider():
             geometry_errors = self.validate_geometry(feature)
             if geometry_errors:
                 errors['geometry_errors'] = geometry_errors
+            else:
+                fields_errors = self.validate_fields(feature)
+                if fields_errors:
+                    errors['data_errors'] = fields_errors
 
         return errors
 
@@ -507,6 +513,119 @@ class DatasetFeaturesProvider():
         # roll back transaction and close database connection
         trans.rollback()
         conn.close()
+
+        return errors
+
+    def validate_fields(self, feature):
+        """Validate data types and constraints of GeoJSON Feature properties.
+
+        :param object feature: GeoJSON Feature
+        """
+        errors = []
+
+        if not self.fields:
+            # skip validation if fields metadata is empty
+            return errors
+
+        # connect to database
+        conn = self.db.connect()
+
+        for attr in feature['properties']:
+            constraints = self.fields.get(attr, {}).get('constraints', {})
+            data_type = self.fields.get(attr, {}).get('data_type')
+            if data_type == 'numeric':
+                data_type = 'numeric(%d,%d)' % (
+                    constraints.get('numeric_precision', 1),
+                    constraints.get('numeric_scale', 0)
+                )
+
+            input_value = feature['properties'][attr]
+            value = None
+
+            # readOnly
+            if constraints.get('readOnly', False):
+                # skip read-only fields and remove below
+                continue
+
+            # validate data type
+
+            # start transaction (for read-only access)
+            trans = conn.begin()
+
+            try:
+                # try to parse value on DB
+                sql = sql_text("SELECT (:value):: %s AS value;" % data_type)
+                result = conn.execute(sql, value=input_value)
+                for row in result:
+                    value = row['value']
+            except (DataError, ProgrammingError) as e:
+                # NOTE: current transaction is aborted
+                errors.append("Invalid value for '%s' for type %s" %
+                              (attr, data_type))
+            finally:
+                # roll back transaction
+                trans.rollback()
+
+            if value is None:
+                # invalid value type
+                continue
+
+            if data_type == 'boolean' and type(input_value) is int:
+                # prevent 'column "..." is of type boolean but expression is of
+                #          type integer'
+                errors.append("Invalid value for '%s' for type %s" %
+                              (attr, data_type))
+                continue
+
+            # validate constraints
+
+            # maxlength
+            maxlength = constraints.get('maxlength')
+            if maxlength is not None and len(str(value)) > int(maxlength):
+                errors.append(
+                    "Value for '%s' must be shorter than %d characters" %
+                    (attr, maxlength)
+                )
+
+            # min
+            minimum = constraints.get('min')
+            if minimum is not None and value < minimum:
+                errors.append(
+                    "Value for '%s' must be greater than or equal to %s" %
+                    (attr, minimum)
+                )
+
+            # max
+            maximum = constraints.get('max')
+            if maximum is not None and value > maximum:
+                errors.append(
+                    "Value for '%s' must be less than or equal to %s" %
+                    (attr, maximum)
+                )
+
+            # values
+            values = constraints.get('values', {})
+            if values and str(value) not in [v['value'] for v in values]:
+                errors.append("Invalid value for '%s'" % (attr))
+
+        # close database connection
+        conn.close()
+
+        # remove read-only properties and check required values
+        for attr in self.fields:
+            constraints = self.fields.get(attr, {}).get('constraints', {})
+            if constraints.get('readOnly', False):
+                if attr in feature['properties']:
+                    # remove read-only property from feature
+                    feature['properties'].pop(attr, None)
+            elif constraints.get('required', False):
+                # check if required value is present and not blank
+                if attr not in feature['properties']:
+                    errors.append("Missing required value for '%s'" % (attr))
+                elif feature['properties'][attr] is None:
+                    errors.append("Missing required value for '%s'" % (attr))
+                elif feature['properties'][attr] == "":
+                    errors.append("Value for '%s' can not be blank" % (attr))
 
         return errors
 

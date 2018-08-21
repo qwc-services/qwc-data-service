@@ -74,3 +74,23 @@ Install requirements:
 Start local service:
 
     CONFIG_SERVICE_URL=http://localhost:5010/ python server.py
+
+
+Testing
+-------
+
+Run all tests:
+
+    python test.py
+
+Run single test module:
+
+    python -m unittest tests.feature_validation_tests
+
+Run single test case:
+
+    python -m unittest tests.feature_validation_tests.FeatureValidationTestCase
+
+Run single test method:
+
+    python -m unittest tests.feature_validation_tests.FeatureValidationTestCase.test_field_constraints

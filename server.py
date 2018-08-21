@@ -38,9 +38,6 @@ class FeatureProperties(fields.Raw):
         return res
 
 
-# create data service
-data_service = DataService()
-
 # Flask application
 app = Flask(__name__)
 # use custom Request subclass
@@ -55,6 +52,9 @@ app.config['ERROR_404_HELP'] = False
 
 # Setup the Flask-JWT-Extended extension
 jwt = jwt_manager(app)
+
+# create data service
+data_service = DataService(app.logger)
 
 
 # Api models

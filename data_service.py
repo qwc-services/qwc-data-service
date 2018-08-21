@@ -1,5 +1,7 @@
 from collections import OrderedDict
 
+from sqlalchemy.exc import DataError, InternalError, ProgrammingError
+
 from qwc_services_core.database import DatabaseEngine
 from qwc_services_core.permission import PermissionClient
 from dataset_features_provider import DatasetFeaturesProvider
@@ -11,8 +13,12 @@ class DataService():
     Manage reading and writing of dataset features.
     """
 
-    def __init__(self):
-        """Constructor"""
+    def __init__(self, logger):
+        """Constructor
+
+        :param Logger logger: Application logger
+        """
+        self.logger = logger
         self.db_engine = DatabaseEngine()
         self.permission = PermissionClient()
 
@@ -114,7 +120,17 @@ class DataService():
             validation_errors = dataset_features_provider.validate(feature)
             if not validation_errors:
                 # create new feature
-                feature = dataset_features_provider.create(feature)
+                try:
+                    feature = dataset_features_provider.create(feature)
+                except (DataError, InternalError, ProgrammingError) as e:
+                    self.logger.error(e)
+                    return {
+                        'error': "Feature commit failed",
+                        'error_details': {
+                            'data_errors': ["Feature could not be created"],
+                        },
+                        'error_code': 422
+                    }
                 return {'feature': feature}
             else:
                 return {
@@ -148,7 +164,17 @@ class DataService():
             validation_errors = dataset_features_provider.validate(feature)
             if not validation_errors:
                 # update feature
-                feature = dataset_features_provider.update(id, feature)
+                try:
+                    feature = dataset_features_provider.update(id, feature)
+                except (DataError, InternalError, ProgrammingError) as e:
+                    self.logger.error(e)
+                    return {
+                        'error': "Feature commit failed",
+                        'error_details': {
+                            'data_errors': ["Feature could not be updated"],
+                        },
+                        'error_code': 422
+                    }
                 if feature is not None:
                     return {'feature': feature}
                 else:
