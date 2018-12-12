@@ -22,10 +22,10 @@ class DataService():
         self.db_engine = DatabaseEngine()
         self.permission = PermissionClient()
 
-    def index(self, username, dataset, bbox, crs, filterexpr):
+    def index(self, identity, dataset, bbox, crs, filterexpr):
         """Find dataset features inside bounding box.
 
-        :param str username: User name
+        :param str identity: User identity
         :param str dataset: Dataset ID
         :param str bbox: Bounding box as '<minx>,<miny>,<maxx>,<maxy>' or None
         :param str crs: Client CRS as 'EPSG:<srid>' or None
@@ -33,7 +33,7 @@ class DataService():
                                '<k1> = <v1>, <k2> like <v2>, ...'
         """
         dataset_features_provider = self.dataset_features_provider(
-            username, dataset
+            identity, dataset
         )
         if dataset_features_provider is not None:
             if bbox is not None:
@@ -69,16 +69,16 @@ class DataService():
         else:
             return {'error': "Dataset not found or permission error"}
 
-    def show(self, username, dataset, id, crs):
+    def show(self, identity, dataset, id, crs):
         """Get a dataset feature.
 
-        :param str username: User name
+        :param str identity: User identity
         :param str dataset: Dataset ID
         :param int id: Dataset feature ID
         :param str crs: Client CRS as 'EPSG:<srid>' or None
         """
         dataset_features_provider = self.dataset_features_provider(
-            username, dataset
+            identity, dataset
         )
         srid = None
         if crs is not None:
@@ -98,15 +98,15 @@ class DataService():
         else:
             return {'error': "Dataset not found or permission error"}
 
-    def create(self, username, dataset, feature):
+    def create(self, identity, dataset, feature):
         """Create a new dataset feature.
 
-        :param str username: User name
+        :param str identity: User identity
         :param str dataset: Dataset ID
         :param object feature: GeoJSON Feature
         """
         dataset_features_provider = self.dataset_features_provider(
-            username, dataset
+            identity, dataset
         )
         if dataset_features_provider is not None:
             # check write permission
@@ -141,16 +141,16 @@ class DataService():
         else:
             return {'error': "Dataset not found or permission error"}
 
-    def update(self, username, dataset, id, feature):
+    def update(self, identity, dataset, id, feature):
         """Update a dataset feature.
 
-        :param str username: User name
+        :param str identity: User identity
         :param str dataset: Dataset ID
         :param int id: Dataset feature ID
         :param object feature: GeoJSON Feature
         """
         dataset_features_provider = self.dataset_features_provider(
-            username, dataset
+            identity, dataset
         )
         if dataset_features_provider is not None:
             # check write permission
@@ -188,15 +188,15 @@ class DataService():
         else:
             return {'error': "Dataset not found or permission error"}
 
-    def destroy(self, username, dataset, id):
+    def destroy(self, identity, dataset, id):
         """Delete a dataset feature.
 
-        :param str username: User name
+        :param str identity: User identity
         :param str dataset: Dataset ID
         :param int id: Dataset feature ID
         """
         dataset_features_provider = self.dataset_features_provider(
-            username, dataset
+            identity, dataset
         )
         if dataset_features_provider is not None:
             # check write permission
@@ -213,17 +213,17 @@ class DataService():
         else:
             return {'error': "Dataset not found or permission error"}
 
-    def dataset_features_provider(self, username, dataset):
+    def dataset_features_provider(self, identity, dataset):
         """Return DatasetFeaturesProvider if available and permitted.
 
-        :param str username: User name
+        :param str identity: User identity
         :param str dataset: Dataset ID
         """
         dataset_features_provider = None
 
         # check permissions (NOTE: returns None on error)
         permissions = self.permission.dataset_edit_permissions(
-            dataset, username
+            dataset, identity
         )
         if permissions is not None and permissions:
             # create DatasetFeaturesProvider
