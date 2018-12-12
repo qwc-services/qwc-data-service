@@ -51,7 +51,7 @@ api = Api(app, version='1.0', title='Data service API',
 app.config['ERROR_404_HELP'] = False
 
 # Setup the Flask-JWT-Extended extension
-jwt = jwt_manager(app)
+jwt = jwt_manager(app, api)
 
 # create data service
 data_service = DataService(app.logger)
