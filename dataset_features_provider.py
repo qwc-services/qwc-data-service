@@ -38,10 +38,27 @@ class DatasetFeaturesProvider():
         self.srid = config['srid']
         # write permission
         self.writable = config['writable']
+        # CRUD permissions
+        self.__creatable = config.get('creatable', self.writable)
+        self.__readable = config.get('readable', True)
+        self.__updatable = config.get('updatable', self.writable)
+        self.__deletable = config.get('deletable', self.writable)
 
-    def is_read_only(self):
-        """Return whether dataset is read-only."""
-        return not self.writable
+    def creatable(self):
+        """Return whether dataset can be created."""
+        return self.__creatable
+
+    def readable(self):
+        """Return whether dataset can be read."""
+        return self.__readable
+
+    def updatable(self):
+        """Return whether dataset can be updated."""
+        return self.__updatable
+
+    def deletable(self):
+        """Return whether dataset can be deleted."""
+        return self.__deletable
 
     def index(self, bbox, client_srid, filterexpr):
         """Find features inside bounding box.

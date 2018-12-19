@@ -36,6 +36,13 @@ class DataService():
             identity, dataset
         )
         if dataset_features_provider is not None:
+            # check read permission
+            if not dataset_features_provider.readable():
+                return {
+                    'error': "Dataset not readable",
+                    'error_code': 405
+                }
+
             if bbox is not None:
                 # parse and validate input bbox
                 bbox = dataset_features_provider.parse_bbox(bbox)
@@ -90,6 +97,13 @@ class DataService():
                     'error_code': 400
                 }
         if dataset_features_provider is not None:
+            # check read permission
+            if not dataset_features_provider.readable():
+                return {
+                    'error': "Dataset not readable",
+                    'error_code': 405
+                }
+
             feature = dataset_features_provider.show(id, srid)
             if feature is not None:
                 return {'feature': feature}
@@ -109,10 +123,10 @@ class DataService():
             identity, dataset
         )
         if dataset_features_provider is not None:
-            # check write permission
-            if dataset_features_provider.is_read_only():
+            # check create permission
+            if not dataset_features_provider.creatable():
                 return {
-                    'error': "Dataset not writable",
+                    'error': "Dataset not creatable",
                     'error_code': 405
                 }
 
@@ -153,10 +167,10 @@ class DataService():
             identity, dataset
         )
         if dataset_features_provider is not None:
-            # check write permission
-            if dataset_features_provider.is_read_only():
+            # check update permission
+            if not dataset_features_provider.updatable():
                 return {
-                    'error': "Dataset not writable",
+                    'error': "Dataset not updatable",
                     'error_code': 405
                 }
 
@@ -199,10 +213,10 @@ class DataService():
             identity, dataset
         )
         if dataset_features_provider is not None:
-            # check write permission
-            if dataset_features_provider.is_read_only():
+            # check delete permission
+            if not dataset_features_provider.deletable():
                 return {
-                    'error': "Dataset not writable",
+                    'error': "Dataset not deletable",
                     'error_code': 405
                 }
 

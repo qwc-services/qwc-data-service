@@ -176,6 +176,7 @@ show_parser.add_argument('crs')
 @api.param('dataset', 'Dataset ID', default='qwc_demo.edit_points')
 class DataCollection(Resource):
     @api.doc('index')
+    @api.response(405, 'Dataset not readable')
     @api.param('bbox', 'Bounding box')
     @api.param('crs', 'Client coordinate reference system')
     @api.param('filter', 'Comma-separated list of filter expressions of the '
@@ -212,7 +213,7 @@ class DataCollection(Resource):
             api.abort(error_code, result['error'])
 
     @api.doc('create')
-    @api.response(405, 'Dataset not writable')
+    @api.response(405, 'Dataset not creatable')
     @api.response(422, 'Feature validation failed', feature_validation_response)
     @api.expect(geojson_feature_request)
     @api.marshal_with(geojson_feature_response, code=201)
@@ -247,6 +248,7 @@ class DataCollection(Resource):
 @api.param('id', 'Feature ID')
 class DataMember(Resource):
     @api.doc('show')
+    @api.response(405, 'Dataset not readable')
     @api.param('crs', 'Client coordinate reference system')
     @api.expect(show_parser)
     @api.marshal_with(geojson_feature_response)
@@ -271,7 +273,7 @@ class DataMember(Resource):
 
     @api.doc('update')
     @api.response(400, 'Bad request')
-    @api.response(405, 'Dataset not writable')
+    @api.response(405, 'Dataset not updatable')
     @api.response(422, 'Feature validation failed', feature_validation_response)
     @api.expect(geojson_feature_request)
     @api.marshal_with(geojson_feature_response)
@@ -301,7 +303,7 @@ class DataMember(Resource):
             api.abort(400, "Request data is not JSON")
 
     @api.doc('destroy')
-    @api.response(405, 'Dataset not writable')
+    @api.response(405, 'Dataset not deletable')
     @api.marshal_with(message_response)
     @jwt_optional
     def delete(self, dataset, id):

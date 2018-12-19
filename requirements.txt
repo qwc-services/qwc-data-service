@@ -1,8 +1,8 @@
-Flask
-flask-jwt-extended==3.5.1
-flask_login
-flask-restplus
-psycopg2
-requests
-sqlalchemy
-git+https://github.com/qwc-services/qwc-services-core.git#egg=qwc-services-core
+Flask==1.0.2
+Flask-JWT-Extended==3.5.1
+Flask-Login==0.4.1
+flask-restplus==0.12.1
+psycopg2==2.7.6.1
+requests==2.21.0
+SQLAlchemy==1.2.9
+git+https://github.com/qwc-services/qwc-services-core.git@9be73b60b828564ac1309e18ef00d0997053c30b#egg=qwc-services-core
