@@ -555,6 +555,12 @@ class DatasetFeaturesProvider():
                     constraints.get('numeric_precision', 1),
                     constraints.get('numeric_scale', 0)
                 )
+            elif data_type == 'bigint':
+                # parse bigint constraints from string
+                if 'min' in constraints:
+                    constraints['min'] = int(constraints['min'])
+                if 'max' in constraints:
+                    constraints['max'] = int(constraints['max'])
 
             input_value = feature['properties'][attr]
             value = None
