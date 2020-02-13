@@ -1,7 +1,9 @@
-QWC Data Service
-================
+QWC Data Service v2
+===================
 
 Edit spatial features of datasets via GeoJSON.
+
+**v2** (WIP): add support for multitenancy and replace QWC Config service with static config and permission files.
 
 **Note:** requires a QWC Config service running on `$CONFIG_SERVICE_URL`
 and a PostGIS database for reading and writing features

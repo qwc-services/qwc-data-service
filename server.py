@@ -10,6 +10,7 @@ from werkzeug.exceptions import BadRequest
 
 from qwc_services_core.api import create_model, CaseInsensitiveArgument
 from qwc_services_core.jwt import jwt_manager
+from qwc_services_core.tenant_handler import TenantHandler
 from data_service import DataService
 
 
@@ -53,8 +54,21 @@ app.config['ERROR_404_HELP'] = False
 # Setup the Flask-JWT-Extended extension
 jwt = jwt_manager(app, api)
 
-# create data service
-data_service = DataService(app.logger)
+# create tenant handler
+tenant_handler = TenantHandler(app.logger)
+
+
+def data_service_handler(identity):
+    """Get or create a DataService instance for a tenant.
+
+    :param str identity: User identity
+    """
+    tenant = tenant_handler.tenant(identity)
+    handler = tenant_handler.handler('data', tenant)
+    if handler is None:
+        handler = tenant_handler.register_handler(
+            'data', tenant, DataService(tenant, app.logger))
+    return handler
 
 
 # Api models
@@ -203,6 +217,7 @@ class DataCollection(Resource):
         crs = args['crs']
         filterexpr = args['filter']
 
+        data_service = data_service_handler(get_jwt_identity())
         result = data_service.index(
             get_jwt_identity(), dataset, bbox, crs, filterexpr
         )
@@ -228,6 +243,7 @@ class DataCollection(Resource):
             # parse request data (NOTE: catches invalid JSON)
             payload = api.payload
             if isinstance(payload, dict):
+                data_service = data_service_handler(get_jwt_identity())
                 result = data_service.create(
                     get_jwt_identity(), dataset, payload)
                 if 'error' not in result:
@@ -265,6 +281,7 @@ class DataMember(Resource):
         args = show_parser.parse_args()
         crs = args['crs']
 
+        data_service = data_service_handler(get_jwt_identity())
         result = data_service.show(get_jwt_identity(), dataset, id, crs)
         if 'error' not in result:
             return result['feature']
@@ -288,6 +305,7 @@ class DataMember(Resource):
             # parse request data (NOTE: catches invalid JSON)
             payload = api.payload
             if isinstance(payload, dict):
+                data_service = data_service_handler(get_jwt_identity())
                 result = data_service.update(
                     get_jwt_identity(), dataset, id, api.payload
                 )
@@ -311,6 +329,7 @@ class DataMember(Resource):
 
         Delete dataset feature with ID.
         """
+        data_service = data_service_handler(get_jwt_identity())
         result = data_service.destroy(get_jwt_identity(), dataset, id)
         if 'error' not in result:
             return {

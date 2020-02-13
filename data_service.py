@@ -13,11 +13,13 @@ class DataService():
     Manage reading and writing of dataset features.
     """
 
-    def __init__(self, logger):
+    def __init__(self, tenant, logger):
         """Constructor
 
+        :param str tenant: Tenant ID
         :param Logger logger: Application logger
         """
+        self.tenant = tenant
         self.logger = logger
         self.db_engine = DatabaseEngine()
         self.permission = PermissionClient()
