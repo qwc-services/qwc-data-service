@@ -3,7 +3,7 @@ from collections import OrderedDict
 from sqlalchemy.exc import DataError, InternalError, ProgrammingError
 
 from qwc_services_core.database import DatabaseEngine
-from qwc_services_core.permission import PermissionClient
+from qwc_services_core.runtime_config import RuntimeConfig
 from dataset_features_provider import DatasetFeaturesProvider
 
 
@@ -21,8 +21,8 @@ class DataService():
         """
         self.tenant = tenant
         self.logger = logger
+        self.resources = self.load_resources()
         self.db_engine = DatabaseEngine()
-        self.permission = PermissionClient()
 
     def index(self, identity, dataset, bbox, crs, filterexpr):
         """Find dataset features inside bounding box.
@@ -237,14 +237,75 @@ class DataService():
         """
         dataset_features_provider = None
 
-        # check permissions (NOTE: returns None on error)
-        permissions = self.permission.dataset_edit_permissions(
+        # check permissions
+        permissions = self.dataset_edit_permissions(
             dataset, identity
         )
-        if permissions is not None and permissions:
+        if permissions:
             # create DatasetFeaturesProvider
             dataset_features_provider = DatasetFeaturesProvider(
                 permissions, self.db_engine
             )
 
         return dataset_features_provider
+
+    def load_resources(self):
+        """Load service resources from config."""
+        # read config
+        config_handler = RuntimeConfig("data", self.logger)
+        config = config_handler.tenant_config(self.tenant)
+
+        # get service resources
+        datasets = {}
+        for resource in config.resources().get('datasets', []):
+            datasets[resource['name']] = resource
+
+        return {
+            'datasets': datasets
+        }
+
+    def dataset_edit_permissions(self, dataset, identity):
+        """Return dataset edit permissions if available and permitted.
+
+        :param str dataset: Dataset ID
+        :param obj identity: User identity
+        """
+        # find resource for requested dataset
+        resource = self.resources['datasets'].get(dataset)
+        if resource is None:
+            # dataset not found
+            return {}
+
+        # TODO: filter by permissions
+
+        attributes = [
+            field['name'] for field in resource['fields']
+        ]
+
+        fields = {}
+        for field in resource['fields']:
+            fields[field['name']] = field
+
+        writable = True
+        creatable = True
+        readable = True
+        updatable = True
+        deletable = True
+
+        return {
+            "dataset": resource['name'],
+            "database": resource['database'],
+            "schema": resource['schema'],
+            "table_name": resource['table_name'],
+            "primary_key": resource['primary_key'],
+            "attributes": attributes,
+            "fields": fields,
+            "geometry_column": resource['geometry_column'],
+            "geometry_type": resource['geometry_type'],
+            "srid": resource['srid'],
+            "writable": writable,
+            "creatable": creatable,
+            "readable": readable,
+            "updatable": updatable,
+            "deletable": deletable
+        }

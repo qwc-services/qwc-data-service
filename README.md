@@ -5,8 +5,7 @@ Edit spatial features of datasets via GeoJSON.
 
 **v2** (WIP): add support for multitenancy and replace QWC Config service with static config and permission files.
 
-**Note:** requires a QWC Config service running on `$CONFIG_SERVICE_URL`
-and a PostGIS database for reading and writing features
+**Note:** requires a PostGIS database for reading and writing features
 
 
 Setup
@@ -34,12 +33,22 @@ sslmode=disable
 ```
 
 
+Configuration
+-------------
+
+The static config and permission files are stored as JSON files in `$CONFIG_PATH` with subdirectories for each tenant, 
+e.g. `$CONFIG_PATH/default/*.json`. The default tenant name is `default`.
+
+
+### Data Service config
+
+File location: `$CONFIG_PATH/<tenant>/dataConfig.json`
+
+
 Usage
 -----
 
-Set the `CONFIG_SERVICE_URL` environment variable to the QWC config service URL
-when starting this service. (default: `http://localhost:5010/` on
-qwc-config-service container)
+Set the `CONFIG_PATH` environment variable to the path containing the service config and permission files when starting this service (default: `config`).
 
 Base URL:
 
@@ -75,7 +84,7 @@ Install requirements:
 
 Start local service:
 
-    CONFIG_SERVICE_URL=http://localhost:5010/ python server.py
+    CONFIG_PATH=/PATH/TO/CONFIGS/ python server.py
 
 
 Testing
