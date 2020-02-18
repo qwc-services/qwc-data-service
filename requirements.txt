@@ -7,4 +7,4 @@ requests==2.21.0
 SQLAlchemy==1.2.18
 werkzeug==0.16.1
 jsonschema==2.6.0
-git+https://github.com/qwc-services/qwc-services-core.git@01485628bb5994dc4f832977f5f22a9c95cad20b#egg=qwc-services-core
+git+https://github.com/qwc-services/qwc-services-core.git@dd8f0244ce938f9f1a993f272fc734b316315968#egg=qwc-services-core

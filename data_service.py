@@ -3,6 +3,7 @@ from collections import OrderedDict
 from sqlalchemy.exc import DataError, InternalError, ProgrammingError
 
 from qwc_services_core.database import DatabaseEngine
+from qwc_services_core.permissions_reader import PermissionsReader
 from qwc_services_core.runtime_config import RuntimeConfig
 from dataset_features_provider import DatasetFeaturesProvider
 
@@ -22,6 +23,7 @@ class DataService():
         self.tenant = tenant
         self.logger = logger
         self.resources = self.load_resources()
+        self.permissions_handler = PermissionsReader(tenant, logger)
         self.db_engine = DatabaseEngine()
 
     def index(self, identity, dataset, bbox, crs, filterexpr):
@@ -276,21 +278,57 @@ class DataService():
             # dataset not found
             return {}
 
-        # TODO: filter by permissions
+        # get permissions for dataset
+        resource_permissions = self.permissions_handler.resource_permissions(
+            'data_datasets', identity, dataset
+        )
+        if not resource_permissions:
+            # dataset not permitted
+            return {}
 
+        # combine permissions
+        permitted_attributes = set()
+        writable = False
+        creatable = False
+        readable = False
+        updatable = False
+        deletable = False
+
+        for permission in resource_permissions:
+            # collect permitted attributes
+            permitted_attributes.update(permission.get('attributes', []))
+
+            # allow writable and CRUD actions if any role permits them
+            writable |= permission.get('writable', False)
+            creatable |= permission.get('creatable', False)
+            readable |= permission.get('readable', False)
+            updatable |= permission.get('updatable', False)
+            deletable |= permission.get('deletable', False)
+
+        # make writable consistent with CRUD actions
+        writable |= creatable and readable and updatable and deletable
+
+        # make CRUD actions consistent with writable
+        creatable |= writable
+        readable |= writable
+        updatable |= writable
+        deletable |= writable
+
+        permitted = creatable or readable or updatable or deletable
+        if not permitted:
+            # no CRUD action permitted
+            return {}
+
+        # filter by permissions
         attributes = [
             field['name'] for field in resource['fields']
+            if field['name'] in permitted_attributes
         ]
 
         fields = {}
         for field in resource['fields']:
-            fields[field['name']] = field
-
-        writable = True
-        creatable = True
-        readable = True
-        updatable = True
-        deletable = True
+            if field['name'] in permitted_attributes:
+                fields[field['name']] = field
 
         return {
             "dataset": resource['name'],
