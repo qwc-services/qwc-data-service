@@ -27,7 +27,9 @@ class DatasetFeaturesProvider():
             self.db = db_engine.geo_db()
 
         # assign values from service config
-        self.table_name = "%s.%s" % (config['schema'], config['table_name'])
+        self.table_name = '"%s"."%s"' % (
+            config['schema'], config['table_name']
+        )
         self.primary_key = config['primary_key']
         # permitted attributes only
         self.attributes = config['attributes']
@@ -74,7 +76,9 @@ class DatasetFeaturesProvider():
         # build query SQL
 
         # select id and permitted attributes
-        columns = (', ').join([self.primary_key] + self.attributes)
+        columns = (', ').join(
+            self.escape_column_names([self.primary_key] + self.attributes)
+        )
 
         where_clauses = []
         params = {}
@@ -88,7 +92,7 @@ class DatasetFeaturesProvider():
                 )
             """, srid, self.srid)
             where_clauses.append(("""
-                ST_Intersects({geom},
+                ST_Intersects("{geom}",
                     %s
                 )
             """ % bbox_geom_sql).format(
@@ -110,7 +114,7 @@ class DatasetFeaturesProvider():
         if where_clauses:
             where_clause = "WHERE " + " AND ".join(where_clauses)
 
-        geom_sql = self.transform_geom_sql("{geom}", self.srid, srid)
+        geom_sql = self.transform_geom_sql('"{geom}"', self.srid, srid)
         sql = sql_text(("""
             SELECT {columns},
                 ST_AsGeoJSON(%s) AS json_geom
@@ -159,9 +163,11 @@ class DatasetFeaturesProvider():
         # build query SQL
 
         # select id and permitted attributes
-        columns = (', ').join([self.primary_key] + self.attributes)
+        columns = (', ').join(
+            self.escape_column_names([self.primary_key] + self.attributes)
+        )
 
-        geom_sql = self.transform_geom_sql("{geom}", self.srid, srid)
+        geom_sql = self.transform_geom_sql('"{geom}"', self.srid, srid)
         sql = sql_text(("""
             SELECT {columns},
                 ST_AsGeoJSON(%s) AS json_geom
@@ -199,7 +205,7 @@ class DatasetFeaturesProvider():
         sql_params = self.sql_params_for_feature(feature)
         srid = sql_params['client_srid']
 
-        geom_sql = self.transform_geom_sql("{geom}", self.srid, srid)
+        geom_sql = self.transform_geom_sql('"{geom}"', self.srid, srid)
         sql = sql_text(("""
             INSERT INTO {table} ({columns})
                 VALUES ({values_sql})
@@ -237,7 +243,7 @@ class DatasetFeaturesProvider():
         sql_params = self.sql_params_for_feature(feature)
         srid = sql_params['client_srid']
 
-        geom_sql = self.transform_geom_sql("{geom}", self.srid, srid)
+        geom_sql = self.transform_geom_sql('"{geom}"', self.srid, srid)
         sql = sql_text(("""
             UPDATE {table} SET ({columns}) =
                 ({values_sql})
@@ -278,8 +284,8 @@ class DatasetFeaturesProvider():
         # build query SQL
         sql = sql_text("""
             DELETE FROM {table}
-            WHERE {pkey} = :id
-            RETURNING {pkey};
+            WHERE "{pkey}" = :id
+            RETURNING "{pkey}";
         """.format(table=self.table_name, pkey=self.primary_key))
 
         # connect to database
@@ -652,6 +658,16 @@ class DatasetFeaturesProvider():
 
         return errors
 
+    def escape_column_names(self, columns):
+        """Return escaped column names by converting them to
+        quoted identifiers.
+
+        :param list(str) columns: Column names
+        """
+        return [
+            '"%s"' % column for column in columns
+        ]
+
     def transform_geom_sql(self, geom_sql, geom_srid, target_srid):
         """Generate SQL fragment for transforming input geometry geom_sql
         from geom_srid to target_srid.
@@ -722,7 +738,11 @@ class DatasetFeaturesProvider():
                 srid = int(srid)
 
         # columns for permitted attributes and geometry
-        columns = (', ').join(attribute_columns + [self.geometry_column])
+        columns = (', ').join(
+            self.escape_column_names(
+                attribute_columns + [self.geometry_column]
+            )
+        )
 
         # use bound parameters for attribute values and geometry
         # e.g. ['name'] + 'geom'
@@ -736,7 +756,9 @@ class DatasetFeaturesProvider():
         values_sql = (', ').join(bound_columns + [geometry_value])
 
         # return id and permitted attributes
-        return_columns = (', ').join([self.primary_key] + self.attributes)
+        return_columns = (', ').join(
+            self.escape_column_names([self.primary_key] + self.attributes)
+        )
 
         return {
             'columns': columns,
