@@ -64,7 +64,7 @@ def data_service_handler(identity):
     :param str identity: User identity
     """
     tenant = tenant_handler.tenant(identity)
-    handler = tenant_handler.handler('data', tenant)
+    handler = tenant_handler.handler('data', 'data', tenant)
     if handler is None:
         handler = tenant_handler.register_handler(
             'data', tenant, DataService(tenant, app.logger))
