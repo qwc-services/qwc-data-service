@@ -106,7 +106,12 @@ geojson_feature_response = create_model(api, 'Feature', [
                                               'num': 4}
                                      )],
     ['crs', fields.Nested(geojson_crs, required=False, allow_null=True,
-                          description='Coordinate reference system')]
+                          description='Coordinate reference system')],
+    ['bbox', fields.Raw(required=False, allow_null=True,
+                        description=(
+                            'Extent of feature as [minx, miny, maxx, maxy]'
+                        ),
+                        example=[950598.0, 6003950.0, 950758.0, 6004010.0])]
 ])
 
 # Feature request
@@ -138,7 +143,7 @@ geojson_feature_member = create_model(api, 'Member Feature', [
                                      description='Feature properties',
                                      example={'name': 'Example', 'type': 2,
                                               'num': 4}
-                                     )],
+                                     )]
 ])
 
 geojson_feature_collection_response = create_model(api, 'FeatureCollection', [
@@ -147,7 +152,12 @@ geojson_feature_collection_response = create_model(api, 'FeatureCollection', [
     ['features', fields.List(fields.Nested(geojson_feature_member),
                              required=True, description='Features')],
     ['crs', fields.Nested(geojson_crs, required=False, allow_null=True,
-                          description='Coordinate reference system')]
+                          description='Coordinate reference system')],
+    ['bbox', fields.Raw(required=False, allow_null=True,
+                        description=(
+                            'Extent of features as [minx, miny, maxx, maxy]'
+                        ),
+                        example=[950598.0, 6003950.0, 950758.0, 6004010.0])]
 ])
 
 # message response

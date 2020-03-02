@@ -115,7 +115,11 @@ class DatasetFeaturesProvider():
         if where_clauses:
             where_clause = "WHERE " + " AND ".join(where_clauses)
 
-        geom_sql = self.geom_column_sql(srid)
+        geom_sql = self.geom_column_sql(srid, with_bbox=False)
+        if self.geometry_column:
+            # select overall extent
+            geom_sql += ', ST_Extent("{geom}") OVER () AS _overall_bbox_'
+
         sql = sql_text(("""
             SELECT {columns}%s
             FROM {table}
@@ -133,9 +137,12 @@ class DatasetFeaturesProvider():
         features = []
         result = conn.execute(sql, **params)
 
+        overall_bbox = None
         for row in result:
             # NOTE: feature CRS removed by marshalling
             features.append(self.feature_from_query(row, srid))
+            if '_overall_bbox_' in row:
+                overall_bbox = row['_overall_bbox_']
 
         # roll back transaction and close database connection
         trans.rollback()
@@ -149,11 +156,14 @@ class DatasetFeaturesProvider():
                     'name': 'urn:ogc:def:crs:EPSG::%s' % srid
                 }
             }
+            if overall_bbox:
+                overall_bbox = self.parse_box2d(overall_bbox)
 
         return {
             'type': 'FeatureCollection',
             'features': features,
-            'crs': crs
+            'crs': crs,
+            'bbox': overall_bbox
         }
 
     def show(self, id, client_srid):
@@ -370,6 +380,26 @@ class DatasetFeaturesProvider():
             return None
         else:
             return (" AND ".join(sql), params)
+
+    def parse_box2d(self, box2d):
+        """Parse Box2D string and return bounding box
+        as [<minx>,<miny>,<maxx>,<maxy>].
+
+        :param str box2d: Box2D string
+        """
+        bbox = None
+
+        # extract coords from Box2D string
+        # e.g. "BOX(950598.12 6003950.34,950758.567 6004010.8)"
+        # truncate brackets and split into coord pairs
+        parts = box2d[4:-1].split(',')
+        if len(parts) == 2:
+            # split coords, e.g. "950598.12 6003950.34"
+            minx, miny = parts[0].split(' ')
+            maxx, maxy = parts[1].split(' ')
+            bbox = [float(minx), float(miny), float(maxx), float(maxy)]
+
+        return bbox
 
     def validate(self, feature):
         """Validate a feature and return any validation errors.
@@ -679,20 +709,26 @@ class DatasetFeaturesProvider():
             '"%s"' % column for column in columns
         ]
 
-    def geom_column_sql(self, srid):
+    def geom_column_sql(self, srid, with_bbox=True):
         """Generate SQL fragment for GeoJSON of transformed geometry
-        as additional GeoJSON column 'json_geom', or empty string if dataset
-        has no geometry.
+        as additional GeoJSON column 'json_geom' and optional Box2D '_bbox_',
+        or empty string if dataset has no geometry.
 
-        :param str target_srid: target SRID
+        :param str target_srid: Target SRID
+        :param bool with_bbox: Whether to add bounding boxes for each feature
+                               (default: True)
         """
         geom_sql = ""
 
         if self.geometry_column:
-            geom_sql = (
-                ", ST_AsGeoJSON(%s) AS json_geom" %
-                self.transform_geom_sql('"{geom}"', self.srid, srid)
+            transform_geom_sql = self.transform_geom_sql(
+                '"{geom}"', self.srid, srid
             )
+            # add GeoJSON column
+            geom_sql = ", ST_AsGeoJSON(%s) AS json_geom" % transform_geom_sql
+            if with_bbox:
+                # add Box2D column
+                geom_sql += ", Box2D(%s) AS _bbox_" % transform_geom_sql
 
         return geom_sql
 
@@ -702,7 +738,7 @@ class DatasetFeaturesProvider():
 
         :param str geom_sql: SQL fragment for input geometry
         :param str geom_srid: SRID of input geometry
-        :param str target_srid: target SRID
+        :param str target_srid: Target SRID
         """
         if geom_sql is None or geom_srid is None or geom_srid == target_srid:
             # no transformation
@@ -725,6 +761,7 @@ class DatasetFeaturesProvider():
 
         geometry = None
         crs = None
+        bbox = None
         if self.geometry_column:
             geometry = json.loads(row['json_geom'])
             srid = client_srid or self.srid
@@ -734,13 +771,16 @@ class DatasetFeaturesProvider():
                     'name': 'urn:ogc:def:crs:EPSG::%d' % srid
                 }
             }
+            if '_bbox_' in row:
+                bbox = self.parse_box2d(row['_bbox_'])
 
         return {
             'type': 'Feature',
             'id': row[self.primary_key],
             'properties': props,
             'geometry': geometry,
-            'crs': crs
+            'crs': crs,
+            'bbox': bbox
         }
 
     def sql_params_for_feature(self, feature):
