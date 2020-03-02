@@ -22,7 +22,7 @@
           "type": "array",
           "items": {
             "title": "Dataset",
-            "description": "PostGIS metadata and field constraints for a dataset",
+            "description": "PostgreSQL metadata and field constraints for a dataset",
             "type": "object",
             "properties": {
               "name": {
@@ -126,22 +126,35 @@
                   ]
                 }
               },
-              "geometry_column": {
-                "type": "string"
-              },
-              "geometry_type": {
-                "type": "string",
-                "enum": [
-                  "POINT",
-                  "LINESTRING",
-                  "POLYGON",
-                  "MULTIPOINT",
-                  "MULTILINESTRING",
-                  "MULTIPOLYGON"
+              "geometry": {
+                "title": "PostGIS geometry metadata",
+                "type": "object",
+                "properties": {
+                  "geometry_column": {
+                    "type": "string"
+                  },
+                  "geometry_type": {
+                    "type": "string",
+                    "enum": [
+                      "POINT",
+                      "LINESTRING",
+                      "POLYGON",
+                      "MULTIPOINT",
+                      "MULTILINESTRING",
+                      "MULTIPOLYGON"
+                    ]
+                  },
+                  "srid": {
+                    "title": "SRID",
+                    "description": "Spatial Reference System Identifier (EPSG code)",
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "geometry_column",
+                  "geometry_type",
+                  "srid"
                 ]
-              },
-              "srid": {
-                "type": "integer"
               }
             },
             "required": [
@@ -150,10 +163,7 @@
               "schema",
               "table_name",
               "primary_key",
-              "fields",
-              "geometry_column",
-              "geometry_type",
-              "srid"
+              "fields"
             ]
           }
         }

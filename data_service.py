@@ -330,6 +330,9 @@ class DataService():
             if field['name'] in permitted_attributes:
                 fields[field['name']] = field
 
+        # NOTE: 'geometry' is None for datasets without geometry
+        geometry = resource.get('geometry', {})
+
         return {
             "dataset": resource['name'],
             "database": resource['database'],
@@ -338,9 +341,9 @@ class DataService():
             "primary_key": resource['primary_key'],
             "attributes": attributes,
             "fields": fields,
-            "geometry_column": resource['geometry_column'],
-            "geometry_type": resource['geometry_type'],
-            "srid": resource['srid'],
+            "geometry_column": geometry.get('geometry_column'),
+            "geometry_type": geometry.get('geometry_type'),
+            "srid": geometry.get('srid'),
             "writable": writable,
             "creatable": creatable,
             "readable": readable,
