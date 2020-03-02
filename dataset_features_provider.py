@@ -35,6 +35,7 @@ class DatasetFeaturesProvider():
         self.attributes = config['attributes']
         # field constraints
         self.fields = config.get('fields', {})
+        # NOTE: geometry_column is None for datasets without geometry
         self.geometry_column = config['geometry_column']
         self.geometry_type = config['geometry_type']
         self.srid = config['srid']
@@ -83,7 +84,7 @@ class DatasetFeaturesProvider():
         where_clauses = []
         params = {}
 
-        if bbox is not None:
+        if self.geometry_column and bbox is not None:
             # bbox filter
             bbox_geom_sql = self.transform_geom_sql("""
                 ST_SetSRID(
@@ -114,10 +115,9 @@ class DatasetFeaturesProvider():
         if where_clauses:
             where_clause = "WHERE " + " AND ".join(where_clauses)
 
-        geom_sql = self.transform_geom_sql('"{geom}"', self.srid, srid)
+        geom_sql = self.geom_column_sql(srid)
         sql = sql_text(("""
-            SELECT {columns},
-                ST_AsGeoJSON(%s) AS json_geom
+            SELECT {columns}%s
             FROM {table}
             {where_clause};
         """ % geom_sql).format(
@@ -141,15 +141,19 @@ class DatasetFeaturesProvider():
         trans.rollback()
         conn.close()
 
-        return {
-            'type': 'FeatureCollection',
-            'crs': {
+        crs = None
+        if self.geometry_column:
+            crs = {
                 'type': 'name',
                 'properties': {
                     'name': 'urn:ogc:def:crs:EPSG::%s' % srid
                 }
-            },
-            'features': features
+            }
+
+        return {
+            'type': 'FeatureCollection',
+            'features': features,
+            'crs': crs
         }
 
     def show(self, id, client_srid):
@@ -167,10 +171,9 @@ class DatasetFeaturesProvider():
             self.escape_column_names([self.primary_key] + self.attributes)
         )
 
-        geom_sql = self.transform_geom_sql('"{geom}"', self.srid, srid)
+        geom_sql = self.geom_column_sql(srid)
         sql = sql_text(("""
-            SELECT {columns},
-                ST_AsGeoJSON(%s) AS json_geom
+            SELECT {columns}%s
             FROM {table}
             WHERE {pkey} = :id
             LIMIT 1;
@@ -205,12 +208,11 @@ class DatasetFeaturesProvider():
         sql_params = self.sql_params_for_feature(feature)
         srid = sql_params['client_srid']
 
-        geom_sql = self.transform_geom_sql('"{geom}"', self.srid, srid)
+        geom_sql = self.geom_column_sql(srid)
         sql = sql_text(("""
             INSERT INTO {table} ({columns})
                 VALUES ({values_sql})
-            RETURNING {return_columns},
-                ST_AsGeoJSON(%s) AS json_geom;
+            RETURNING {return_columns}%s;
         """ % geom_sql).format(
             table=self.table_name, columns=sql_params['columns'],
             values_sql=sql_params['values_sql'],
@@ -243,13 +245,12 @@ class DatasetFeaturesProvider():
         sql_params = self.sql_params_for_feature(feature)
         srid = sql_params['client_srid']
 
-        geom_sql = self.transform_geom_sql('"{geom}"', self.srid, srid)
+        geom_sql = self.geom_column_sql(srid)
         sql = sql_text(("""
             UPDATE {table} SET ({columns}) =
                 ({values_sql})
             WHERE {pkey} = :{pkey}
-            RETURNING {return_columns},
-                ST_AsGeoJSON(%s) AS json_geom;
+            RETURNING {return_columns}%s;
         """ % geom_sql).format(
             table=self.table_name, columns=sql_params['columns'],
             values_sql=sql_params['values_sql'], pkey=self.primary_key,
@@ -403,7 +404,10 @@ class DatasetFeaturesProvider():
             errors.append("GeoJSON must be of type Feature")
 
         # validate geometry object
-        if 'geometry' not in feature:
+        if not self.geometry_column:
+            # skip geometry validation for datasets without geometry
+            pass
+        elif 'geometry' not in feature:
             errors.append("Missing GeoJSON geometry")
         elif not isinstance(feature.get('geometry'), dict):
             errors.append("Invalid GeoJSON geometry")
@@ -445,7 +449,10 @@ class DatasetFeaturesProvider():
                                   attr)
 
         # validate CRS
-        if 'crs' not in feature:
+        if not self.geometry_column:
+            # skip CRS validation for datasets without geometry
+            pass
+        elif 'crs' not in feature:
             errors.append("Missing GeoJSON CRS")
         elif not isinstance(feature.get('crs'), dict):
             errors.append("Invalid GeoJSON CRS")
@@ -470,6 +477,10 @@ class DatasetFeaturesProvider():
         :param object feature: GeoJSON Feature
         """
         errors = []
+
+        if not self.geometry_column:
+            # skip geometry validation for dataset without geometry
+            return []
 
         json_geom = json.dumps(feature.get('geometry'))
 
@@ -668,6 +679,23 @@ class DatasetFeaturesProvider():
             '"%s"' % column for column in columns
         ]
 
+    def geom_column_sql(self, srid):
+        """Generate SQL fragment for GeoJSON of transformed geometry
+        as additional GeoJSON column 'json_geom', or empty string if dataset
+        has no geometry.
+
+        :param str target_srid: target SRID
+        """
+        geom_sql = ""
+
+        if self.geometry_column:
+            geom_sql = (
+                ", ST_AsGeoJSON(%s) AS json_geom" %
+                self.transform_geom_sql('"{geom}"', self.srid, srid)
+            )
+
+        return geom_sql
+
     def transform_geom_sql(self, geom_sql, geom_srid, target_srid):
         """Generate SQL fragment for transforming input geometry geom_sql
         from geom_srid to target_srid.
@@ -691,23 +719,28 @@ class DatasetFeaturesProvider():
         :param obj row: Row result from query
         :param int client_srid: Client SRID or None for dataset SRID
         """
-        srid = client_srid or self.srid
-
         props = OrderedDict()
         for attr in self.attributes:
             props[attr] = row[attr]
 
-        return {
-            'type': 'Feature',
-            'id': row[self.primary_key],
-            'geometry': json.loads(row['json_geom']),
-            'properties': props,
-            'crs': {
+        geometry = None
+        crs = None
+        if self.geometry_column:
+            geometry = json.loads(row['json_geom'])
+            srid = client_srid or self.srid
+            crs = {
                 'type': 'name',
                 'properties': {
                     'name': 'urn:ogc:def:crs:EPSG::%d' % srid
                 }
             }
+
+        return {
+            'type': 'Feature',
+            'id': row[self.primary_key],
+            'properties': props,
+            'geometry': geometry,
+            'crs': crs
         }
 
     def sql_params_for_feature(self, feature):
@@ -723,37 +756,47 @@ class DatasetFeaturesProvider():
                 bound_values[attr] = feature['properties'][attr]
         attribute_columns = list(bound_values.keys())
 
-        # get geometry value as GeoJSON string
-        bound_values[self.geometry_column] = json.dumps(feature['geometry'])
-
-        # get client SRID from GeoJSON CRS
-        if 'crs' not in feature:
-            srid = self.srid
-        else:
-            srid = feature['crs']['properties']['name'].split(':')[-1]
-            if srid == 'CRS84':
-                # use EPSG:4326 for 'urn:ogc:def:crs:OGC:1.3:CRS84'
-                srid = 4326
-            else:
-                srid = int(srid)
-
-        # columns for permitted attributes and geometry
-        columns = (', ').join(
-            self.escape_column_names(
-                attribute_columns + [self.geometry_column]
+        srid = None
+        if self.geometry_column:
+            # get geometry value as GeoJSON string
+            bound_values[self.geometry_column] = json.dumps(
+                feature['geometry']
             )
-        )
+
+            # get client SRID from GeoJSON CRS
+            if 'crs' not in feature:
+                srid = self.srid
+            else:
+                srid = feature['crs']['properties']['name'].split(':')[-1]
+                if srid == 'CRS84':
+                    # use EPSG:4326 for 'urn:ogc:def:crs:OGC:1.3:CRS84'
+                    srid = 4326
+                else:
+                    srid = int(srid)
+
+            # columns for permitted attributes and geometry
+            columns = (', ').join(
+                self.escape_column_names(
+                    attribute_columns + [self.geometry_column]
+                )
+            )
+        else:
+            # columns for permitted attributes
+            columns = (', ').join(self.escape_column_names(attribute_columns))
 
         # use bound parameters for attribute values and geometry
         # e.g. ['name'] + 'geom'
         #     ==>
         #      ":name, ST_SetSRID(ST_GeomFromGeoJSON(:geom), 2056)"
         bound_columns = [":%s" % attr for attr in attribute_columns]
-        # build geometry from GeoJSON, transformed to dataset CRS
-        geometry_value = self.transform_geom_sql(
-            "ST_SetSRID(ST_GeomFromGeoJSON(:{geom}), {srid})", srid, self.srid
-        ).format(geom=self.geometry_column, srid=srid)
-        values_sql = (', ').join(bound_columns + [geometry_value])
+        if self.geometry_column:
+            # build geometry from GeoJSON, transformed to dataset CRS
+            geometry_value = self.transform_geom_sql(
+                "ST_SetSRID(ST_GeomFromGeoJSON(:{geom}), {srid})", srid,
+                self.srid
+            ).format(geom=self.geometry_column, srid=srid)
+            bound_columns += [geometry_value]
+        values_sql = (', ').join(bound_columns)
 
         # return id and permitted attributes
         return_columns = (', ').join(

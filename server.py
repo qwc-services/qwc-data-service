@@ -97,14 +97,15 @@ geojson_feature_response = create_model(api, 'Feature', [
                            example='Feature')],
     ['id', fields.Integer(required=True, description='Feature ID',
                           example=123)],
-    ['geometry', fields.Nested(geojson_geometry, required=True,
+    ['geometry', fields.Nested(geojson_geometry, required=False,
+                               allow_null=True,
                                description='Feature geometry')],
     ['properties', FeatureProperties(required=True,
                                      description='Feature properties',
                                      example={'name': 'Example', 'type': 2,
                                               'num': 4}
                                      )],
-    ['crs', fields.Nested(geojson_crs, required=True,
+    ['crs', fields.Nested(geojson_crs, required=False, allow_null=True,
                           description='Coordinate reference system')]
 ])
 
@@ -113,12 +114,13 @@ geojson_feature_response = create_model(api, 'Feature', [
 geojson_feature_request = create_model(api, 'Input Feature', [
     ['type', fields.String(required=True, description='Feature',
                            example='Feature')],
-    ['geometry', fields.Nested(geojson_geometry, required=True,
+    ['geometry', fields.Nested(geojson_geometry, required=False,
+                               allow_null=True,
                                description='Feature geometry')],
     ['properties', fields.Raw(required=True, description='Feature properties',
                               example={'name': 'Example', 'type': 2, 'num': 4}
                               )],
-    ['crs', fields.Nested(geojson_crs, required=True,
+    ['crs', fields.Nested(geojson_crs, required=False, allow_null=True,
                           description='Coordinate reference system')]
 ])
 
@@ -129,7 +131,8 @@ geojson_feature_member = create_model(api, 'Member Feature', [
                            example='Feature')],
     ['id', fields.Integer(required=True, description='Feature ID',
                           example=123)],
-    ['geometry', fields.Nested(geojson_geometry, required=True,
+    ['geometry', fields.Nested(geojson_geometry, required=False,
+                               allow_null=True,
                                description='Feature geometry')],
     ['properties', FeatureProperties(required=True,
                                      description='Feature properties',
@@ -143,7 +146,7 @@ geojson_feature_collection_response = create_model(api, 'FeatureCollection', [
                            example='FeatureCollection')],
     ['features', fields.List(fields.Nested(geojson_feature_member),
                              required=True, description='Features')],
-    ['crs', fields.Nested(geojson_crs, required=True,
+    ['crs', fields.Nested(geojson_crs, required=False, allow_null=True,
                           description='Coordinate reference system')]
 ])
 
@@ -196,7 +199,7 @@ class DataCollection(Resource):
     @api.param('filter', 'Comma-separated list of filter expressions of the '
                'form "a = b" and "c like d"')
     @api.expect(index_parser)
-    @api.marshal_with(geojson_feature_collection_response)
+    @api.marshal_with(geojson_feature_collection_response, skip_none=True)
     @jwt_optional
     def get(self, dataset):
         """Get dataset features
