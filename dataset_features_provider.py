@@ -119,7 +119,10 @@ class DatasetFeaturesProvider():
         geom_sql = self.geom_column_sql(srid, with_bbox=False)
         if self.geometry_column:
             # select overall extent
-            geom_sql += ', ST_Extent("{geom}") OVER () AS _overall_bbox_'
+            geom_sql += (
+                ', ST_Extent(%s) OVER () AS _overall_bbox_' %
+                self.transform_geom_sql('"{geom}"', self.srid, srid)
+            )
 
         sql = sql_text(("""
             SELECT {columns}%s
