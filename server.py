@@ -45,9 +45,57 @@ app = Flask(__name__)
 app.request_class = Request
 # Flask-RESTPlus Api
 api = Api(app, version='1.0', title='Data service API',
-          description='API for QWC Data service',
-          default_label='Data edit operations', doc='/api/',
+          description="""API for QWC Data service.
+
+## General Information for all operations
+
+### Datatypes-Encoding
+
+JSON only defines recommendations or has no information concerning
+the encoding of some quite common used database data types.
+Following a description on how these are encoded in the data
+service API.
+
+- Date: ISO date strings `YYYY-MM-DD`
+- Datetime: ISO date/time strings `YYYY-MM-DDThh:mm:ss`
+- UUID: Hex-encoded string format. Example: `'6fa459ea-ee8a-3ca4-894e-db77e160355e'`
+
+### Feature-ID
+For operations like updating or deleting features, records are identified by
+a feature `id`. This `id` refers to the primary key of the database
+table and is usually kept constant over time.
+
+## Filter expressions
+
+Query operations support passing filter expressions to narrow down the results.
+This expression is a serialized JSON array of the format:
+
+    [["<name>", "<op>", <value>],"and|or",["<name>","<op>",<value>],...]
+
+* `name` is the attribute column name
+* `op` can be one of
+
+      "=", "!=", "<>", "<", ">", "<=", ">=", "LIKE", "ILIKE", "IS", "IS NOT"
+
+  The operators are applied on the original database types.
+
+  If value is `null`, the operator should be `IS` or `IS NOT`.
+
+* `value` can be of type `string`, `int`, `float` or `null`.
+
+  For string operations, the SQL wildcard character `%` can be used.
+
+### Filter examples
+
+* Find all features in the dataset with a number field smaller 10 and a matching name field:
+  `[["name","LIKE","example%"],"and",["number","<",10]]`
+* Find all features in the dataset with a last change before 1st of January 2020 or having `NULL` as lastchange value:
+  `[["lastchange","<","2020-01-01T12:00:00"],"or",["lastchange","IS",null]]`
+          """,
+          default_label='Data edit operations', doc='/api/', # ordered=True  + reorder geom/props
           )
+# Omit X-Fields header in docs
+app.config['RESTPLUS_MASK_SWAGGER'] = False
 # disable verbose 404 error message
 app.config['ERROR_404_HELP'] = False
 
@@ -204,26 +252,19 @@ show_parser.add_argument('crs')
 class DataCollection(Resource):
     @api.doc('index')
     @api.response(405, 'Dataset not readable')
-    @api.param('bbox', 'Bounding box')
-    @api.param('crs', 'Client coordinate reference system')
-    @api.param('filter', 'Comma-separated list of filter expressions of the '
-               'form "a = b" and "c like d"')
+    @api.param('bbox', 'Bounding box as `<minx>,<miny>,<maxx>,<maxy>`')
+    @api.param('crs', 'Client coordinate reference system, e.g. `EPSG:3857`')
+    @api.param(
+        'filter', 'JSON serialized array of filter expressions: '
+        '`[["<name>", "<op>", <value>],"and|or",["<name>","<op>",<value>]]`')
     @api.expect(index_parser)
     @api.marshal_with(geojson_feature_collection_response, skip_none=True)
     @jwt_optional
     def get(self, dataset):
         """Get dataset features
 
-        Return dataset features inside bounding box as a
+        Return dataset features inside bounding box and matching filter as a
         GeoJSON FeatureCollection.
-
-        Query parameters:
-
-        <b>bbox</b>: Bounding box as
-                     <b>&lt;minx>,&lt;miny>,&lt;maxx>,&lt;maxy></b>,
-                     e.g. <b>950700,6003900,950800,6004000</b>
-
-        <b>crs</b>: Client CRS, e.g. <b>EPSG:3857<b>
         """
         args = index_parser.parse_args()
         bbox = args['bbox']

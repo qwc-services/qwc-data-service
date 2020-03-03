@@ -33,8 +33,8 @@ class DataService():
         :param str dataset: Dataset ID
         :param str bbox: Bounding box as '<minx>,<miny>,<maxx>,<maxy>' or None
         :param str crs: Client CRS as 'EPSG:<srid>' or None
-        :param str filterexpr: Comma-separated filter expressions as
-                               '<k1> = <v1>, <k2> like <v2>, ...'
+        :param str filterexpr: JSON serialized array of filter expressions:
+        [["<attr>", "<op>", "<value>"], "and|or", ["<attr>", "<op>", "<value>"]]
         """
         dataset_features_provider = self.dataset_features_provider(
             identity, dataset
@@ -67,15 +67,27 @@ class DataService():
             if filterexpr is not None:
                 # parse and validate input filter
                 filterexpr = dataset_features_provider.parse_filter(filterexpr)
-                if filterexpr is None:
+                if filterexpr[0] is None:
                     return {
-                        'error': "Invalid filter expression",
+                        'error': (
+                            "Invalid filter expression: %s" % filterexpr[1]
+                        ),
                         'error_code': 400
                     }
 
-            feature_collection = dataset_features_provider.index(
-                bbox, srid, filterexpr
-            )
+            try:
+                feature_collection = dataset_features_provider.index(
+                    bbox, srid, filterexpr
+                )
+            except (DataError, ProgrammingError) as e:
+                self.logger.error(e)
+                return {
+                    'error': (
+                        "Feature query failed. Please check filter expression "
+                        "values and operators."
+                    ),
+                    'error_code': 400
+                }
             return {'feature_collection': feature_collection}
         else:
             return {'error': "Dataset not found or permission error"}

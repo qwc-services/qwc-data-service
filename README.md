@@ -5,6 +5,8 @@ Edit spatial and unlocated features of datasets via GeoJSON.
 
 **v2** (WIP): add support for multitenancy and replace QWC Config service with static config and permission files.
 
+**Note:**: Filter expressions have been refactored to JSON serialized arrays in v2.
+
 **Note:** requires a PostGIS database for reading and writing features
 
 

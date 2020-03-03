@@ -1,5 +1,6 @@
 from collections import OrderedDict
 import re
+from json.decoder import JSONDecodeError
 
 from flask import json
 from sqlalchemy.exc import DataError, InternalError, ProgrammingError
@@ -356,30 +357,96 @@ class DatasetFeaturesProvider():
         """Parse and validate a filter expression and return a tuple
         (sql_expr, bind_params).
 
-        :param str filterexpr: Comma-separated filter expressions as
-                               '<k1> = <v1>, <k2> like <v2>, ...'
+        :param str filterexpr: JSON serialized array of filter expressions:
+        [["<attr>", "<op>", "<value>"], "and|or", ["<attr>", "<op>", "<value>"]]
         """
+        if not filterexpr:
+            return (None, "Empty expression")
+        try:
+            filterarray = json.loads(filterexpr)
+        except JSONDecodeError as e:
+            return (None, "Invalid JSON")
+        if type(filterarray) is not list:
+            return (None, "Not an array")
+
+        CONCAT_OPERATORS = ["AND", "OR"]
+        OPERATORS = [
+            "=", "!=", "<>", "<", ">", "<=", ">=",
+            "LIKE", "ILIKE",
+            "IS", "IS NOT"
+        ]
+        VALUE_TYPES = [int, float, str, type(None)]
+
         sql = []
         params = {}
         i = 0
-        for expr in re.split(r"(?<!\\),", filterexpr):
-            parts = [
-                s.strip() for s in re.split(r"(\s*=\s*|\s+like(?i)\s+)", expr)
-            ]
-            if len(parts) != 3:
-                # Invalid expression
-                return None
-            column_name = parts[0].replace(r"\,", ",")
-            if column_name not in self.attributes:
-                # Invalid column_name
-                return None
-            sql.append("%s %s :v%d" % (column_name, parts[1], i))
-            params["v%d" % i] = parts[2].replace(r"\,", ",")
+        for entry in filterarray:
+            if type(entry) is str:
+                entry = entry.upper()
+                if entry not in CONCAT_OPERATORS:
+                    return (
+                        None, "Invalid concatenation operator '%s'" % entry)
+                if i % 2 != 1 or i == len(filterarray) - 1:
+                    # filter concatenation operators must be at odd-numbered
+                    # positions in the array and cannot appear last
+                    return (
+                        None,
+                        "Incorrect concatenation operator position for '%s'" %
+                        entry
+                    )
+                sql.append(entry)
+            elif type(entry) is list:
+                if len(entry) != 3:
+                    # filter entry must have exactly three parts
+                    return (None, "Incorrect number of entries in %s" % entry)
+
+                # column
+                column_name = entry[0]
+                if type(column_name) is not str:
+                    return (None, "Invalid column name in %s" % entry)
+
+                if column_name not in self.attributes:
+                    # column not available or not permitted
+                    return (
+                        None,
+                        "Column name not found or permission error in %s" %
+                        entry
+                    )
+
+                # operator
+                op = entry[1].upper().strip()
+                if type(entry[1]) is not str or op not in OPERATORS:
+                    return (None, "Invalid operator in %s" % entry)
+
+                # value
+                value = entry[2]
+                if type(value) not in VALUE_TYPES:
+                    return (None, "Invalid value type in %s" % entry)
+
+                if value is None:
+                    # modify operator for NULL value
+                    if op == "=":
+                        op = "IS"
+                    elif op == "!=":
+                        op = "IS NOT"
+                elif op in ["IS", "IS NOT"]:
+                    return (None, "Invalid operator in %s" % entry)
+
+                # add SQL fragment for filter
+                # e.g. '"type" >= :v0'
+                sql.append('"%s" %s :v%d' % (column_name, op, i))
+                # add value
+                params["v%d" % i] = value
+            else:
+                # invalid entry
+                return (None, "%s" % entry)
+
             i += 1
+
         if not sql:
-            return None
+            return (None, "Empty expression")
         else:
-            return (" AND ".join(sql), params)
+            return ("(%s)" % " ".join(sql), params)
 
     def parse_box2d(self, box2d):
         """Parse Box2D string and return bounding box
