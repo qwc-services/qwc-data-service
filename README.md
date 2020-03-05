@@ -164,6 +164,53 @@ Example:
 
 * File location: `$CONFIG_PATH/<tenant>/permissions.json`
 
+Example:
+```json
+{
+  "users": [
+    {
+      "name": "demo",
+      "groups": ["demo"],
+      "roles": []
+    }
+  ],
+  "groups": [
+    {
+      "name": "demo",
+      "roles": ["demo"]
+    }
+  ],
+  "roles": [
+    {
+      "role": "public",
+      "permissions": {
+        "data_datasets": [
+          {
+            "name": "qwc_demo.edit_points",
+            "attributes": [
+              "id",
+              "name",
+              "description",
+              "num",
+              "value",
+              "type",
+              "amount",
+              "validated",
+              "datetime"
+            ],
+            "writable": true,
+            "creatable": true,
+            "readable": true,
+            "updatable": true,
+            "deletable": true
+          }
+        ]
+      }
+    }
+  ]
+}
+```
+
 
 Usage
 -----
