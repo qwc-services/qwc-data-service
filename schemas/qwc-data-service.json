@@ -65,6 +65,8 @@
                         "date",
                         "double precision",
                         "integer",
+                        "json",
+                        "jsonb",
                         "numeric",
                         "real",
                         "smallint",

@@ -564,10 +564,16 @@ class DatasetFeaturesProvider():
                     # unknown attribute or not permitted
                     errors.append("Feature property '%s' can not be set" %
                                   attr)
-                elif value is not None and not isinstance(value,
-                                                          (str, int, float)):
-                    errors.append("Invalid type for feature property '%s'" %
-                                  attr)
+                elif value is not None:
+                    data_type = self.fields.get(attr, {}).get('data_type')
+                    # NOTE: allow any data type for fields of type json
+                    if (
+                        data_type not in ['json', 'jsonb']
+                        and not isinstance(value, (str, int, float, bool))
+                    ):
+                        errors.append(
+                            "Invalid type for feature property '%s'" % attr
+                        )
 
         # validate CRS
         if not self.geometry_column:
@@ -693,6 +699,9 @@ class DatasetFeaturesProvider():
         for attr in feature['properties']:
             constraints = self.fields.get(attr, {}).get('constraints', {})
             data_type = self.fields.get(attr, {}).get('data_type')
+            input_value = feature['properties'][attr]
+            value = None
+
             if data_type == 'numeric':
                 data_type = 'numeric(%d,%d)' % (
                     constraints.get('numeric_precision', 1),
@@ -704,9 +713,9 @@ class DatasetFeaturesProvider():
                     constraints['min'] = int(constraints['min'])
                 if 'max' in constraints:
                     constraints['max'] = int(constraints['max'])
-
-            input_value = feature['properties'][attr]
-            value = None
+            elif data_type in ['json', 'jsonb']:
+                # convert values for fields of type json to string
+                input_value = json.dumps(input_value)
 
             # readOnly
             if constraints.get('readOnly', False):
@@ -893,7 +902,15 @@ class DatasetFeaturesProvider():
         bound_values = OrderedDict()
         for attr in self.attributes:
             if attr in feature['properties']:
-                bound_values[attr] = feature['properties'][attr]
+                data_type = self.fields.get(attr, {}).get('data_type')
+                if data_type in ['json', 'jsonb']:
+                    # convert values for fields of type json to string
+                    bound_values[attr] = json.dumps(
+                        feature['properties'][attr]
+                    )
+                else:
+                    bound_values[attr] = feature['properties'][attr]
+
         attribute_columns = list(bound_values.keys())
 
         # columns for permitted attributes
