@@ -147,7 +147,9 @@ class DataService():
                 }
 
             # validate input feature
-            validation_errors = dataset_features_provider.validate(feature)
+            validation_errors = dataset_features_provider.validate(
+                feature, new_feature=True
+            )
             if not validation_errors:
                 # create new feature
                 try:
@@ -356,6 +358,7 @@ class DataService():
             "geometry_column": geometry.get('geometry_column'),
             "geometry_type": geometry.get('geometry_type'),
             "srid": geometry.get('srid'),
+            "allow_null_geometry": geometry.get('allow_null', False),
             "writable": writable,
             "creatable": creatable,
             "readable": readable,

@@ -27,6 +27,7 @@ class FeatureValidationTestCase(unittest.TestCase):
             'geometry_column': 'geom',
             'geometry_type': 'POINT',
             'srid': 3857,
+            'allow_null_geometry': False,
             'attributes': [
                 'field'
             ],

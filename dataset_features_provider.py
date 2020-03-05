@@ -40,6 +40,7 @@ class DatasetFeaturesProvider():
         self.geometry_column = config['geometry_column']
         self.geometry_type = config['geometry_type']
         self.srid = config['srid']
+        self.allow_null_geometry = config['allow_null_geometry']
         # write permission
         self.writable = config['writable']
         # CRUD permissions
@@ -459,6 +460,10 @@ class DatasetFeaturesProvider():
         """
         bbox = None
 
+        if box2d is None:
+            # bounding box is empty
+            return None
+
         # extract coords from Box2D string
         # e.g. "BOX(950598.12 6003950.34,950758.567 6004010.8)"
         # truncate brackets and split into coord pairs
@@ -471,14 +476,15 @@ class DatasetFeaturesProvider():
 
         return bbox
 
-    def validate(self, feature):
+    def validate(self, feature, new_feature=False):
         """Validate a feature and return any validation errors.
 
         :param object feature: GeoJSON Feature
+        :param bool new_feature: Set if this is a new feature
         """
         errors = OrderedDict()
 
-        validation_errors = self.validate_geo_json(feature)
+        validation_errors = self.validate_geo_json(feature, new_feature)
         if validation_errors:
             errors['validation_errors'] = validation_errors
         else:
@@ -492,10 +498,11 @@ class DatasetFeaturesProvider():
 
         return errors
 
-    def validate_geo_json(self, feature):
+    def validate_geo_json(self, feature, new_feature):
         """Validate structure of GeoJSON Feature object.
 
         :param object feature: GeoJSON Feature
+        :param bool new_feature: Set if this is a new feature
         """
         errors = []
 
@@ -503,12 +510,26 @@ class DatasetFeaturesProvider():
         if feature.get('type') != 'Feature':
             errors.append("GeoJSON must be of type Feature")
 
+        crs_required = True
+
         # validate geometry object
         if not self.geometry_column:
             # skip geometry validation for datasets without geometry
-            pass
+            crs_required = False
         elif 'geometry' not in feature:
-            errors.append("Missing GeoJSON geometry")
+            if new_feature and not self.allow_null_geometry:
+                # geometry required on create,
+                # unless NULL geometries are allowed
+                errors.append("Missing GeoJSON geometry")
+            else:
+                # geometry always optional on update
+                crs_required = False
+        elif feature.get('geometry') is None:
+            if not self.allow_null_geometry:
+                errors.append("Geometry may not be NULL")
+            else:
+                # geometry is NULL
+                crs_required = False
         elif not isinstance(feature.get('geometry'), dict):
             errors.append("Invalid GeoJSON geometry")
         else:
@@ -553,7 +574,9 @@ class DatasetFeaturesProvider():
             # skip CRS validation for datasets without geometry
             pass
         elif 'crs' not in feature:
-            errors.append("Missing GeoJSON CRS")
+            # CRS not required if geometry is omitted or NULL
+            if crs_required:
+                errors.append("Missing GeoJSON CRS")
         elif not isinstance(feature.get('crs'), dict):
             errors.append("Invalid GeoJSON CRS")
         else:
@@ -580,6 +603,9 @@ class DatasetFeaturesProvider():
 
         if not self.geometry_column:
             # skip geometry validation for dataset without geometry
+            return []
+        elif feature.get('geometry') is None:
+            # skip geometry validation if geometry is omitted or NULL
             return []
 
         json_geom = json.dumps(feature.get('geometry'))
@@ -833,7 +859,11 @@ class DatasetFeaturesProvider():
         crs = None
         bbox = None
         if self.geometry_column:
-            geometry = json.loads(row['json_geom'])
+            if row['json_geom'] is not None:
+                geometry = json.loads(row['json_geom'])
+            else:
+                # geometry is NULL
+                geometry = None
             srid = client_srid or self.srid
             crs = {
                 'type': 'name',
@@ -866,12 +896,27 @@ class DatasetFeaturesProvider():
                 bound_values[attr] = feature['properties'][attr]
         attribute_columns = list(bound_values.keys())
 
+        # columns for permitted attributes
+        columns = (', ').join(self.escape_column_names(attribute_columns))
+
         srid = None
         if self.geometry_column:
-            # get geometry value as GeoJSON string
-            bound_values[self.geometry_column] = json.dumps(
-                feature['geometry']
-            )
+            if 'geometry' in feature:
+                if feature['geometry'] is not None:
+                    # get geometry value as GeoJSON string
+                    bound_values[self.geometry_column] = json.dumps(
+                        feature['geometry']
+                    )
+                else:
+                    # geometry is NULL
+                    bound_values[self.geometry_column] = None
+
+                # columns for permitted attributes and geometry
+                columns = (', ').join(
+                    self.escape_column_names(
+                        attribute_columns + [self.geometry_column]
+                    )
+                )
 
             # get client SRID from GeoJSON CRS
             if 'crs' not in feature:
@@ -884,22 +929,12 @@ class DatasetFeaturesProvider():
                 else:
                     srid = int(srid)
 
-            # columns for permitted attributes and geometry
-            columns = (', ').join(
-                self.escape_column_names(
-                    attribute_columns + [self.geometry_column]
-                )
-            )
-        else:
-            # columns for permitted attributes
-            columns = (', ').join(self.escape_column_names(attribute_columns))
-
         # use bound parameters for attribute values and geometry
         # e.g. ['name'] + 'geom'
         #     ==>
         #      ":name, ST_SetSRID(ST_GeomFromGeoJSON(:geom), 2056)"
         bound_columns = [":%s" % attr for attr in attribute_columns]
-        if self.geometry_column:
+        if self.geometry_column and 'geometry' in feature:
             # build geometry from GeoJSON, transformed to dataset CRS
             geometry_value = self.transform_geom_sql(
                 "ST_SetSRID(ST_GeomFromGeoJSON(:{geom}), {srid})", srid,

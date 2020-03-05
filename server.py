@@ -61,6 +61,7 @@ service API.
 - UUID: Hex-encoded string format. Example: `'6fa459ea-ee8a-3ca4-894e-db77e160355e'`
 
 ### Feature-ID
+
 For operations like updating or deleting features, records are identified by
 a feature `id`. This `id` refers to the primary key of the database
 table and is usually kept constant over time.
@@ -92,7 +93,7 @@ This expression is a serialized JSON array of the format:
 * Find all features in the dataset with a last change before 1st of January 2020 or having `NULL` as lastchange value:
   `[["lastchange","<","2020-01-01T12:00:00"],"or",["lastchange","IS",null]]`
           """,
-          default_label='Data edit operations', doc='/api/', # ordered=True  + reorder geom/props
+          default_label='Data edit operations', doc='/api/',
           )
 # Omit X-Fields header in docs
 app.config['RESTPLUS_MASK_SWAGGER'] = False

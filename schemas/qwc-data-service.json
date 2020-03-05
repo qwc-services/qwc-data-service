@@ -155,6 +155,12 @@
                     "title": "SRID",
                     "description": "Spatial Reference System Identifier (EPSG code)",
                     "type": "integer"
+                  },
+                  "allow_null": {
+                    "title": "Allow NULL geometries",
+                    "description": "Allow setting geometry values to NULL",
+                    "type": "boolean",
+                    "default": false
                   }
                 },
                 "required": [
