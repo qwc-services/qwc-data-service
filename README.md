@@ -9,32 +9,6 @@ Edit spatial and unlocated features of datasets via GeoJSON.
 
 **Note:** requires a PostGIS database for reading and writing features
 
-Docker usage
-------------
-
-### Run docker image
-
-    docker run -v /PATH/TO/pg_service.conf:/var/www/.pg_service.conf:ro \
-      -v /PATH/TO/CONFIG:/etc/qwc_service/:ro \
-      -e "CONFIG_PATH=/etc/qwc_service" \
-      -p 5012:9090 sourcepole/qwc-data-service
-
-A configuration database is required to run the Data Service. For testing purposes you can use the demo DB:
-
-    docker run -p 5439:5432 sourcepole/qwc-demo-db
-
-
-| docker parameters | Description |
-|----------------------|-------------|
-| `-v /PATH/TO/pg_service.conf:/var/www/.pg_service.conf:ro` | Mount your pg_service.conf file to `/var/www/` with read only mode|
-| `-v /PATH/TO/CONFIG:/etc/qwc_service/:ro` | Mount your config directory to `/etc/qwc_service/` with read only mode|
-| `-e "CONFIG_PATH=/etc/qwc_service"` | Set enviroment varible [CONFIG_PATH](#Configuration)|
-| `-p 5012:9090` | This binds port 9090 of the container to port 5012 on 127.0.0.1 of the host machine. |
-
-### Build docker image locally:
-
-    docker build .
-
 Setup
 -----
 
@@ -229,6 +203,28 @@ Sample requests:
 
     curl 'http://localhost:5012/qwc_demo.edit_points/'
 
+
+Docker usage
+------------
+
+To run this docker image you will need a PostGIS database. For testing purposes you can use the demo DB.
+
+The following steps explain how to download the demo DB docker image and how to run the `qwc-data-service` with `docker-compose`.
+
+**Step 1: Clone qwc-docker**
+
+    git clone https://github.com/qwc-services/qwc-docker
+    cd qwc-docker
+
+**Step 2: Create docker-compose.yml file**
+
+    cp docker-compose-example.yml docker-compose.yml
+
+**Step 3: Start docker containers**
+
+    docker-compose up qwc-data-service
+
+For more information please visit: https://github.com/qwc-services/qwc-docker
 
 Development
 -----------
