@@ -220,14 +220,9 @@ The following steps explain how to download the demo DB docker image and how to 
 
     cp docker-compose-example.yml docker-compose.yml
 
-Remove all docker images except:
-
-* qwc-postgis
-* qwc-data-service
-
 **Step 3: Start docker containers**
 
-    docker-compose up
+    docker-compose up qwc-data-service
 
 For more information please visit: https://github.com/qwc-services/qwc-docker
 
