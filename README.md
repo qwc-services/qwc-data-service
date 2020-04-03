@@ -185,6 +185,50 @@ Example:
 }
 ```
 
+### Overview
+
+                                     QWC2 build:                                      Public:
+    +--------------------+           +------------+
+    | themesConfig.json  |           |            |
+    |          ^         +-----------> yarn build +----------------------------------> (themes.json)
+    |          |         |       +--->            |
+    |          +         +-----+ |   +------------+       +---------------+
+    |        (edit.json) |     | |                        |               |
+    +--------------------+     | |------------------------+ QGIS Server   +----------> WMS/WFS
+                               | |      Capabilities      |               |
+    +--------------------+     | |                        +------^--------+
+    | ui Files           +-----------------------------------------------------------> assets/*.ui
+    +--------------------+     | |                               |
+                               | |                               |                    +------------------+
+    +--------------------+     | |                               +                    |                  +--> html/js/css/assets
+    | qgs Files          +--+-------------------------------> *.qgs         +---------> qwc-map-viewer   |
+    +--------------------+  |  | |                                          |         |                  +--> config.json/themes.json
+                            |  | |                                          |         +------------------+
+                            |  | |                                          |
+                            |  | |                                          |         +------------------+
+                            |  | |                                          |         |                  |  REST-API
+        +---------+         |  | |                                          +---------> qwc-data-service <--------------->
+        |         |         |  | |   +------------+                         |         |                  |
+        | config- |         |  | +--->            |                         +         +------------------+
+        |   DB    | +-------v--v-----> Config-    +------> [service].json+permissions.json
+        |         |                  | Generator  |
+        |         |                  |            |
+        +---------+                  +------------+
+
+Edit forms:
+
+- Edit forms are automatically created from field information extracted from QGS files
+- ui-Files created with QT Designer can also be used to create edit forms
+
+Data service configuration:
+
+- Table names and column information are extracted from QGS files
+- Data contraints are extracted from QGS files
+
+Data read/write:
+
+- QWC2 issues data-service API requests for reading und writing
+
 
 Usage
 -----
