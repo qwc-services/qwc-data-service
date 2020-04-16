@@ -227,6 +227,23 @@ class DataService():
         else:
             return {'error': "Dataset not found or permission error"}
 
+    def is_editable(self, identity, dataset, id):
+        """Returns whether a dataset is editable.
+
+        :param str identity: User identity
+        :param str dataset: Dataset ID
+        :param int id: Dataset feature ID
+        """
+        dataset_features_provider = self.dataset_features_provider(
+            identity, dataset
+        )
+        if dataset_features_provider is not None:
+            # check update permission
+            if not dataset_features_provider.updatable():
+                return False
+
+        return dataset_features_provider.exists(id)
+
     def dataset_features_provider(self, identity, dataset):
         """Return DatasetFeaturesProvider if available and permitted.
 

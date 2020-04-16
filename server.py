@@ -168,6 +168,9 @@ index_parser.add_argument('filter')
 show_parser = reqparse.RequestParser(argument_class=CaseInsensitiveArgument)
 show_parser.add_argument('crs')
 
+get_relations_parser = reqparse.RequestParser(argument_class=CaseInsensitiveArgument)
+get_relations_parser.add_argument('tables', required=True)
+
 
 # routes
 @api.route('/<dataset>/')
@@ -320,6 +323,102 @@ class DataMember(Resource):
             error_code = result.get('error_code') or 404
             api.abort(error_code, result['error'])
 
+@api.route('/<dataset>/<int:id>/relations')
+@api.response(404, 'Dataset or feature not found or permission error')
+@api.param('dataset', 'Dataset ID', default='qwc_demo.edit_points')
+@api.param('id', 'Feature ID')
+class Relations(Resource):
+    @api.doc('get_relations')
+    @api.param('tables', 'Comma separated list of relation tables of the form "tablename:fk_field_name"')
+    @api.expect(get_relations_parser)
+    # TODO
+    #@api.marshal_with(relationvalues_response, code=201)
+    def get(self, dataset, id):
+        args = get_relations_parser.parse_args()
+        relations = args['tables'] or ""
+        ret = {}
+        for relation in relations.split(","):
+            try:
+                table, fk_field_name = relation.split(":")
+            except:
+                continue
+            ret[table] = {"fk": fk_field_name, "records": []}
+            result = data_service.index(
+                get_jwt_identity(), table, None, None, "%s = %d" % (fk_field_name, id)
+            )
+            if 'feature_collection' in result:
+                for feature in result['feature_collection']['features']:
+                    record = {(table + "__" + k): v for k, v in feature['properties'].items()}
+                    record["id"] = feature["id"]
+                    ret[table]['records'].append(record)
+        return {"relationvalues": ret}
+
+    @api.doc('post_relations')
+    # TODO
+    #@api.expect(relationvalues_request)
+    #@api.marshal_with(relationvalues_response, code=201)
+    @jwt_optional
+    def post(self, dataset, id):
+        """Update relation values for the specified dataset
+
+        Return success status for each relation value.
+        """
+        if not request.is_json:
+            api.abort(400, "Request data is not JSON")
+
+        payload = api.payload
+        if not isinstance(payload, dict):
+            api.abort(400, "JSON is not an object")
+
+        # Check if dataset with specified id exists
+        if not data_service.is_editable(get_jwt_identity(), dataset, id):
+            api.abort(404, "Dataset or feature not found or permission error")
+
+        ret = {}
+        haserrors = False
+        for (rel_table, rel_data) in payload.items():
+            fk_field = rel_data.get("fk", None)
+            ret[rel_table] = {
+                "fk": fk_field,
+                "records": []
+            }
+            tbl_prefix = rel_table + "__"
+            for rel_record in rel_data.get("records", []):
+                # Set foreign key for new records
+                if rel_record.get("__status__", "") == "new":
+                    rel_record[tbl_prefix + fk_field] = id
+
+                if rel_record.get(tbl_prefix + fk_field, None) != id:
+                    rel_record["__error__"] = "FK validation failed"
+                    ret[rel_table]["records"].append(rel_record)
+                    haserrors = True
+                else:
+                    json = {
+                        "type": "Feature",
+                        "id": rel_record["id"] if "id" in rel_record else None,
+                        "properties": {k.lstrip(tbl_prefix): v for k, v in rel_record.items() if k.startswith(tbl_prefix)}
+                    }
+                    if not "__status__" in rel_record:
+                        ret[rel_table]["records"].append(rel_record)
+                        continue
+                    elif rel_record["__status__"] == "new":
+                        result = data_service.create(get_jwt_identity(), rel_table, json)
+                    elif rel_record["__status__"] == "changed":
+                        result = data_service.update(get_jwt_identity(), rel_table, rel_record["id"], json)
+                    elif rel_record["__status__"].startswith("deleted"):
+                        result = data_service.destroy(get_jwt_identity(), rel_table, rel_record["id"])
+                    else:
+                        continue
+                    if "error" in result:
+                        rel_record["error"] = result["error"]
+                        rel_record["error_details"] = result.get('error_details') or {}
+                        ret[rel_table]["records"].append(rel_record)
+                        haserrors = True
+                    elif "feature" in result:
+                        rel_record = {(rel_table + "__" + k): v for k, v in result['feature']['properties'].items()}
+                        rel_record["id"] = result['feature']["id"]
+                        ret[rel_table]["records"].append(rel_record)
+        return {"relationvalues": ret, "success": not haserrors}
 
 # local webserver
 if __name__ == '__main__':

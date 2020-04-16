@@ -312,6 +312,29 @@ class DatasetFeaturesProvider():
 
         return success
 
+    def exists(self, id):
+        """Check if a feature exists.
+
+        :param int id: Dataset feature ID
+        """
+        sql = sql_text(("""
+            SELECT EXISTS(SELECT 1 FROM {table} WHERE {pkey}=:id)
+        """).format(
+            table=self.table_name, pkey=self.primary_key
+        ))
+
+        # connect to database
+        conn = self.db.connect()
+
+        # execute query
+        result = conn.execute(sql, id=id)
+        exists = result.fetchone()[0]
+
+        # close database connection
+        conn.close()
+
+        return exists
+
     def parse_bbox(self, bbox):
         """Parse and validate a bounding box and return list of coordinates.
 
