@@ -35,9 +35,9 @@ class DatasetFeaturesProvider():
         self.attributes = config['attributes']
         # field constraints
         self.fields = config.get('fields', {})
-        self.geometry_column = config['geometry_column']
-        self.geometry_type = config['geometry_type']
-        self.srid = config['srid']
+        self.geometry_column = config.get('geometry_column', None)
+        self.geometry_type = config.get('geometry_type', None)
+        self.srid = config.get('srid', None)
         # write permission
         self.writable = config['writable']
         # CRUD permissions
@@ -114,14 +114,17 @@ class DatasetFeaturesProvider():
         if where_clauses:
             where_clause = "WHERE " + " AND ".join(where_clauses)
 
-        geom_sql = self.transform_geom_sql('"{geom}"', self.srid, srid)
+        geom_col = ""
+        if self.geometry_column:
+            geom_sql = self.transform_geom_sql('"{geom}"', self.srid, srid)
+            geom_col = (", ST_AsGeoJSON(%s) AS json_geom" % geom_sql).format(geom=self.geometry_column)
+
         sql = sql_text(("""
-            SELECT {columns},
-                ST_AsGeoJSON(%s) AS json_geom
+            SELECT {columns}{geom_col}
             FROM {table}
             {where_clause};
-        """ % geom_sql).format(
-            columns=columns, geom=self.geometry_column, table=self.table_name,
+        """).format(
+            columns=columns, geom_col=geom_col, table=self.table_name,
             where_clause=where_clause
         ))
 
@@ -166,16 +169,18 @@ class DatasetFeaturesProvider():
         columns = (', ').join(
             self.escape_column_names([self.primary_key] + self.attributes)
         )
+        geom_col = ""
+        if self.geometry_column:
+            geom_sql = self.transform_geom_sql('"{geom}"', self.srid, srid)
+            geom_col = (", ST_AsGeoJSON(%s) AS json_geom" % geom_sql).format(geom=self.geometry_column)
 
-        geom_sql = self.transform_geom_sql('"{geom}"', self.srid, srid)
         sql = sql_text(("""
-            SELECT {columns},
-                ST_AsGeoJSON(%s) AS json_geom
+            SELECT {columns}{geom_col}
             FROM {table}
             WHERE {pkey} = :id
             LIMIT 1;
-        """ % geom_sql).format(
-            columns=columns, geom=self.geometry_column, table=self.table_name,
+        """).format(
+            columns=columns, geom_col=geom_col, table=self.table_name,
             pkey=self.primary_key
         ))
 
@@ -205,17 +210,19 @@ class DatasetFeaturesProvider():
         sql_params = self.sql_params_for_feature(feature)
         srid = sql_params['client_srid']
 
-        geom_sql = self.transform_geom_sql('"{geom}"', self.srid, srid)
+        geom_col = ""
+        if self.geometry_column:
+            geom_sql = self.transform_geom_sql('"{geom}"', self.srid, srid)
+            geom_col = (", ST_AsGeoJSON(%s) AS json_geom" % geom_sql).format(geom=self.geometry_column)
+
         sql = sql_text(("""
             INSERT INTO {table} ({columns})
                 VALUES ({values_sql})
-            RETURNING {return_columns},
-                ST_AsGeoJSON(%s) AS json_geom;
-        """ % geom_sql).format(
+            RETURNING {return_columns}{geom_col};
+        """).format(
             table=self.table_name, columns=sql_params['columns'],
             values_sql=sql_params['values_sql'],
-            return_columns=sql_params['return_columns'],
-            geom=self.geometry_column
+            return_columns=sql_params['return_columns'], geom_col=geom_col
         ))
 
         # connect to database
@@ -243,18 +250,20 @@ class DatasetFeaturesProvider():
         sql_params = self.sql_params_for_feature(feature)
         srid = sql_params['client_srid']
 
-        geom_sql = self.transform_geom_sql('"{geom}"', self.srid, srid)
+        geom_col = ""
+        if self.geometry_column:
+            geom_sql = self.transform_geom_sql('"{geom}"', self.srid, srid)
+            geom_col = (", ST_AsGeoJSON(%s) AS json_geom" % geom_sql).format(geom=self.geometry_column)
+
         sql = sql_text(("""
             UPDATE {table} SET ({columns}) =
                 ({values_sql})
             WHERE {pkey} = :{pkey}
-            RETURNING {return_columns},
-                ST_AsGeoJSON(%s) AS json_geom;
-        """ % geom_sql).format(
+            RETURNING {return_columns}{geom_col};
+        """).format(
             table=self.table_name, columns=sql_params['columns'],
             values_sql=sql_params['values_sql'], pkey=self.primary_key,
-            return_columns=sql_params['return_columns'],
-            geom=self.geometry_column
+            return_columns=sql_params['return_columns'], geom_col=geom_col
         ))
 
         update_values = sql_params['bound_values']
@@ -377,11 +386,12 @@ class DatasetFeaturesProvider():
         """
         errors = OrderedDict()
 
+        hasgeometry = self.geometry_column is not None
         validation_errors = self.validate_geo_json(feature)
         if validation_errors:
             errors['validation_errors'] = validation_errors
         else:
-            geometry_errors = self.validate_geometry(feature)
+            geometry_errors = self.validate_geometry(feature) if hasgeometry else None
             if geometry_errors:
                 errors['geometry_errors'] = geometry_errors
             else:
@@ -398,34 +408,37 @@ class DatasetFeaturesProvider():
         """
         errors = []
 
+        hasgeometry = self.geometry_column is not None
+
         # validate GeoJSON
         if feature.get('type') != 'Feature':
             errors.append("GeoJSON must be of type Feature")
 
         # validate geometry object
-        if 'geometry' not in feature:
-            errors.append("Missing GeoJSON geometry")
-        elif not isinstance(feature.get('geometry'), dict):
-            errors.append("Invalid GeoJSON geometry")
-        else:
-            geo_json_geometry_types = [
-                'Point',
-                'MultiPoint',
-                'LineString',
-                'MultiLineString',
-                'Polygon',
-                'MultiPolygon',
-                'GeometryCollection'
-            ]
-            geometry = feature['geometry']
-            if 'type' not in geometry:
-                errors.append("Missing GeoJSON geometry type")
-            elif geometry.get('type') not in geo_json_geometry_types:
-                errors.append("Invalid GeoJSON geometry type")
-            if 'coordinates' not in geometry:
-                errors.append("Missing GeoJSON geometry coordinates")
-            elif not isinstance(geometry.get('coordinates'), list):
-                errors.append("Invalid GeoJSON geometry coordinates")
+        if hasgeometry:
+            if 'geometry' not in feature:
+                errors.append("Missing GeoJSON geometry")
+            elif not isinstance(feature.get('geometry'), dict):
+                errors.append("Invalid GeoJSON geometry")
+            else:
+                geo_json_geometry_types = [
+                    'Point',
+                    'MultiPoint',
+                    'LineString',
+                    'MultiLineString',
+                    'Polygon',
+                    'MultiPolygon',
+                    'GeometryCollection'
+                ]
+                geometry = feature['geometry']
+                if 'type' not in geometry:
+                    errors.append("Missing GeoJSON geometry type")
+                elif geometry.get('type') not in geo_json_geometry_types:
+                    errors.append("Invalid GeoJSON geometry type")
+                if 'coordinates' not in geometry:
+                    errors.append("Missing GeoJSON geometry coordinates")
+                elif not isinstance(geometry.get('coordinates'), list):
+                    errors.append("Invalid GeoJSON geometry coordinates")
 
         # validate properties
         if 'properties' not in feature:
@@ -445,22 +458,23 @@ class DatasetFeaturesProvider():
                                   attr)
 
         # validate CRS
-        if 'crs' not in feature:
-            errors.append("Missing GeoJSON CRS")
-        elif not isinstance(feature.get('crs'), dict):
-            errors.append("Invalid GeoJSON CRS")
-        else:
-            crs = feature['crs']
-            if crs.get('type') != 'name':
-                errors.append("GeoJSON CRS must be of type 'name'")
-            if 'properties' not in crs:
-                errors.append("Missing GeoJSON CRS properties")
-            elif not isinstance(crs.get('properties'), dict):
-                errors.append("Invalid GeoJSON CRS properties")
-            elif not re.match(r'^urn:ogc:def:crs:EPSG::\d{1,6}$',
-                              str(crs['properties'].get('name'))):
-                errors.append("GeoJSON CRS is not an OGC CRS URN "
-                              "(e.g. 'urn:ogc:def:crs:EPSG::4326')")
+        if hasgeometry:
+            if 'crs' not in feature:
+                errors.append("Missing GeoJSON CRS")
+            elif not isinstance(feature.get('crs'), dict):
+                errors.append("Invalid GeoJSON CRS")
+            else:
+                crs = feature['crs']
+                if crs.get('type') != 'name':
+                    errors.append("GeoJSON CRS must be of type 'name'")
+                if 'properties' not in crs:
+                    errors.append("Missing GeoJSON CRS properties")
+                elif not isinstance(crs.get('properties'), dict):
+                    errors.append("Invalid GeoJSON CRS properties")
+                elif not re.match(r'^urn:ogc:def:crs:EPSG::\d{1,6}$',
+                                str(crs['properties'].get('name'))):
+                    errors.append("GeoJSON CRS is not an OGC CRS URN "
+                                "(e.g. 'urn:ogc:def:crs:EPSG::4326')")
 
         return errors
 
@@ -700,14 +714,14 @@ class DatasetFeaturesProvider():
         return {
             'type': 'Feature',
             'id': row[self.primary_key],
-            'geometry': json.loads(row['json_geom']),
+            'geometry': json.loads(row['json_geom']) if self.geometry_column else None,
             'properties': props,
             'crs': {
                 'type': 'name',
                 'properties': {
                     'name': 'urn:ogc:def:crs:EPSG::%d' % srid
                 }
-            }
+            } if self.geometry_column else None
         }
 
     def sql_params_for_feature(self, feature):
@@ -722,25 +736,30 @@ class DatasetFeaturesProvider():
             if attr in feature['properties']:
                 bound_values[attr] = feature['properties'][attr]
         attribute_columns = list(bound_values.keys())
+        escape_columns = list(attribute_columns)
 
-        # get geometry value as GeoJSON string
-        bound_values[self.geometry_column] = json.dumps(feature['geometry'])
+        srid = None
+        if self.geometry_column:
+            # get geometry value as GeoJSON string
+            bound_values[self.geometry_column] = json.dumps(feature['geometry'])
 
-        # get client SRID from GeoJSON CRS
-        if 'crs' not in feature:
-            srid = self.srid
-        else:
-            srid = feature['crs']['properties']['name'].split(':')[-1]
-            if srid == 'CRS84':
-                # use EPSG:4326 for 'urn:ogc:def:crs:OGC:1.3:CRS84'
-                srid = 4326
+            # get client SRID from GeoJSON CRS
+            if 'crs' not in feature:
+                srid = self.srid
             else:
-                srid = int(srid)
+                srid = feature['crs']['properties']['name'].split(':')[-1]
+                if srid == 'CRS84':
+                    # use EPSG:4326 for 'urn:ogc:def:crs:OGC:1.3:CRS84'
+                    srid = 4326
+                else:
+                    srid = int(srid)
+
+            escape_columns += [self.geometry_column]
 
         # columns for permitted attributes and geometry
         columns = (', ').join(
             self.escape_column_names(
-                attribute_columns + [self.geometry_column]
+                escape_columns
             )
         )
 
@@ -749,17 +768,18 @@ class DatasetFeaturesProvider():
         #     ==>
         #      ":name, ST_SetSRID(ST_GeomFromGeoJSON(:geom), 2056)"
         bound_columns = [":%s" % attr for attr in attribute_columns]
-        # build geometry from GeoJSON, transformed to dataset CRS
-        geometry_value = self.transform_geom_sql(
-            "ST_SetSRID(ST_GeomFromGeoJSON(:{geom}), {srid})", srid, self.srid
-        ).format(geom=self.geometry_column, srid=srid)
-        values_sql = (', ').join(bound_columns + [geometry_value])
+        if self.geometry_column:
+            # build geometry from GeoJSON, transformed to dataset CRS
+            geometry_value = self.transform_geom_sql(
+                "ST_SetSRID(ST_GeomFromGeoJSON(:{geom}), {srid})", srid, self.srid
+            ).format(geom=self.geometry_column, srid=srid)
+            bound_columns += [geometry_value]
+        values_sql = (', ').join(bound_columns)
 
         # return id and permitted attributes
         return_columns = (', ').join(
             self.escape_column_names([self.primary_key] + self.attributes)
         )
-
         return {
             'columns': columns,
             'values_sql': values_sql,
