@@ -194,7 +194,7 @@ Example:
     |          |         |       +--->            |
     |          +         +-----+ |   +------------+       +---------------+
     |        (edit.json) |     | |                        |               |
-    +--------------------+     | |------------------------+ QGIS Server   +----------> WMS/WFS
+    +--------------------+     | +------------------------+ QGIS Server   +----------> WMS/WFS
                                | |      Capabilities      |               |
     +--------------------+     | |                        +------^--------+
     | ui Files           +-----------------------------------------------------------> assets/*.ui
@@ -222,8 +222,9 @@ Edit forms:
 
 Data service configuration:
 
-- Table names and column information are extracted from QGS files
+- DB connection information, table and column names and primary key information are extracted from QGS files
 - Data contraints are extracted from QGS files
+- Column types and additional constraints are read from the the geo-DB
 
 Data read/write:
 
