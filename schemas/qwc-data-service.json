@@ -33,9 +33,10 @@
             "type": "object",
             "properties": {
               "name": {
+                "description": "Dataset name",
                 "type": "string"
               },
-              "database": {
+              "db_url": {
                 "type": "string"
               },
               "schema": {
@@ -54,6 +55,7 @@
                   "type": "object",
                   "properties": {
                     "name": {
+                      "description": "Field name",
                       "type": "string"
                     },
                     "data_type": {
@@ -174,7 +176,7 @@
             },
             "required": [
               "name",
-              "database",
+              "db_url",
               "schema",
               "table_name",
               "primary_key",
