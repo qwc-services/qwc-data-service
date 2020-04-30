@@ -56,7 +56,7 @@ Example:
     "datasets": [
       {
         "name": "qwc_demo.edit_points",
-        "database": "postgresql:///?service=qwc_geodb",
+        "db_url": "postgresql:///?service=qwc_geodb",
         "schema": "qwc_geodb",
         "table_name": "edit_points",
         "primary_key": "id",
@@ -136,11 +136,13 @@ Example:
 
 ### Permissions
 
+* [JSON schema](https://github.com/qwc-services/qwc-services-core/blob/master/schemas/qwc-services-permissions.json)
 * File location: `$CONFIG_PATH/<tenant>/permissions.json`
 
 Example:
 ```json
 {
+  "$schema": "https://raw.githubusercontent.com/qwc-services/qwc-services-core/master/schemas/qwc-services-permissions.json",
   "users": [
     {
       "name": "demo",
