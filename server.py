@@ -93,7 +93,7 @@ This expression is a serialized JSON array of the format:
 * Find all features in the dataset with a last change before 1st of January 2020 or having `NULL` as lastchange value:
   `[["lastchange","<","2020-01-01T12:00:00"],"or",["lastchange","IS",null]]`
           """,
-          default_label='Data edit operations', doc='/api/',
+          default_label='Data edit operations', doc='/api/'
           )
 # Omit X-Fields header in docs
 app.config['RESTPLUS_MASK_SWAGGER'] = False
@@ -107,12 +107,9 @@ jwt = jwt_manager(app, api)
 tenant_handler = TenantHandler(app.logger)
 
 
-def data_service_handler(identity):
-    """Get or create a DataService instance for a tenant.
-
-    :param str identity: User identity
-    """
-    tenant = tenant_handler.tenant(identity)
+def data_service_handler():
+    """Get or create a DataService instance for a tenant."""
+    tenant = tenant_handler.tenant()
     handler = tenant_handler.handler('data', 'data', tenant)
     if handler is None:
         handler = tenant_handler.register_handler(
@@ -272,7 +269,7 @@ class DataCollection(Resource):
         crs = args['crs']
         filterexpr = args['filter']
 
-        data_service = data_service_handler(get_jwt_identity())
+        data_service = data_service_handler()
         result = data_service.index(
             get_jwt_identity(), dataset, bbox, crs, filterexpr
         )
@@ -298,7 +295,7 @@ class DataCollection(Resource):
             # parse request data (NOTE: catches invalid JSON)
             payload = api.payload
             if isinstance(payload, dict):
-                data_service = data_service_handler(get_jwt_identity())
+                data_service = data_service_handler()
                 result = data_service.create(
                     get_jwt_identity(), dataset, payload)
                 if 'error' not in result:
@@ -336,7 +333,7 @@ class DataMember(Resource):
         args = show_parser.parse_args()
         crs = args['crs']
 
-        data_service = data_service_handler(get_jwt_identity())
+        data_service = data_service_handler()
         result = data_service.show(get_jwt_identity(), dataset, id, crs)
         if 'error' not in result:
             return result['feature']
@@ -360,7 +357,7 @@ class DataMember(Resource):
             # parse request data (NOTE: catches invalid JSON)
             payload = api.payload
             if isinstance(payload, dict):
-                data_service = data_service_handler(get_jwt_identity())
+                data_service = data_service_handler()
                 result = data_service.update(
                     get_jwt_identity(), dataset, id, api.payload
                 )
@@ -384,7 +381,7 @@ class DataMember(Resource):
 
         Delete dataset feature with ID.
         """
-        data_service = data_service_handler(get_jwt_identity())
+        data_service = data_service_handler()
         result = data_service.destroy(get_jwt_identity(), dataset, id)
         if 'error' not in result:
             return {
