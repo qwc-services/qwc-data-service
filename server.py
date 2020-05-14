@@ -396,7 +396,7 @@ class Relations(Resource):
                     json = {
                         "type": "Feature",
                         "id": rel_record["id"] if "id" in rel_record else None,
-                        "properties": {k.lstrip(tbl_prefix): v for k, v in rel_record.items() if k.startswith(tbl_prefix)}
+                        "properties": {k[len(tbl_prefix):]: v for k, v in rel_record.items() if k.startswith(tbl_prefix)}
                     }
                     if not "__status__" in rel_record:
                         ret[rel_table]["records"].append(rel_record)
