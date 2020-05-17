@@ -420,6 +420,35 @@ class Relations(Resource):
                         ret[rel_table]["records"].append(rel_record)
         return {"relationvalues": ret, "success": not haserrors}
 
+
+@api.route('/keyvals')
+@api.response(404, 'Dataset or feature not found or permission error')
+class KeyValues(Resource):
+    @api.doc('get_relations')
+    @api.param('tables', 'Comma separated list of keyvalue tables of the form "tablename:key_field_name:value_field_name"')
+    @api.expect(get_relations_parser)
+    # TODO
+    #@api.marshal_with(relationvalues_response, code=201)
+    def get(self):
+        args = get_relations_parser.parse_args()
+        keyvals = args['tables'] or ""
+        ret = {}
+        for keyval in keyvals.split(","):
+            try:
+                table, key_field_name, value_field_name = keyval.split(":")
+            except:
+                continue
+            ret[table] = []
+            result = data_service.index(
+                get_jwt_identity(), table, None, None, None
+            )
+            if 'feature_collection' in result:
+                for feature in result['feature_collection']['features']:
+                    record = {"key": feature["id"] if key_field_name == "id" else feature['properties'][key_field_name], "value": feature['properties'][value_field_name].strip()}
+                    ret[table].append(record)
+        return {"keyvalues": ret}
+
+
 # local webserver
 if __name__ == '__main__':
     print("Starting Data service...")
