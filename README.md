@@ -1,14 +1,10 @@
 [![](https://github.com/qwc-services/qwc-data-service/workflows/build/badge.svg)](https://github.com/qwc-services/qwc-data-service/actions)
 [![](https://img.shields.io/docker/pulls/sourcepole/qwc-data-service)](https://hub.docker.com/r/sourcepole/qwc-data-service)
 
-QWC Data Service v2
-===================
+QWC Data Service
+================
 
 Edit spatial and unlocated features of datasets via GeoJSON.
-
-**v2** (WIP): add support for multitenancy and replace QWC Config service with static config and permission files.
-
-**Note:**: Filter expressions have been refactored to JSON serialized arrays in v2.
 
 **Note:** requires a PostGIS database for reading and writing features
 
