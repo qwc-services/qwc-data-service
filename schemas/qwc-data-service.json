@@ -1,0 +1,198 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://raw.githubusercontent.com/qwc-services/qwc-data-service/v2/schemas/qwc-data-service.json",
+  "title": "QWC Data Service",
+  "type": "object",
+  "properties": {
+    "$schema": {
+      "title": "JSON Schema",
+      "description": "Reference to JSON schema of this config",
+      "type": "string",
+      "format": "uri",
+      "default": "https://raw.githubusercontent.com/qwc-services/qwc-data-service/v2/schemas/qwc-data-service.json"
+    },
+    "service": {
+      "title": "Service name",
+      "type": "string",
+      "const": "data"
+    },
+    "config": {
+      "title": "Config options",
+      "type": "object"
+    },
+    "resources": {
+      "title": "Resources",
+      "type": "object",
+      "properties": {
+        "datasets": {
+          "title": "Datasets",
+          "type": "array",
+          "items": {
+            "title": "Dataset",
+            "description": "PostgreSQL metadata and field constraints for a dataset",
+            "type": "object",
+            "properties": {
+              "name": {
+                "description": "Dataset name",
+                "type": "string"
+              },
+              "db_url": {
+                "type": "string"
+              },
+              "schema": {
+                "type": "string"
+              },
+              "table_name": {
+                "type": "string"
+              },
+              "primary_key": {
+                "type": "string"
+              },
+              "fields": {
+                "description": "Dataset fields with optional constraints",
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "description": "Field name",
+                      "type": "string"
+                    },
+                    "data_type": {
+                      "type": "string",
+                      "enum": [
+                        "bigint",
+                        "boolean",
+                        "character varying",
+                        "date",
+                        "double precision",
+                        "integer",
+                        "json",
+                        "jsonb",
+                        "numeric",
+                        "real",
+                        "smallint",
+                        "text",
+                        "time",
+                        "timestamp with time zone",
+                        "timestamp without time zone",
+                        "uuid"
+                      ],
+                      "default": "text"
+                    },
+                    "constraints": {
+                      "type": "object",
+                      "properties": {
+                        "maxlength": {
+                          "type": "integer"
+                        },
+                        "pattern": {
+                          "type": "string"
+                        },
+                        "min": {
+                          "type": "number"
+                        },
+                        "max": {
+                          "type": "number"
+                        },
+                        "numeric_precision": {
+                          "type": "integer"
+                        },
+                        "numeric_scale": {
+                          "type": "integer"
+                        },
+                        "step": {
+                          "type": "number"
+                        },
+                        "values": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "label": {
+                                "type": "string"
+                              },
+                              "value": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "label",
+                              "value"
+                            ]
+                          }
+                        },
+                        "readOnly": {
+                          "type": "boolean"
+                        },
+                        "required": {
+                          "type": "boolean"
+                        }
+                      }
+                    }
+                  },
+                  "required": [
+                    "name",
+                    "data_type"
+                  ]
+                }
+              },
+              "geometry": {
+                "title": "PostGIS geometry metadata",
+                "type": "object",
+                "properties": {
+                  "geometry_column": {
+                    "type": "string"
+                  },
+                  "geometry_type": {
+                    "type": "string",
+                    "enum": [
+                      "POINT",
+                      "LINESTRING",
+                      "POLYGON",
+                      "MULTIPOINT",
+                      "MULTILINESTRING",
+                      "MULTIPOLYGON"
+                    ]
+                  },
+                  "srid": {
+                    "title": "SRID",
+                    "description": "Spatial Reference System Identifier (EPSG code)",
+                    "type": "integer"
+                  },
+                  "allow_null": {
+                    "title": "Allow NULL geometries",
+                    "description": "Allow setting geometry values to NULL",
+                    "type": "boolean",
+                    "default": false
+                  }
+                },
+                "required": [
+                  "geometry_column",
+                  "geometry_type",
+                  "srid"
+                ]
+              }
+            },
+            "required": [
+              "name",
+              "db_url",
+              "schema",
+              "table_name",
+              "primary_key",
+              "fields"
+            ]
+          }
+        }
+      },
+      "required": [
+        "datasets"
+      ]
+    }
+  },
+  "required": [
+    "service",
+    "config",
+    "resources"
+  ]
+}

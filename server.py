@@ -3,13 +3,14 @@ from datetime import date
 from decimal import Decimal
 from uuid import UUID
 
-from flask import Flask, Request as RequestBase, request
+from flask import Flask, Request as RequestBase, request, jsonify
 from flask_restplus import Api, Resource, fields, reqparse
 from flask_jwt_extended import JWTManager, jwt_optional, get_jwt_identity
 from werkzeug.exceptions import BadRequest
 
 from qwc_services_core.api import create_model, CaseInsensitiveArgument
 from qwc_services_core.jwt import jwt_manager
+from qwc_services_core.tenant_handler import TenantHandler
 from data_service import DataService
 
 
@@ -44,17 +45,76 @@ app = Flask(__name__)
 app.request_class = Request
 # Flask-RESTPlus Api
 api = Api(app, version='1.0', title='Data service API',
-          description='API for QWC Data service',
-          default_label='Data edit operations', doc='/api/',
+          description="""API for QWC Data service.
+
+## General Information for all operations
+
+### Datatypes-Encoding
+
+JSON only defines recommendations or has no information concerning
+the encoding of some quite common used database data types.
+Following a description on how these are encoded in the data
+service API.
+
+- Date: ISO date strings `YYYY-MM-DD`
+- Datetime: ISO date/time strings `YYYY-MM-DDThh:mm:ss`
+- UUID: Hex-encoded string format. Example: `'6fa459ea-ee8a-3ca4-894e-db77e160355e'`
+
+### Feature-ID
+
+For operations like updating or deleting features, records are identified by
+a feature `id`. This `id` refers to the primary key of the database
+table and is usually kept constant over time.
+
+## Filter expressions
+
+Query operations support passing filter expressions to narrow down the results.
+This expression is a serialized JSON array of the format:
+
+    [["<name>", "<op>", <value>],"and|or",["<name>","<op>",<value>],...]
+
+* `name` is the attribute column name
+* `op` can be one of
+
+      "=", "!=", "<>", "<", ">", "<=", ">=", "LIKE", "ILIKE", "IS", "IS NOT"
+
+  The operators are applied on the original database types.
+
+  If value is `null`, the operator should be `IS` or `IS NOT`.
+
+* `value` can be of type `string`, `int`, `float` or `null`.
+
+  For string operations, the SQL wildcard character `%` can be used.
+
+### Filter examples
+
+* Find all features in the dataset with a number field smaller 10 and a matching name field:
+  `[["name","LIKE","example%"],"and",["number","<",10]]`
+* Find all features in the dataset with a last change before 1st of January 2020 or having `NULL` as lastchange value:
+  `[["lastchange","<","2020-01-01T12:00:00"],"or",["lastchange","IS",null]]`
+          """,
+          default_label='Data edit operations', doc='/api/'
           )
+# Omit X-Fields header in docs
+app.config['RESTPLUS_MASK_SWAGGER'] = False
 # disable verbose 404 error message
 app.config['ERROR_404_HELP'] = False
 
 # Setup the Flask-JWT-Extended extension
 jwt = jwt_manager(app, api)
 
-# create data service
-data_service = DataService(app.logger)
+# create tenant handler
+tenant_handler = TenantHandler(app.logger)
+
+
+def data_service_handler():
+    """Get or create a DataService instance for a tenant."""
+    tenant = tenant_handler.tenant()
+    handler = tenant_handler.handler('data', 'data', tenant)
+    if handler is None:
+        handler = tenant_handler.register_handler(
+            'data', tenant, DataService(tenant, app.logger))
+    return handler
 
 
 # Api models
@@ -83,15 +143,21 @@ geojson_feature_response = create_model(api, 'Feature', [
                            example='Feature')],
     ['id', fields.Integer(required=True, description='Feature ID',
                           example=123)],
-    ['geometry', fields.Nested(geojson_geometry, required=True,
+    ['geometry', fields.Nested(geojson_geometry, required=False,
+                               allow_null=True,
                                description='Feature geometry')],
     ['properties', FeatureProperties(required=True,
                                      description='Feature properties',
                                      example={'name': 'Example', 'type': 2,
                                               'num': 4}
                                      )],
-    ['crs', fields.Nested(geojson_crs, required=True,
-                          description='Coordinate reference system')]
+    ['crs', fields.Nested(geojson_crs, required=False, allow_null=True,
+                          description='Coordinate reference system')],
+    ['bbox', fields.Raw(required=False, allow_null=True,
+                        description=(
+                            'Extent of feature as [minx, miny, maxx, maxy]'
+                        ),
+                        example=[950598.0, 6003950.0, 950758.0, 6004010.0])]
 ])
 
 # Feature request
@@ -99,12 +165,13 @@ geojson_feature_response = create_model(api, 'Feature', [
 geojson_feature_request = create_model(api, 'Input Feature', [
     ['type', fields.String(required=True, description='Feature',
                            example='Feature')],
-    ['geometry', fields.Nested(geojson_geometry, required=True,
+    ['geometry', fields.Nested(geojson_geometry, required=False,
+                               allow_null=True,
                                description='Feature geometry')],
     ['properties', fields.Raw(required=True, description='Feature properties',
                               example={'name': 'Example', 'type': 2, 'num': 4}
                               )],
-    ['crs', fields.Nested(geojson_crs, required=True,
+    ['crs', fields.Nested(geojson_crs, required=False, allow_null=True,
                           description='Coordinate reference system')]
 ])
 
@@ -115,13 +182,14 @@ geojson_feature_member = create_model(api, 'Member Feature', [
                            example='Feature')],
     ['id', fields.Integer(required=True, description='Feature ID',
                           example=123)],
-    ['geometry', fields.Nested(geojson_geometry, required=True,
+    ['geometry', fields.Nested(geojson_geometry, required=False,
+                               allow_null=True,
                                description='Feature geometry')],
     ['properties', FeatureProperties(required=True,
                                      description='Feature properties',
                                      example={'name': 'Example', 'type': 2,
                                               'num': 4}
-                                     )],
+                                     )]
 ])
 
 geojson_feature_collection_response = create_model(api, 'FeatureCollection', [
@@ -129,8 +197,13 @@ geojson_feature_collection_response = create_model(api, 'FeatureCollection', [
                            example='FeatureCollection')],
     ['features', fields.List(fields.Nested(geojson_feature_member),
                              required=True, description='Features')],
-    ['crs', fields.Nested(geojson_crs, required=True,
-                          description='Coordinate reference system')]
+    ['crs', fields.Nested(geojson_crs, required=False, allow_null=True,
+                          description='Coordinate reference system')],
+    ['bbox', fields.Raw(required=False, allow_null=True,
+                        description=(
+                            'Extent of features as [minx, miny, maxx, maxy]'
+                        ),
+                        example=[950598.0, 6003950.0, 950758.0, 6004010.0])]
 ])
 
 # message response
@@ -180,32 +253,26 @@ get_relations_parser.add_argument('tables', required=True)
 class DataCollection(Resource):
     @api.doc('index')
     @api.response(405, 'Dataset not readable')
-    @api.param('bbox', 'Bounding box')
-    @api.param('crs', 'Client coordinate reference system')
-    @api.param('filter', 'Comma-separated list of filter expressions of the '
-               'form "a = b" and "c like d"')
+    @api.param('bbox', 'Bounding box as `<minx>,<miny>,<maxx>,<maxy>`')
+    @api.param('crs', 'Client coordinate reference system, e.g. `EPSG:3857`')
+    @api.param(
+        'filter', 'JSON serialized array of filter expressions: '
+        '`[["<name>", "<op>", <value>],"and|or",["<name>","<op>",<value>]]`')
     @api.expect(index_parser)
-    @api.marshal_with(geojson_feature_collection_response)
+    @api.marshal_with(geojson_feature_collection_response, skip_none=True)
     @jwt_optional
     def get(self, dataset):
         """Get dataset features
 
-        Return dataset features inside bounding box as a
+        Return dataset features inside bounding box and matching filter as a
         GeoJSON FeatureCollection.
-
-        Query parameters:
-
-        <b>bbox</b>: Bounding box as
-                     <b>&lt;minx>,&lt;miny>,&lt;maxx>,&lt;maxy></b>,
-                     e.g. <b>950700,6003900,950800,6004000</b>
-
-        <b>crs</b>: Client CRS, e.g. <b>EPSG:3857<b>
         """
         args = index_parser.parse_args()
         bbox = args['bbox']
         crs = args['crs']
         filterexpr = args['filter']
 
+        data_service = data_service_handler()
         result = data_service.index(
             get_jwt_identity(), dataset, bbox, crs, filterexpr
         )
@@ -231,6 +298,7 @@ class DataCollection(Resource):
             # parse request data (NOTE: catches invalid JSON)
             payload = api.payload
             if isinstance(payload, dict):
+                data_service = data_service_handler()
                 result = data_service.create(
                     get_jwt_identity(), dataset, payload)
                 if 'error' not in result:
@@ -268,6 +336,7 @@ class DataMember(Resource):
         args = show_parser.parse_args()
         crs = args['crs']
 
+        data_service = data_service_handler()
         result = data_service.show(get_jwt_identity(), dataset, id, crs)
         if 'error' not in result:
             return result['feature']
@@ -291,6 +360,7 @@ class DataMember(Resource):
             # parse request data (NOTE: catches invalid JSON)
             payload = api.payload
             if isinstance(payload, dict):
+                data_service = data_service_handler()
                 result = data_service.update(
                     get_jwt_identity(), dataset, id, api.payload
                 )
@@ -314,6 +384,7 @@ class DataMember(Resource):
 
         Delete dataset feature with ID.
         """
+        data_service = data_service_handler()
         result = data_service.destroy(get_jwt_identity(), dataset, id)
         if 'error' not in result:
             return {
@@ -334,6 +405,7 @@ class Relations(Resource):
     # TODO
     #@api.marshal_with(relationvalues_response, code=201)
     def get(self, dataset, id):
+        data_service = data_service_handler()
         args = get_relations_parser.parse_args()
         relations = args['tables'] or ""
         ret = {}
@@ -369,6 +441,8 @@ class Relations(Resource):
         payload = api.payload
         if not isinstance(payload, dict):
             api.abort(400, "JSON is not an object")
+
+        data_service = data_service_handler()
 
         # Check if dataset with specified id exists
         if not data_service.is_editable(get_jwt_identity(), dataset, id):
@@ -431,6 +505,9 @@ class KeyValues(Resource):
     #@api.marshal_with(relationvalues_response, code=201)
     def get(self):
         args = get_relations_parser.parse_args()
+
+        data_service = data_service_handler()
+
         keyvals = args['tables'] or ""
         ret = {}
         for keyval in keyvals.split(","):
@@ -447,6 +524,18 @@ class KeyValues(Resource):
                     record = {"key": feature["id"] if key_field_name == "id" else feature['properties'][key_field_name], "value": feature['properties'][value_field_name].strip()}
                     ret[table].append(record)
         return {"keyvalues": ret}
+
+
+""" readyness probe endpoint """
+@app.route("/ready", methods=['GET'])
+def ready():
+    return jsonify({"status": "OK"})
+
+
+""" liveness probe endpoint """
+@app.route("/healthz", methods=['GET'])
+def healthz():
+    return jsonify({"status": "OK"})
 
 
 # local webserver

@@ -3,7 +3,8 @@ from collections import OrderedDict
 from sqlalchemy.exc import DataError, InternalError, ProgrammingError
 
 from qwc_services_core.database import DatabaseEngine
-from qwc_services_core.permission import PermissionClient
+from qwc_services_core.permissions_reader import PermissionsReader
+from qwc_services_core.runtime_config import RuntimeConfig
 from dataset_features_provider import DatasetFeaturesProvider
 
 
@@ -13,14 +14,17 @@ class DataService():
     Manage reading and writing of dataset features.
     """
 
-    def __init__(self, logger):
+    def __init__(self, tenant, logger):
         """Constructor
 
+        :param str tenant: Tenant ID
         :param Logger logger: Application logger
         """
+        self.tenant = tenant
         self.logger = logger
+        self.resources = self.load_resources()
+        self.permissions_handler = PermissionsReader(tenant, logger)
         self.db_engine = DatabaseEngine()
-        self.permission = PermissionClient()
 
     def index(self, identity, dataset, bbox, crs, filterexpr):
         """Find dataset features inside bounding box.
@@ -29,8 +33,8 @@ class DataService():
         :param str dataset: Dataset ID
         :param str bbox: Bounding box as '<minx>,<miny>,<maxx>,<maxy>' or None
         :param str crs: Client CRS as 'EPSG:<srid>' or None
-        :param str filterexpr: Comma-separated filter expressions as
-                               '<k1> = <v1>, <k2> like <v2>, ...'
+        :param str filterexpr: JSON serialized array of filter expressions:
+        [["<attr>", "<op>", "<value>"], "and|or", ["<attr>", "<op>", "<value>"]]
         """
         dataset_features_provider = self.dataset_features_provider(
             identity, dataset
@@ -63,15 +67,27 @@ class DataService():
             if filterexpr is not None:
                 # parse and validate input filter
                 filterexpr = dataset_features_provider.parse_filter(filterexpr)
-                if filterexpr is None:
+                if filterexpr[0] is None:
                     return {
-                        'error': "Invalid filter expression",
+                        'error': (
+                            "Invalid filter expression: %s" % filterexpr[1]
+                        ),
                         'error_code': 400
                     }
 
-            feature_collection = dataset_features_provider.index(
-                bbox, srid, filterexpr
-            )
+            try:
+                feature_collection = dataset_features_provider.index(
+                    bbox, srid, filterexpr
+                )
+            except (DataError, ProgrammingError) as e:
+                self.logger.error(e)
+                return {
+                    'error': (
+                        "Feature query failed. Please check filter expression "
+                        "values and operators."
+                    ),
+                    'error_code': 400
+                }
             return {'feature_collection': feature_collection}
         else:
             return {'error': "Dataset not found or permission error"}
@@ -131,7 +147,9 @@ class DataService():
                 }
 
             # validate input feature
-            validation_errors = dataset_features_provider.validate(feature)
+            validation_errors = dataset_features_provider.validate(
+                feature, new_feature=True
+            )
             if not validation_errors:
                 # create new feature
                 try:
@@ -229,7 +247,6 @@ class DataService():
 
     def is_editable(self, identity, dataset, id):
         """Returns whether a dataset is editable.
-
         :param str identity: User identity
         :param str dataset: Dataset ID
         :param int id: Dataset feature ID
@@ -252,14 +269,115 @@ class DataService():
         """
         dataset_features_provider = None
 
-        # check permissions (NOTE: returns None on error)
-        permissions = self.permission.dataset_edit_permissions(
+        # check permissions
+        permissions = self.dataset_edit_permissions(
             dataset, identity
         )
-        if permissions is not None and permissions:
+        if permissions:
             # create DatasetFeaturesProvider
             dataset_features_provider = DatasetFeaturesProvider(
                 permissions, self.db_engine
             )
 
         return dataset_features_provider
+
+    def load_resources(self):
+        """Load service resources from config."""
+        # read config
+        config_handler = RuntimeConfig("data", self.logger)
+        config = config_handler.tenant_config(self.tenant)
+
+        # get service resources
+        datasets = {}
+        for resource in config.resources().get('datasets', []):
+            datasets[resource['name']] = resource
+
+        return {
+            'datasets': datasets
+        }
+
+    def dataset_edit_permissions(self, dataset, identity):
+        """Return dataset edit permissions if available and permitted.
+
+        :param str dataset: Dataset ID
+        :param obj identity: User identity
+        """
+        # find resource for requested dataset
+        resource = self.resources['datasets'].get(dataset)
+        if resource is None:
+            # dataset not found
+            return {}
+
+        # get permissions for dataset
+        resource_permissions = self.permissions_handler.resource_permissions(
+            'data_datasets', identity, dataset
+        )
+        if not resource_permissions:
+            # dataset not permitted
+            return {}
+
+        # combine permissions
+        permitted_attributes = set()
+        writable = False
+        creatable = False
+        readable = False
+        updatable = False
+        deletable = False
+
+        for permission in resource_permissions:
+            # collect permitted attributes
+            permitted_attributes.update(permission.get('attributes', []))
+
+            # allow writable and CRUD actions if any role permits them
+            writable |= permission.get('writable', False)
+            creatable |= permission.get('creatable', False)
+            readable |= permission.get('readable', False)
+            updatable |= permission.get('updatable', False)
+            deletable |= permission.get('deletable', False)
+
+        # make writable consistent with CRUD actions
+        writable |= creatable and readable and updatable and deletable
+
+        # make CRUD actions consistent with writable
+        creatable |= writable
+        readable |= writable
+        updatable |= writable
+        deletable |= writable
+
+        permitted = creatable or readable or updatable or deletable
+        if not permitted:
+            # no CRUD action permitted
+            return {}
+
+        # filter by permissions
+        attributes = [
+            field['name'] for field in resource['fields']
+            if field['name'] in permitted_attributes
+        ]
+
+        fields = {}
+        for field in resource['fields']:
+            if field['name'] in permitted_attributes:
+                fields[field['name']] = field
+
+        # NOTE: 'geometry' is None for datasets without geometry
+        geometry = resource.get('geometry', {})
+
+        return {
+            "dataset": resource['name'],
+            "database": resource['db_url'],
+            "schema": resource['schema'],
+            "table_name": resource['table_name'],
+            "primary_key": resource['primary_key'],
+            "attributes": attributes,
+            "fields": fields,
+            "geometry_column": geometry.get('geometry_column'),
+            "geometry_type": geometry.get('geometry_type'),
+            "srid": geometry.get('srid'),
+            "allow_null_geometry": geometry.get('allow_null', False),
+            "writable": writable,
+            "creatable": creatable,
+            "readable": readable,
+            "updatable": updatable,
+            "deletable": deletable
+        }
