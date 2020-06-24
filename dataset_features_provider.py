@@ -431,7 +431,10 @@ class DatasetFeaturesProvider():
                 if type(column_name) is not str:
                     return (None, "Invalid column name in %s" % entry)
 
-                if column_name not in self.attributes:
+                if (
+                    column_name != self.primary_key
+                    and column_name not in self.attributes
+                ):
                     # column not available or not permitted
                     return (
                         None,
