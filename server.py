@@ -4,7 +4,7 @@ from decimal import Decimal
 from uuid import UUID
 
 from flask import Flask, Request as RequestBase, request, jsonify
-from flask_restplus import Api, Resource, fields, reqparse
+from flask_restx import Api, Resource, fields, reqparse
 from flask_jwt_extended import JWTManager, jwt_optional, get_jwt_identity
 from werkzeug.exceptions import BadRequest
 
