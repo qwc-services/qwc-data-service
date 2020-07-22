@@ -416,7 +416,7 @@ class Relations(Resource):
                 continue
             ret[table] = {"fk": fk_field_name, "records": []}
             result = data_service.index(
-                get_jwt_identity(), table, None, None, "%s = %d" % (fk_field_name, id)
+                get_jwt_identity(), table, None, None, '[["%s", "=", %d]]' % (fk_field_name, id)
             )
             if 'feature_collection' in result:
                 for feature in result['feature_collection']['features']:
