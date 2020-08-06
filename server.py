@@ -2,16 +2,20 @@ from collections import OrderedDict
 from datetime import date
 from decimal import Decimal
 from uuid import UUID
+import json
+import os
 
-from flask import Flask, Request as RequestBase, request, jsonify
+from flask import Flask, Request as RequestBase, request, jsonify, send_file
 from flask_restx import Api, Resource, fields, reqparse
 from flask_jwt_extended import JWTManager, jwt_optional, get_jwt_identity
 from werkzeug.exceptions import BadRequest
+from werkzeug.datastructures import FileStorage
 
 from qwc_services_core.api import create_model, CaseInsensitiveArgument
 from qwc_services_core.jwt import jwt_manager
 from qwc_services_core.tenant_handler import TenantHandler
 from data_service import DataService
+from attachments_service import AttachmentsService
 
 
 class Request(RequestBase):
@@ -114,6 +118,16 @@ def data_service_handler():
     if handler is None:
         handler = tenant_handler.register_handler(
             'data', tenant, DataService(tenant, app.logger))
+    return handler
+
+
+def attachments_service_handler():
+    """Get or create a DataService instance for a tenant."""
+    tenant = tenant_handler.tenant()
+    handler = tenant_handler.handler('data', 'attachments', tenant)
+    if handler is None:
+        handler = tenant_handler.register_handler(
+            'attachments', tenant, AttachmentsService(tenant, app.logger))
     return handler
 
 
@@ -238,11 +252,32 @@ index_parser.add_argument('bbox')
 index_parser.add_argument('crs')
 index_parser.add_argument('filter')
 
+feature_multipart_parser = reqparse.RequestParser(argument_class=CaseInsensitiveArgument)
+feature_multipart_parser.add_argument('feature', help='Feature', required=True, location='form')
+feature_multipart_parser.add_argument('file_document', help='File attachments', type=FileStorage, location='files')
+
 show_parser = reqparse.RequestParser(argument_class=CaseInsensitiveArgument)
 show_parser.add_argument('crs')
 
+# attachment
+get_attachment_parser = reqparse.RequestParser(argument_class=CaseInsensitiveArgument)
+get_attachment_parser.add_argument('file', required=True)
+
+# Relations
 get_relations_parser = reqparse.RequestParser(argument_class=CaseInsensitiveArgument)
 get_relations_parser.add_argument('tables', required=True)
+
+post_relations_parser = reqparse.RequestParser(
+    argument_class=CaseInsensitiveArgument
+)
+post_relations_parser.add_argument(
+    'values', help='Relations', required=True, location='form'
+)
+post_relations_parser.add_argument(
+    'file_document', help='File attachments',
+    type=FileStorage, location='files'
+)
+
 
 
 # routes
@@ -311,6 +346,135 @@ class DataCollection(Resource):
                 api.abort(400, "JSON is not an object")
         else:
             api.abort(400, "Request data is not JSON")
+
+
+@api.route('/<dataset>/multipart')
+@api.response(400, 'Bad request')
+@api.response(404, 'Dataset not found or permission error')
+@api.param('dataset', 'Dataset ID', default='qwc_demo.edit_points')
+class CreateFeatureMultipart(Resource):
+    @api.doc('create')
+    @api.response(405, 'Dataset not creatable')
+    @api.response(422, 'Feature validation failed', feature_validation_response)
+    @api.expect(feature_multipart_parser)
+    @api.marshal_with(geojson_feature_response, code=201)
+    @jwt_optional
+    def post(self, dataset):
+        """Create a new dataset feature
+
+        Create new dataset feature from a GeoJSON Feature and return it as a
+        GeoJSON Feature.
+        """
+        args = feature_multipart_parser.parse_args()
+        try:
+            feature = json.loads(args['feature'])
+        except:
+            feature = None
+        if not isinstance(feature, dict):
+            api.abort(400, "feature is not an object")
+
+        # Validate attachments
+        attachments = attachments_service_handler()
+        for key in request.files:
+            filedata = request.files[key]
+            if not attachments.validate_attachment(dataset, filedata):
+                api.abort(404, "Attachment validation failed: " + key)
+
+        # Save attachments
+        saved_attachments = {}
+        for key in request.files:
+            filedata = request.files[key]
+            slug = attachments.save_attachment(dataset, filedata)
+            if not slug:
+                for slug in saved_attachments.values():
+                    attachments.remove_attachment(dataset, slug)
+                api.abort(404, "Failed to save attachment: " + key)
+            else:
+                saved_attachments[key] = slug
+                field = key.lstrip("file:")
+                feature["properties"][field] = "attachment://" + slug
+
+        data_service = data_service_handler()
+        result = data_service.create(
+            get_jwt_identity(), dataset, feature)
+        if 'error' not in result:
+            return result['feature'], 201
+        else:
+            for slug in saved_attachments.values():
+                attachments.remove_attachment(dataset, slug)
+            error_code = result.get('error_code') or 404
+            error_details = result.get('error_details') or {}
+            api.abort(error_code, result['error'], **error_details)
+
+
+@api.route('/<dataset>/multipart/<int:id>')
+@api.response(404, 'Dataset or feature not found or permission error')
+@api.param('dataset', 'Dataset ID', default='qwc_demo.edit_points')
+@api.param('id', 'Feature ID')
+class EditFeatureMultipart(Resource):
+    @api.doc('update')
+    @api.response(400, 'Bad request')
+    @api.response(405, 'Dataset not updatable')
+    @api.response(422, 'Feature validation failed', feature_validation_response)
+    @api.expect(feature_multipart_parser)
+    @api.marshal_with(geojson_feature_response)
+    @jwt_optional
+    def put(self, dataset, id):
+        """Update a dataset feature
+
+        Update dataset feature with ID from a GeoJSON Feature and return it as
+        a GeoJSON Feature.
+        """
+        args = feature_multipart_parser.parse_args()
+        try:
+            feature = json.loads(args['feature'])
+        except:
+            feature = None
+        if not isinstance(feature, dict):
+            api.abort(400, "feature is not an object")
+
+        # Validate attachments
+        attachments = attachments_service_handler()
+        for key in request.files:
+            filedata = request.files[key]
+            if not attachments.validate_attachment(dataset, filedata):
+                api.abort(404, "Attachment validation failed: " + key)
+
+        # Save attachments
+        saved_attachments = {}
+        for key in request.files:
+            filedata = request.files[key]
+            slug = attachments.save_attachment(dataset, filedata)
+            if not slug:
+                for slug in saved_attachments.values():
+                    attachments.remove_attachment(dataset, slug)
+                api.abort(404, "Failed to save attachment: " + key)
+            else:
+                saved_attachments[key] = slug
+                field = key.lstrip("file:")
+                feature["properties"][field] = "attachment://" + slug
+
+        data_service = data_service_handler()
+
+        prev = data_service.show(get_jwt_identity(), dataset, id, None)
+        if prev:
+            prev_feature = prev["feature"]
+            # If a non-empty attachment field value is changed, delete the attachment
+            for key in feature["properties"]:
+                if key in prev_feature["properties"] and prev_feature["properties"][key] and str(prev_feature["properties"][key]).startswith("attachment://") and feature["properties"][key] != prev_feature["properties"][key]:
+                    attachments.remove_attachment(dataset, prev_feature["properties"][key].lstrip("attachment://"))
+
+        result = data_service.update(
+            get_jwt_identity(), dataset, id, feature
+        )
+        if 'error' not in result:
+            return result['feature']
+        else:
+            for slug in saved_attachments.values():
+                attachments.remove_attachment(dataset, slug)
+            error_code = result.get('error_code') or 404
+            error_details = result.get('error_details') or {}
+            api.abort(error_code, result['error'], **error_details)
 
 
 @api.route('/<dataset>/<int:id>')
@@ -394,6 +558,25 @@ class DataMember(Resource):
             error_code = result.get('error_code') or 404
             api.abort(error_code, result['error'])
 
+
+@api.route('/<dataset>/<int:id>/attachment')
+@api.response(404, 'Dataset or feature not found or permission error')
+@api.param('dataset', 'Dataset ID', default='qwc_demo.edit_points')
+@api.param('id', 'Feature ID')
+class AttachmentDownloader(Resource):
+    @api.doc('get_attachment')
+    @api.param('file', 'The file to download')
+    @api.expect(get_attachment_parser)
+    def get(self, dataset, id):
+        args = get_attachment_parser.parse_args()
+        attachments = attachments_service_handler()
+        path = attachments.resolve_attachment(dataset, args['file'])
+        if not path:
+            api.abort(404, 'Unable to read file')
+
+        return send_file(path, as_attachment=True, attachment_filename=os.path.basename(path))
+
+
 @api.route('/<dataset>/<int:id>/relations')
 @api.response(404, 'Dataset or feature not found or permission error')
 @api.param('dataset', 'Dataset ID', default='qwc_demo.edit_points')
@@ -423,11 +606,12 @@ class Relations(Resource):
                     record = {(table + "__" + k): v for k, v in feature['properties'].items()}
                     record["id"] = feature["id"]
                     ret[table]['records'].append(record)
+                ret[table]['records'].sort(key=lambda r: r["id"])
         return {"relationvalues": ret}
 
     @api.doc('post_relations')
+    @api.expect(post_relations_parser)
     # TODO
-    #@api.expect(relationvalues_request)
     #@api.marshal_with(relationvalues_response, code=201)
     @jwt_optional
     def post(self, dataset, id):
@@ -435,10 +619,12 @@ class Relations(Resource):
 
         Return success status for each relation value.
         """
-        if not request.is_json:
-            api.abort(400, "Request data is not JSON")
+        args = post_relations_parser.parse_args()
 
-        payload = api.payload
+        try:
+            payload = json.loads(args['values'])
+        except:
+            payload = None
         if not isinstance(payload, dict):
             api.abort(400, "JSON is not an object")
 
@@ -447,6 +633,30 @@ class Relations(Resource):
         # Check if dataset with specified id exists
         if not data_service.is_editable(get_jwt_identity(), dataset, id):
             api.abort(404, "Dataset or feature not found or permission error")
+
+        # Validate attachments
+        attachments = attachments_service_handler()
+        for key in request.files:
+            filedata = request.files[key]
+            if not attachments.validate_attachment(dataset, filedata):
+                api.abort(404, "Attachment validation failed: " + key)
+
+        # Save attachments
+        saved_attachments = {}
+        for key in request.files:
+            filedata = request.files[key]
+            slug = attachments.save_attachment(dataset, filedata)
+            if not slug:
+                for slug in saved_attachments.values():
+                    attachments.remove_attachment(dataset, slug)
+                api.abort(404, "Failed to save attachment: " + key)
+            else:
+                saved_attachments[key] = slug
+                parts = key.lstrip("file:").split("__")
+                table = parts[0]
+                field = parts[1]
+                index = parts[2]
+                payload[table]["records"][int(index)][table + "__" + field] = "attachment://" + slug
 
         ret = {}
         haserrors = False
@@ -467,20 +677,25 @@ class Relations(Resource):
                     ret[rel_table]["records"].append(rel_record)
                     haserrors = True
                 else:
-                    json = {
+                    entry = {
                         "type": "Feature",
                         "id": rel_record["id"] if "id" in rel_record else None,
                         "properties": {k[len(tbl_prefix):]: v for k, v in rel_record.items() if k.startswith(tbl_prefix)}
                     }
+
                     if not "__status__" in rel_record:
                         ret[rel_table]["records"].append(rel_record)
                         continue
                     elif rel_record["__status__"] == "new":
-                        result = data_service.create(get_jwt_identity(), rel_table, json)
+                        result = data_service.create(get_jwt_identity(), rel_table, entry)
                     elif rel_record["__status__"] == "changed":
-                        result = data_service.update(get_jwt_identity(), rel_table, rel_record["id"], json)
+                        (newattachments, oldattachments) = self.attachments_diff(data_service, attachments, dataset, rel_table, rel_record["id"], entry)
+                        result = data_service.update(get_jwt_identity(), rel_table, rel_record["id"], entry)
+                        self.cleanup_attachments(attachments, dataset, newattachments if "error" in result else oldattachments)
                     elif rel_record["__status__"].startswith("deleted"):
+                        (newattachments, oldattachments) = self.attachments_diff(data_service, attachments, dataset, rel_table, rel_record["id"], entry)
                         result = data_service.destroy(get_jwt_identity(), rel_table, rel_record["id"])
+                        self.cleanup_attachments(attachments, dataset, newattachments if "error" in result else oldattachments)
                     else:
                         continue
                     if "error" in result:
@@ -493,6 +708,26 @@ class Relations(Resource):
                         rel_record["id"] = result['feature']["id"]
                         ret[rel_table]["records"].append(rel_record)
         return {"relationvalues": ret, "success": not haserrors}
+
+    def attachments_diff(self, data_service, attachments, dataset, rel_table, rel_record_id, feature):
+        newattachments = []
+        oldattachments = []
+        prev = data_service.show(get_jwt_identity(), rel_table, rel_record_id, None)
+        if not prev:
+            return (newattachments, oldattachments)
+        prev_feature = prev["feature"]
+        # If a attachment field value is changed, delete the attachment
+        for key in feature["properties"]:
+            if key in prev_feature["properties"] and feature["properties"][key] != prev_feature["properties"][key]:
+                if str(prev_feature["properties"][key]).startswith("attachment://"):
+                    oldattachments.append(prev_feature["properties"][key])
+                if str(feature["properties"][key]).startswith("attachment://"):
+                    newattachments.append(feature["properties"][key])
+        return (newattachments, oldattachments)
+
+    def cleanup_attachments(self, attachments, dataset, slugs):
+        for slug in slugs:
+            attachments.remove_attachment(dataset, slug.lstrip("attachment://"))
 
 
 @api.route('/keyvals')
