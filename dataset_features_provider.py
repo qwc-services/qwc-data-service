@@ -741,6 +741,8 @@ class DatasetFeaturesProvider():
             elif data_type in ['json', 'jsonb']:
                 # convert values for fields of type json to string
                 input_value = json.dumps(input_value)
+            elif data_type == 'file':
+                data_type = 'text'
 
             # readOnly
             if constraints.get('readOnly', False):
