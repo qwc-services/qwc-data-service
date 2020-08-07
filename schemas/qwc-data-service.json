@@ -67,6 +67,7 @@
                         "character varying",
                         "date",
                         "double precision",
+                        "file",
                         "integer",
                         "json",
                         "jsonb",
