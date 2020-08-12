@@ -559,15 +559,14 @@ class DataMember(Resource):
             api.abort(error_code, result['error'])
 
 
-@api.route('/<dataset>/<int:id>/attachment')
+@api.route('/<dataset>/attachment')
 @api.response(404, 'Dataset or feature not found or permission error')
 @api.param('dataset', 'Dataset ID', default='qwc_demo.edit_points')
-@api.param('id', 'Feature ID')
 class AttachmentDownloader(Resource):
     @api.doc('get_attachment')
     @api.param('file', 'The file to download')
     @api.expect(get_attachment_parser)
-    def get(self, dataset, id):
+    def get(self, dataset):
         args = get_attachment_parser.parse_args()
         attachments = attachments_service_handler()
         path = attachments.resolve_attachment(dataset, args['file'])
