@@ -21,9 +21,9 @@ class AttachmentsService():
         self.attachments_base_dir = os.environ.get(
             'ATTACHMENTS_BASE_DIR', '/tmp/qwc_attachments/'
         )
-        self.max_file_size = os.environ.get(
+        self.max_file_size = int(os.environ.get(
             'MAX_ATTACHMENT_FILE_SIZE', 10 * 1024 * 1024
-        )
+        ))
 
     def validate_attachment(self, dataset, file):
         """Validate file size of an attachment file.
