@@ -3,6 +3,7 @@ import random
 import string
 
 from werkzeug.utils import secure_filename
+from qwc_services_core.runtime_config import RuntimeConfig
 
 
 class AttachmentsService():
@@ -18,11 +19,13 @@ class AttachmentsService():
         """
         self.tenant = tenant
         self.logger = logger
-        self.attachments_base_dir = os.environ.get(
-            'ATTACHMENTS_BASE_DIR', '/tmp/qwc_attachments/'
-        )
-        self.max_file_size = int(os.environ.get(
-            'MAX_ATTACHMENT_FILE_SIZE', 10 * 1024 * 1024
+
+        config_handler = RuntimeConfig("data", self.logger)
+        config = config_handler.tenant_config(self.tenant)
+
+        self.attachments_base_dir = config.get('attachments_base_dir', '/tmp/qwc_attachments/')
+        self.max_file_size = int(config.get(
+            'max_attachment_file_size', 10 * 1024 * 1024
         ))
 
     def validate_attachment(self, dataset, file):
