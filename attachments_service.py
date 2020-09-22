@@ -27,6 +27,7 @@ class AttachmentsService():
         self.max_file_size = int(config.get(
             'max_attachment_file_size', 10 * 1024 * 1024
         ))
+        self.allowed_extensions = config.get('allowed_attachment_extensions', '').split(",")
 
     def validate_attachment(self, dataset, file):
         """Validate file size of an attachment file.
@@ -41,10 +42,20 @@ class AttachmentsService():
             size = file.tell()
             file.seek(0)
 
-            return size <= self.max_file_size
+            if size > self.max_file_size:
+                self.logger.info("File too large: %s: %d" % (file.filename, size))
+                return False
         except Exception as e:
             self.logger.error("Could not validate attachment: %s" % e)
             return False
+
+        ext = os.path.splitext(file.filename)[1].lower()
+        if self.allowed_extensions and not ext in self.allowed_extensions:
+            self.logger.info("Forbidden file extension: %s: %s" % (file.filename, ext))
+            return False
+
+        return True
+
 
     def save_attachment(self, dataset, file):
         """Save attachment file for a dataset and return its slug.
