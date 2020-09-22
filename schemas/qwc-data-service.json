@@ -18,7 +18,21 @@
     },
     "config": {
       "title": "Config options",
-      "type": "object"
+      "type": "object",
+      "properties": {
+        "attachments_base_dir": {
+          "description": "Base dir where attachments are stored",
+          "type": "string"
+        },
+        "allowed_attachment_extensions": {
+          "description": "Comma separated list of allowed attachment file extensions",
+          "type": "string"
+        },
+        "max_attachment_file_size": {
+          "description": "Maximum attachment file size in bytes",
+          "type": "number"
+        }
+      }
     },
     "resources": {
       "title": "Resources",
