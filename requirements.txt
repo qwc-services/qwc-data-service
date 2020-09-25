@@ -6,4 +6,4 @@ psycopg2-binary==2.8.5
 requests==2.23.0
 SQLAlchemy==1.3.16
 werkzeug==0.16.1
-qwc-services-core==1.0.0
+qwc-services-core==1.1.1
