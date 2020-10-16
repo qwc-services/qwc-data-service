@@ -372,14 +372,12 @@ class CreateFeatureMultipart(Resource):
             feature = None
         if not isinstance(feature, dict):
             api.abort(400, "feature is not an object")
-
         # Validate attachments
         attachments = attachments_service_handler()
         for key in request.files:
             filedata = request.files[key]
             if not attachments.validate_attachment(dataset, filedata):
                 api.abort(404, "Attachment validation failed: " + key)
-
         # Save attachments
         saved_attachments = {}
         for key in request.files:
@@ -393,7 +391,6 @@ class CreateFeatureMultipart(Resource):
                 saved_attachments[key] = slug
                 field = key.lstrip("file:")
                 feature["properties"][field] = "attachment://" + slug
-
         data_service = data_service_handler()
         result = data_service.create(
             get_jwt_identity(), dataset, feature)
@@ -755,7 +752,11 @@ class KeyValues(Resource):
             )
             if 'feature_collection' in result:
                 for feature in result['feature_collection']['features']:
-                    record = {"key": feature["id"] if key_field_name == "id" else feature['properties'][key_field_name], "value": feature['properties'][value_field_name].strip()}
+                    key = feature["id"] if key_field_name == "id" else feature['properties'][key_field_name]
+                    if type(key) == UUID:
+                        key = str(key)
+                    value = feature['properties'][value_field_name].strip()
+                    record = {"key": key, "value": value}
                     ret[table].append(record)
         return {"keyvalues": ret}
 
