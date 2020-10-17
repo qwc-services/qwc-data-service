@@ -372,12 +372,14 @@ class CreateFeatureMultipart(Resource):
             feature = None
         if not isinstance(feature, dict):
             api.abort(400, "feature is not an object")
+
         # Validate attachments
         attachments = attachments_service_handler()
         for key in request.files:
             filedata = request.files[key]
             if not attachments.validate_attachment(dataset, filedata):
                 api.abort(404, "Attachment validation failed: " + key)
+
         # Save attachments
         saved_attachments = {}
         for key in request.files:
@@ -391,6 +393,7 @@ class CreateFeatureMultipart(Resource):
                 saved_attachments[key] = slug
                 field = key.lstrip("file:")
                 feature["properties"][field] = "attachment://" + slug
+
         data_service = data_service_handler()
         result = data_service.create(
             get_jwt_identity(), dataset, feature)
