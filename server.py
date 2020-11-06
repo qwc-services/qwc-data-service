@@ -7,12 +7,11 @@ import os
 
 from flask import Flask, Request as RequestBase, request, jsonify, send_file
 from flask_restx import Api, Resource, fields, reqparse
-from flask_jwt_extended import JWTManager, jwt_optional, get_jwt_identity
 from werkzeug.exceptions import BadRequest
 from werkzeug.datastructures import FileStorage
 
 from qwc_services_core.api import create_model, CaseInsensitiveArgument
-from qwc_services_core.jwt import jwt_manager
+from qwc_services_core.auth import auth_manager, optional_auth, get_auth_user
 from qwc_services_core.tenant_handler import TenantHandler
 from data_service import DataService
 from attachments_service import AttachmentsService
@@ -104,8 +103,7 @@ app.config['RESTPLUS_MASK_SWAGGER'] = False
 # disable verbose 404 error message
 app.config['ERROR_404_HELP'] = False
 
-# Setup the Flask-JWT-Extended extension
-jwt = jwt_manager(app, api)
+auth = auth_manager(app, api)
 
 # create tenant handler
 tenant_handler = TenantHandler(app.logger)
@@ -295,7 +293,7 @@ class DataCollection(Resource):
         '`[["<name>", "<op>", <value>],"and|or",["<name>","<op>",<value>]]`')
     @api.expect(index_parser)
     @api.marshal_with(geojson_feature_collection_response, skip_none=True)
-    @jwt_optional
+    @optional_auth
     def get(self, dataset):
         """Get dataset features
 
@@ -309,7 +307,7 @@ class DataCollection(Resource):
 
         data_service = data_service_handler()
         result = data_service.index(
-            get_jwt_identity(), dataset, bbox, crs, filterexpr
+            get_auth_user(), dataset, bbox, crs, filterexpr
         )
         if 'error' not in result:
             return result['feature_collection']
@@ -322,7 +320,7 @@ class DataCollection(Resource):
     @api.response(422, 'Feature validation failed', feature_validation_response)
     @api.expect(geojson_feature_request)
     @api.marshal_with(geojson_feature_response, code=201)
-    @jwt_optional
+    @optional_auth
     def post(self, dataset):
         """Create a new dataset feature
 
@@ -335,7 +333,7 @@ class DataCollection(Resource):
             if isinstance(payload, dict):
                 data_service = data_service_handler()
                 result = data_service.create(
-                    get_jwt_identity(), dataset, payload)
+                    get_auth_user(), dataset, payload)
                 if 'error' not in result:
                     return result['feature'], 201
                 else:
@@ -358,7 +356,7 @@ class CreateFeatureMultipart(Resource):
     @api.response(422, 'Feature validation failed', feature_validation_response)
     @api.expect(feature_multipart_parser)
     @api.marshal_with(geojson_feature_response, code=201)
-    @jwt_optional
+    @optional_auth
     def post(self, dataset):
         """Create a new dataset feature
 
@@ -396,7 +394,7 @@ class CreateFeatureMultipart(Resource):
 
         data_service = data_service_handler()
         result = data_service.create(
-            get_jwt_identity(), dataset, feature)
+            get_auth_user(), dataset, feature)
         if 'error' not in result:
             return result['feature'], 201
         else:
@@ -418,7 +416,7 @@ class EditFeatureMultipart(Resource):
     @api.response(422, 'Feature validation failed', feature_validation_response)
     @api.expect(feature_multipart_parser)
     @api.marshal_with(geojson_feature_response)
-    @jwt_optional
+    @optional_auth
     def put(self, dataset, id):
         """Update a dataset feature
 
@@ -456,7 +454,7 @@ class EditFeatureMultipart(Resource):
 
         data_service = data_service_handler()
 
-        prev = data_service.show(get_jwt_identity(), dataset, id, None)
+        prev = data_service.show(get_auth_user(), dataset, id, None)
         if prev:
             prev_feature = prev["feature"]
             # If a non-empty attachment field value is changed, delete the attachment
@@ -465,7 +463,7 @@ class EditFeatureMultipart(Resource):
                     attachments.remove_attachment(dataset, prev_feature["properties"][key].lstrip("attachment://"))
 
         result = data_service.update(
-            get_jwt_identity(), dataset, id, feature
+            get_auth_user(), dataset, id, feature
         )
         if 'error' not in result:
             return result['feature']
@@ -487,7 +485,7 @@ class DataMember(Resource):
     @api.param('crs', 'Client coordinate reference system')
     @api.expect(show_parser)
     @api.marshal_with(geojson_feature_response)
-    @jwt_optional
+    @optional_auth
     def get(self, dataset, id):
         """Get a dataset feature
 
@@ -501,7 +499,7 @@ class DataMember(Resource):
         crs = args['crs']
 
         data_service = data_service_handler()
-        result = data_service.show(get_jwt_identity(), dataset, id, crs)
+        result = data_service.show(get_auth_user(), dataset, id, crs)
         if 'error' not in result:
             return result['feature']
         else:
@@ -513,7 +511,7 @@ class DataMember(Resource):
     @api.response(422, 'Feature validation failed', feature_validation_response)
     @api.expect(geojson_feature_request)
     @api.marshal_with(geojson_feature_response)
-    @jwt_optional
+    @optional_auth
     def put(self, dataset, id):
         """Update a dataset feature
 
@@ -526,7 +524,7 @@ class DataMember(Resource):
             if isinstance(payload, dict):
                 data_service = data_service_handler()
                 result = data_service.update(
-                    get_jwt_identity(), dataset, id, api.payload
+                    get_auth_user(), dataset, id, api.payload
                 )
                 if 'error' not in result:
                     return result['feature']
@@ -542,14 +540,14 @@ class DataMember(Resource):
     @api.doc('destroy')
     @api.response(405, 'Dataset not deletable')
     @api.marshal_with(message_response)
-    @jwt_optional
+    @optional_auth
     def delete(self, dataset, id):
         """Delete a dataset feature
 
         Delete dataset feature with ID.
         """
         data_service = data_service_handler()
-        result = data_service.destroy(get_jwt_identity(), dataset, id)
+        result = data_service.destroy(get_auth_user(), dataset, id)
         if 'error' not in result:
             return {
                 'message': "Dataset feature deleted"
@@ -598,7 +596,7 @@ class Relations(Resource):
                 continue
             ret[table] = {"fk": fk_field_name, "records": []}
             result = data_service.index(
-                get_jwt_identity(), table, None, None, '[["%s", "=", %d]]' % (fk_field_name, id)
+                get_auth_user(), table, None, None, '[["%s", "=", %d]]' % (fk_field_name, id)
             )
             if 'feature_collection' in result:
                 for feature in result['feature_collection']['features']:
@@ -612,7 +610,7 @@ class Relations(Resource):
     @api.expect(post_relations_parser)
     # TODO
     #@api.marshal_with(relationvalues_response, code=201)
-    @jwt_optional
+    @optional_auth
     def post(self, dataset, id):
         """Update relation values for the specified dataset
 
@@ -630,7 +628,7 @@ class Relations(Resource):
         data_service = data_service_handler()
 
         # Check if dataset with specified id exists
-        if not data_service.is_editable(get_jwt_identity(), dataset, id):
+        if not data_service.is_editable(get_auth_user(), dataset, id):
             api.abort(404, "Dataset or feature not found or permission error")
 
         # Validate attachments
@@ -686,14 +684,14 @@ class Relations(Resource):
                         ret[rel_table]["records"].append(rel_record)
                         continue
                     elif rel_record["__status__"] == "new":
-                        result = data_service.create(get_jwt_identity(), rel_table, entry)
+                        result = data_service.create(get_auth_user(), rel_table, entry)
                     elif rel_record["__status__"] == "changed":
                         (newattachments, oldattachments) = self.attachments_diff(data_service, attachments, dataset, rel_table, rel_record["id"], entry)
-                        result = data_service.update(get_jwt_identity(), rel_table, rel_record["id"], entry)
+                        result = data_service.update(get_auth_user(), rel_table, rel_record["id"], entry)
                         self.cleanup_attachments(attachments, dataset, newattachments if "error" in result else oldattachments)
                     elif rel_record["__status__"].startswith("deleted"):
                         (newattachments, oldattachments) = self.attachments_diff(data_service, attachments, dataset, rel_table, rel_record["id"], entry)
-                        result = data_service.destroy(get_jwt_identity(), rel_table, rel_record["id"])
+                        result = data_service.destroy(get_auth_user(), rel_table, rel_record["id"])
                         self.cleanup_attachments(attachments, dataset, newattachments if "error" in result else oldattachments)
                     else:
                         continue
@@ -711,7 +709,7 @@ class Relations(Resource):
     def attachments_diff(self, data_service, attachments, dataset, rel_table, rel_record_id, feature):
         newattachments = []
         oldattachments = []
-        prev = data_service.show(get_jwt_identity(), rel_table, rel_record_id, None)
+        prev = data_service.show(get_auth_user(), rel_table, rel_record_id, None)
         if not prev:
             return (newattachments, oldattachments)
         prev_feature = prev["feature"]
@@ -751,7 +749,7 @@ class KeyValues(Resource):
                 continue
             ret[table] = []
             result = data_service.index(
-                get_jwt_identity(), table, None, None, None
+                get_auth_user(), table, None, None, None
             )
             if 'feature_collection' in result:
                 for feature in result['feature_collection']['features']:
