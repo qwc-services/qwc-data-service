@@ -237,6 +237,7 @@ Edit forms:
 
     Note: `:/` in the `form` property is resolved to the assets directory of the viewer.
   * Create the designer form in Qt-Designer, using the dataset field names as edit widget names.
+- *Note*: In general, for tables with an auto-incrementing primary key field, you'll want to set the attribute form widget type to "Hidden" in the QGIS layer properties. This way, the data-service won't block the commit if the feature is comitted with an empty PK field value.
 
 File uploads:
 
@@ -247,14 +248,14 @@ File uploads:
 1:N relations:
 
 - *Note*: 1:N relations are only supported in Qt-Designed Ui forms.
-- In your Ui form, create a `QWidget` named according to the pattern `nrel__<reltablename>__<foreignkeyfield>`, where `<reltablename>` is the name of the relation table and `<foreignkeyfield>` the name of the foreign key field in the relation table..
+- In your Ui form, create a `QWidget` named according to the pattern `nrel__<reltablename>__<foreignkeyfield>`, where `<reltablename>` is the name of the relation table and `<foreignkeyfield>` the name of the foreign key field in the relation table.
 - Inside this widget, add the edit widgets for the values of the relation table. Name the widgets `<reltablename>__<fieldname>`. These edit widgets will be replicated for each relation record.
-- *Note:* You also need to set appropriate permissions for the relation table dataset in the QWC admin backend.
+- *Note:* The relation table needs to be added as a (geometryless) table to the QGIS Project. You also need to set appropriate permissions for the relation table dataset in the QWC admin backend.
 
 Key-value relations:
 
-- In a Qt-Designer Ui form, you can use key-value relations for combo box entries by naming the `QComboBox` widget according to the following pattern: `kvrel__<fieldname>__<kvtablename>__<kvtable_valuefield>__<kvtable_labelfield>`. `<kvtablename>` refers to a table containing a field called `<kvtable_valuefield>` for the value of the entry and a field `<kvtable_labelfield>` for the label of the entry.
-- *Note:* You also need to set appropriate permissions for the relation table dataset in the QWC admin backend.
+- In a Qt-Designer Ui form, you can use key-value relations for combo box entries by naming the `QComboBox` widget according to the following pattern: `kvrel__<fieldname>__<kvtablename>__<kvtable_valuefield>__<kvtable_labelfield>`. `<kvtablename>` refers to a table containing a field called `<kvtable_valuefield>` for the value of the entry and a field `<kvtable_labelfield>` for the label of the entry. For key-value relations inside a 1:N relation, use `kvrel__<reltablename>__<fieldname>__<kvtablename>__<kvtable_valuefield>__<kvtable_labelfield>`. `<kvtablename>`
+- *Note:* The relation table needs to be added as a (geometryless) table to the QGIS Project. You also need to set appropriate permissions for the relation table dataset in the QWC admin backend.
 
 Data service configuration:
 
