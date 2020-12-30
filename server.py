@@ -192,8 +192,8 @@ geojson_feature_request = create_model(api, 'Input Feature', [
 geojson_feature_member = create_model(api, 'Member Feature', [
     ['type', fields.String(required=True, description='Feature',
                            example='Feature')],
-    ['id', fields.Integer(required=True, description='Feature ID',
-                          example=123)],
+    ['id', fields.String(required=True, description='Feature ID',
+                         example=123)],
     ['geometry', fields.Nested(geojson_geometry, required=False,
                                allow_null=True,
                                description='Feature geometry')],
@@ -405,7 +405,7 @@ class CreateFeatureMultipart(Resource):
             api.abort(error_code, result['error'], **error_details)
 
 
-@api.route('/<path:dataset>/multipart/<int:id>')
+@api.route('/<path:dataset>/multipart/id')
 @api.response(404, 'Dataset or feature not found or permission error')
 @api.param('dataset', 'Dataset ID', default='qwc_demo.edit_points')
 @api.param('id', 'Feature ID')
@@ -475,7 +475,7 @@ class EditFeatureMultipart(Resource):
             api.abort(error_code, result['error'], **error_details)
 
 
-@api.route('/<path:dataset>/<int:id>')
+@api.route('/<path:dataset>/id')
 @api.response(404, 'Dataset or feature not found or permission error')
 @api.param('dataset', 'Dataset ID', default='qwc_demo.edit_points')
 @api.param('id', 'Feature ID')
@@ -574,7 +574,7 @@ class AttachmentDownloader(Resource):
         return send_file(path, as_attachment=True, attachment_filename=os.path.basename(path))
 
 
-@api.route('/<path:dataset>/<int:id>/relations')
+@api.route('/<path:dataset>/id/relations')
 @api.response(404, 'Dataset or feature not found or permission error')
 @api.param('dataset', 'Dataset ID', default='qwc_demo.edit_points')
 @api.param('id', 'Feature ID')
