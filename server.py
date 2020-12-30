@@ -279,7 +279,7 @@ post_relations_parser.add_argument(
 
 
 # routes
-@api.route('/<dataset>/')
+@api.route('/<path:dataset>/')
 @api.response(400, 'Bad request')
 @api.response(404, 'Dataset not found or permission error')
 @api.param('dataset', 'Dataset ID', default='qwc_demo.edit_points')
@@ -346,7 +346,7 @@ class DataCollection(Resource):
             api.abort(400, "Request data is not JSON")
 
 
-@api.route('/<dataset>/multipart')
+@api.route('/<path:dataset>/multipart')
 @api.response(400, 'Bad request')
 @api.response(404, 'Dataset not found or permission error')
 @api.param('dataset', 'Dataset ID', default='qwc_demo.edit_points')
@@ -405,7 +405,7 @@ class CreateFeatureMultipart(Resource):
             api.abort(error_code, result['error'], **error_details)
 
 
-@api.route('/<dataset>/multipart/<int:id>')
+@api.route('/<path:dataset>/multipart/<int:id>')
 @api.response(404, 'Dataset or feature not found or permission error')
 @api.param('dataset', 'Dataset ID', default='qwc_demo.edit_points')
 @api.param('id', 'Feature ID')
@@ -475,7 +475,7 @@ class EditFeatureMultipart(Resource):
             api.abort(error_code, result['error'], **error_details)
 
 
-@api.route('/<dataset>/<int:id>')
+@api.route('/<path:dataset>/<int:id>')
 @api.response(404, 'Dataset or feature not found or permission error')
 @api.param('dataset', 'Dataset ID', default='qwc_demo.edit_points')
 @api.param('id', 'Feature ID')
@@ -557,7 +557,7 @@ class DataMember(Resource):
             api.abort(error_code, result['error'])
 
 
-@api.route('/<dataset>/attachment')
+@api.route('/<path:dataset>/attachment')
 @api.response(404, 'Dataset or feature not found or permission error')
 @api.param('dataset', 'Dataset ID', default='qwc_demo.edit_points')
 class AttachmentDownloader(Resource):
@@ -574,7 +574,7 @@ class AttachmentDownloader(Resource):
         return send_file(path, as_attachment=True, attachment_filename=os.path.basename(path))
 
 
-@api.route('/<dataset>/<int:id>/relations')
+@api.route('/<path:dataset>/<int:id>/relations')
 @api.response(404, 'Dataset or feature not found or permission error')
 @api.param('dataset', 'Dataset ID', default='qwc_demo.edit_points')
 @api.param('id', 'Feature ID')
