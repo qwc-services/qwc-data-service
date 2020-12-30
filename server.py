@@ -735,6 +735,7 @@ class KeyValues(Resource):
     @api.expect(get_relations_parser)
     # TODO
     #@api.marshal_with(relationvalues_response, code=201)
+    @optional_auth
     def get(self):
         args = get_relations_parser.parse_args()
 
@@ -753,7 +754,11 @@ class KeyValues(Resource):
             )
             if 'feature_collection' in result:
                 for feature in result['feature_collection']['features']:
-                    record = {"key": feature["id"] if key_field_name == "id" else feature['properties'][key_field_name], "value": feature['properties'][value_field_name].strip()}
+                    key = feature["id"] if key_field_name == "id" else feature['properties'][key_field_name]
+                    if type(key) == UUID:
+                        key = str(key)
+                    value = feature['properties'][value_field_name].strip()
+                    record = {"key": key, "value": value}
                     ret[table].append(record)
         return {"keyvalues": ret}
 
