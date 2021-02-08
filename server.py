@@ -12,6 +12,7 @@ from werkzeug.datastructures import FileStorage
 
 from qwc_services_core.api import create_model, CaseInsensitiveArgument
 from qwc_services_core.auth import auth_manager, optional_auth, get_auth_user
+from qwc_services_core.runtime_config import RuntimeConfig
 from qwc_services_core.tenant_handler import TenantHandler
 from data_service import DataService
 from attachments_service import AttachmentsService
@@ -371,6 +372,10 @@ class CreateFeatureMultipart(Resource):
         if not isinstance(feature, dict):
             api.abort(400, "feature is not an object")
 
+        config_handler = RuntimeConfig("data", app.logger)
+        config = config_handler.tenant_config(tenant_handler.tenant())
+        upload_user_field_suffix = config.get("upload_user_field_suffix", None)
+
         # Validate attachments
         attachments = attachments_service_handler()
         for key in request.files:
@@ -391,6 +396,9 @@ class CreateFeatureMultipart(Resource):
                 saved_attachments[key] = slug
                 field = key.lstrip("file:")
                 feature["properties"][field] = "attachment://" + slug
+                if upload_user_field_suffix:
+                    upload_user_field = field + "_" + upload_user_field_suffix
+                    feature["properties"][upload_user_field] = get_auth_user()
 
         data_service = data_service_handler()
         result = data_service.create(
@@ -431,6 +439,10 @@ class EditFeatureMultipart(Resource):
         if not isinstance(feature, dict):
             api.abort(400, "feature is not an object")
 
+        config_handler = RuntimeConfig("data", app.logger)
+        config = config_handler.tenant_config(tenant_handler.tenant())
+        upload_user_field_suffix = config.get("upload_user_field_suffix", None)
+
         # Validate attachments
         attachments = attachments_service_handler()
         for key in request.files:
@@ -451,6 +463,9 @@ class EditFeatureMultipart(Resource):
                 saved_attachments[key] = slug
                 field = key.lstrip("file:")
                 feature["properties"][field] = "attachment://" + slug
+                if upload_user_field_suffix:
+                    upload_user_field = field + "_" + upload_user_field_suffix
+                    feature["properties"][upload_user_field] = get_auth_user()
 
         data_service = data_service_handler()
 
@@ -458,9 +473,13 @@ class EditFeatureMultipart(Resource):
         if prev:
             prev_feature = prev["feature"]
             # If a non-empty attachment field value is changed, delete the attachment
-            for key in feature["properties"]:
+            keys = list(feature["properties"].keys())
+            for key in keys:
                 if key in prev_feature["properties"] and prev_feature["properties"][key] and str(prev_feature["properties"][key]).startswith("attachment://") and feature["properties"][key] != prev_feature["properties"][key]:
                     attachments.remove_attachment(dataset, prev_feature["properties"][key].lstrip("attachment://"))
+                    if upload_user_field_suffix:
+                        upload_user_field = key + "_" + upload_user_field_suffix
+                        feature["properties"][upload_user_field] = ""
 
         result = data_service.update(
             get_auth_user(), dataset, id, feature
@@ -627,6 +646,10 @@ class Relations(Resource):
 
         data_service = data_service_handler()
 
+        config_handler = RuntimeConfig("data", app.logger)
+        config = config_handler.tenant_config(tenant_handler.tenant())
+        upload_user_field_suffix = config.get("upload_user_field_suffix", None)
+
         # Check if dataset with specified id exists
         if not data_service.is_editable(get_auth_user(), dataset, id):
             api.abort(404, "Dataset or feature not found or permission error")
@@ -654,6 +677,9 @@ class Relations(Resource):
                 field = parts[1]
                 index = parts[2]
                 payload[table]["records"][int(index)][table + "__" + field] = "attachment://" + slug
+                if upload_user_field_suffix:
+                    upload_user_field = table + "__" + field + "_" + upload_user_field_suffix
+                    payload[table]["records"][int(index)][upload_user_field] = get_auth_user()
 
         ret = {}
         haserrors = False

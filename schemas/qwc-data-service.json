@@ -31,6 +31,10 @@
         "max_attachment_file_size": {
           "description": "Maximum attachment file size in bytes",
           "type": "number"
+        },
+        "upload_user_field_suffix": {
+          "description": "Field suffix where to log the username who last changed an upload field, i.e. <fieldname>_<suffix> for the field <fieldname>. If empty, username is not logged.",
+          "type": "string"
         }
       }
     },
