@@ -479,7 +479,7 @@ class EditFeatureMultipart(Resource):
                     attachments.remove_attachment(dataset, prev_feature["properties"][key].lstrip("attachment://"))
                     if upload_user_field_suffix:
                         upload_user_field = key + "_" + upload_user_field_suffix
-                        feature["properties"][upload_user_field] = ""
+                        feature["properties"][upload_user_field] = get_auth_user()
 
         result = data_service.update(
             get_auth_user(), dataset, id, feature
