@@ -128,15 +128,16 @@ class DataService():
         else:
             return {'error': "Dataset not found or permission error"}
 
-    def create(self, identity, dataset, feature):
+    def create(self, identity, dataset, feature, internal_fields={}):
         """Create a new dataset feature.
 
         :param str identity: User identity
         :param str dataset: Dataset ID
         :param object feature: GeoJSON Feature
+        :param object internal_fields: Internal fields to inject into permissions
         """
         dataset_features_provider = self.dataset_features_provider(
-            identity, dataset
+            identity, dataset, internal_fields
         )
         if dataset_features_provider is not None:
             # check create permission
@@ -173,16 +174,17 @@ class DataService():
         else:
             return {'error': "Dataset not found or permission error"}
 
-    def update(self, identity, dataset, id, feature):
+    def update(self, identity, dataset, id, feature, internal_fields={}):
         """Update a dataset feature.
 
         :param str identity: User identity
         :param str dataset: Dataset ID
         :param int id: Dataset feature ID
         :param object feature: GeoJSON Feature
+        :param object internal_fields: Internal fields to inject into permissions
         """
         dataset_features_provider = self.dataset_features_provider(
-            identity, dataset
+            identity, dataset, internal_fields
         )
         if dataset_features_provider is not None:
             # check update permission
@@ -261,17 +263,18 @@ class DataService():
 
         return dataset_features_provider.exists(id)
 
-    def dataset_features_provider(self, identity, dataset):
+    def dataset_features_provider(self, identity, dataset, internal_fields={}):
         """Return DatasetFeaturesProvider if available and permitted.
 
         :param str identity: User identity
         :param str dataset: Dataset ID
+        :param object internal_fields: Internal fields to inject into permissions
         """
         dataset_features_provider = None
 
         # check permissions
         permissions = self.dataset_edit_permissions(
-            dataset, identity
+            dataset, identity, internal_fields
         )
         if permissions:
             # create DatasetFeaturesProvider
@@ -296,11 +299,12 @@ class DataService():
             'datasets': datasets
         }
 
-    def dataset_edit_permissions(self, dataset, identity):
+    def dataset_edit_permissions(self, dataset, identity, internal_fields):
         """Return dataset edit permissions if available and permitted.
 
         :param str dataset: Dataset ID
         :param obj identity: User identity
+        :param object internal_fields: Internal fields to inject into permissions
         """
         # find resource for requested dataset
         resource = self.resources['datasets'].get(dataset)
@@ -362,6 +366,10 @@ class DataService():
 
         # NOTE: 'geometry' is None for datasets without geometry
         geometry = resource.get('geometry', {})
+
+        for key in internal_fields:
+            fields[key] = internal_fields[key]
+            attributes.append(key)
 
         return {
             "dataset": resource['name'],

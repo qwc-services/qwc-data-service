@@ -385,6 +385,7 @@ class CreateFeatureMultipart(Resource):
 
         # Save attachments
         saved_attachments = {}
+        internal_fields = {}
         for key in request.files:
             filedata = request.files[key]
             slug = attachments.save_attachment(dataset, filedata)
@@ -399,11 +400,15 @@ class CreateFeatureMultipart(Resource):
                 if upload_user_field_suffix:
                     upload_user_field = field + "__" + upload_user_field_suffix
                     feature["properties"][upload_user_field] = get_auth_user()
+                    internal_fields[upload_user_field] = {'name': upload_user_field, 'data_type': 'text'}
 
         data_service = data_service_handler()
         result = data_service.create(
-            get_auth_user(), dataset, feature)
+            get_auth_user(), dataset, feature, internal_fields
+        )
+
         if 'error' not in result:
+            result['feature']['properties'] = dict(filter(lambda x: x[0] not in internal_fields, result['feature']['properties'].items()))
             return result['feature'], 201
         else:
             for slug in saved_attachments.values():
@@ -452,6 +457,7 @@ class EditFeatureMultipart(Resource):
 
         # Save attachments
         saved_attachments = {}
+        internal_fields = {}
         for key in request.files:
             filedata = request.files[key]
             slug = attachments.save_attachment(dataset, filedata)
@@ -466,6 +472,8 @@ class EditFeatureMultipart(Resource):
                 if upload_user_field_suffix:
                     upload_user_field = field + "__" + upload_user_field_suffix
                     feature["properties"][upload_user_field] = get_auth_user()
+                    internal_fields[upload_user_field] = {'name': upload_user_field, 'data_type': 'text'}
+
 
         data_service = data_service_handler()
 
@@ -480,11 +488,14 @@ class EditFeatureMultipart(Resource):
                     if upload_user_field_suffix:
                         upload_user_field = key + "__" + upload_user_field_suffix
                         feature["properties"][upload_user_field] = get_auth_user()
+                        internal_fields[upload_user_field] = {'name': upload_user_field, 'data_type': 'text'}
 
         result = data_service.update(
-            get_auth_user(), dataset, id, feature
+            get_auth_user(), dataset, id, feature, internal_fields
         )
+
         if 'error' not in result:
+            result['feature']['properties'] = dict(filter(lambda x: x[0] not in internal_fields, result['feature']['properties'].items()))
             return result['feature']
         else:
             for slug in saved_attachments.values():
@@ -663,6 +674,7 @@ class Relations(Resource):
 
         # Save attachments
         saved_attachments = {}
+        internal_fields = []
         for key in request.files:
             filedata = request.files[key]
             slug = attachments.save_attachment(dataset, filedata)
@@ -680,6 +692,7 @@ class Relations(Resource):
                 if upload_user_field_suffix:
                     upload_user_field = table + "__" + field + "__" + upload_user_field_suffix
                     payload[table]["records"][int(index)][upload_user_field] = get_auth_user()
+                    internal_fields.append(upload_user_field)
 
         ret = {}
         haserrors = False
@@ -706,17 +719,19 @@ class Relations(Resource):
                         "properties": {k[len(tbl_prefix):]: v for k, v in rel_record.items() if k.startswith(tbl_prefix)}
                     }
 
+                    table_internal_fields = {n[len(tbl_prefix):]: {'name': n[len(tbl_prefix):], 'data_type': 'text'} for n in internal_fields if n.startswith(tbl_prefix)}
+
                     if not "__status__" in rel_record:
                         ret[rel_table]["records"].append(rel_record)
                         continue
                     elif rel_record["__status__"] == "new":
-                        result = data_service.create(get_auth_user(), rel_table, entry)
+                        result = data_service.create(get_auth_user(), rel_table, entry, table_internal_fields)
                     elif rel_record["__status__"] == "changed":
-                        (newattachments, oldattachments) = self.attachments_diff(data_service, attachments, dataset, rel_table, rel_record["id"], entry)
-                        result = data_service.update(get_auth_user(), rel_table, rel_record["id"], entry)
+                        (newattachments, oldattachments) = self.attachments_diff(data_service, attachments, dataset, rel_table, rel_record["id"], entry, table_internal_fields, upload_user_field_suffix)
+                        result = data_service.update(get_auth_user(), rel_table, rel_record["id"], entry, table_internal_fields)
                         self.cleanup_attachments(attachments, dataset, newattachments if "error" in result else oldattachments)
                     elif rel_record["__status__"].startswith("deleted"):
-                        (newattachments, oldattachments) = self.attachments_diff(data_service, attachments, dataset, rel_table, rel_record["id"], entry)
+                        (newattachments, oldattachments) = self.attachments_diff(data_service, attachments, dataset, rel_table, rel_record["id"], entry, table_internal_fields, upload_user_field_suffix)
                         result = data_service.destroy(get_auth_user(), rel_table, rel_record["id"])
                         self.cleanup_attachments(attachments, dataset, newattachments if "error" in result else oldattachments)
                     else:
@@ -727,12 +742,13 @@ class Relations(Resource):
                         ret[rel_table]["records"].append(rel_record)
                         haserrors = True
                     elif "feature" in result:
-                        rel_record = {(rel_table + "__" + k): v for k, v in result['feature']['properties'].items()}
+                        rel_record = {(rel_table + "__" + k): v for k, v in result['feature']['properties'].items() if not k in table_internal_fields}
                         rel_record["id"] = result['feature']["id"]
                         ret[rel_table]["records"].append(rel_record)
+
         return {"relationvalues": ret, "success": not haserrors}
 
-    def attachments_diff(self, data_service, attachments, dataset, rel_table, rel_record_id, feature):
+    def attachments_diff(self, data_service, attachments, dataset, rel_table, rel_record_id, feature, internal_fields, upload_user_field_suffix):
         newattachments = []
         oldattachments = []
         prev = data_service.show(get_auth_user(), rel_table, rel_record_id, None)
@@ -740,10 +756,16 @@ class Relations(Resource):
             return (newattachments, oldattachments)
         prev_feature = prev["feature"]
         # If a attachment field value is changed, delete the attachment
-        for key in feature["properties"]:
+        keys = list(feature["properties"].keys())
+        for key in keys:
             if key in prev_feature["properties"] and feature["properties"][key] != prev_feature["properties"][key]:
                 if str(prev_feature["properties"][key]).startswith("attachment://"):
                     oldattachments.append(prev_feature["properties"][key])
+                    if upload_user_field_suffix:
+                        upload_user_field = key + "__" + upload_user_field_suffix
+                        feature["properties"][upload_user_field] = get_auth_user()
+                        internal_fields[upload_user_field] = {'name': upload_user_field, 'data_type': 'text'}
+
                 if str(feature["properties"][key]).startswith("attachment://"):
                     newattachments.append(feature["properties"][key])
         return (newattachments, oldattachments)
