@@ -397,7 +397,7 @@ class CreateFeatureMultipart(Resource):
                 field = key.lstrip("file:")
                 feature["properties"][field] = "attachment://" + slug
                 if upload_user_field_suffix:
-                    upload_user_field = field + "_" + upload_user_field_suffix
+                    upload_user_field = field + "__" + upload_user_field_suffix
                     feature["properties"][upload_user_field] = get_auth_user()
 
         data_service = data_service_handler()
@@ -464,7 +464,7 @@ class EditFeatureMultipart(Resource):
                 field = key.lstrip("file:")
                 feature["properties"][field] = "attachment://" + slug
                 if upload_user_field_suffix:
-                    upload_user_field = field + "_" + upload_user_field_suffix
+                    upload_user_field = field + "__" + upload_user_field_suffix
                     feature["properties"][upload_user_field] = get_auth_user()
 
         data_service = data_service_handler()
@@ -478,7 +478,7 @@ class EditFeatureMultipart(Resource):
                 if key in prev_feature["properties"] and prev_feature["properties"][key] and str(prev_feature["properties"][key]).startswith("attachment://") and feature["properties"][key] != prev_feature["properties"][key]:
                     attachments.remove_attachment(dataset, prev_feature["properties"][key].lstrip("attachment://"))
                     if upload_user_field_suffix:
-                        upload_user_field = key + "_" + upload_user_field_suffix
+                        upload_user_field = key + "__" + upload_user_field_suffix
                         feature["properties"][upload_user_field] = get_auth_user()
 
         result = data_service.update(
@@ -678,7 +678,7 @@ class Relations(Resource):
                 index = parts[2]
                 payload[table]["records"][int(index)][table + "__" + field] = "attachment://" + slug
                 if upload_user_field_suffix:
-                    upload_user_field = table + "__" + field + "_" + upload_user_field_suffix
+                    upload_user_field = table + "__" + field + "__" + upload_user_field_suffix
                     payload[table]["records"][int(index)][upload_user_field] = get_auth_user()
 
         ret = {}
