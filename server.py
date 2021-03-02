@@ -731,7 +731,7 @@ class Relations(Resource):
                         result = data_service.update(get_auth_user(), rel_table, rel_record["id"], entry, table_internal_fields)
                         self.cleanup_attachments(attachments, dataset, newattachments if "error" in result else oldattachments)
                     elif rel_record["__status__"].startswith("deleted"):
-                        (newattachments, oldattachments) = self.attachments_diff(data_service, attachments, dataset, rel_table, rel_record["id"], entry, table_internal_fields, upload_user_field_suffix)
+                        (newattachments, oldattachments) = self.attachments_diff(data_service, attachments, dataset, rel_table, rel_record["id"], entry, table_internal_fields, upload_user_field_suffix, True)
                         result = data_service.destroy(get_auth_user(), rel_table, rel_record["id"])
                         self.cleanup_attachments(attachments, dataset, newattachments if "error" in result else oldattachments)
                     else:
@@ -748,7 +748,7 @@ class Relations(Resource):
 
         return {"relationvalues": ret, "success": not haserrors}
 
-    def attachments_diff(self, data_service, attachments, dataset, rel_table, rel_record_id, feature, internal_fields, upload_user_field_suffix):
+    def attachments_diff(self, data_service, attachments, dataset, rel_table, rel_record_id, feature, internal_fields, upload_user_field_suffix, record_deleted=False):
         newattachments = []
         oldattachments = []
         prev = data_service.show(get_auth_user(), rel_table, rel_record_id, None)
@@ -758,7 +758,7 @@ class Relations(Resource):
         # If a attachment field value is changed, delete the attachment
         keys = list(feature["properties"].keys())
         for key in keys:
-            if key in prev_feature["properties"] and feature["properties"][key] != prev_feature["properties"][key]:
+            if (key in prev_feature["properties"] and feature["properties"][key] != prev_feature["properties"][key]) or record_deleted:
                 if str(prev_feature["properties"][key]).startswith("attachment://"):
                     oldattachments.append(prev_feature["properties"][key])
                     if upload_user_field_suffix:
