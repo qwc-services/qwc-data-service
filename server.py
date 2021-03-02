@@ -732,6 +732,8 @@ class Relations(Resource):
                         self.cleanup_attachments(attachments, dataset, newattachments if "error" in result else oldattachments)
                     elif rel_record["__status__"].startswith("deleted"):
                         (newattachments, oldattachments) = self.attachments_diff(data_service, attachments, dataset, rel_table, rel_record["id"], entry, table_internal_fields, upload_user_field_suffix, True)
+                        if upload_user_field_suffix:
+                            data_service.update(get_auth_user(), rel_table, rel_record["id"], entry, table_internal_fields)
                         result = data_service.destroy(get_auth_user(), rel_table, rel_record["id"])
                         self.cleanup_attachments(attachments, dataset, newattachments if "error" in result else oldattachments)
                     else:
