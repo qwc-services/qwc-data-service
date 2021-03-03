@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://raw.githubusercontent.com/qwc-services/qwc-data-service/v2/schemas/qwc-data-service.json",
+  "$id": "https://github.com/qwc-services/qwc-data-service/raw/master/schemas/qwc-data-service.json",
   "title": "QWC Data Service",
   "type": "object",
   "properties": {
@@ -9,7 +9,7 @@
       "description": "Reference to JSON schema of this config",
       "type": "string",
       "format": "uri",
-      "default": "https://raw.githubusercontent.com/qwc-services/qwc-data-service/v2/schemas/qwc-data-service.json"
+      "default": "https://github.com/qwc-services/qwc-data-service/raw/master/schemas/qwc-data-service.json"
     },
     "service": {
       "title": "Service name",
@@ -55,6 +55,11 @@
                 "type": "string"
               },
               "db_url": {
+                "description": "DB connection string for read and write access (or read-only access if db_write_url is present)",
+                "type": "string"
+              },
+              "db_write_url": {
+                "description": "Optional DB connection string for write access",
                 "type": "string"
               },
               "schema": {

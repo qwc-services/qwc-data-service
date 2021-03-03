@@ -20,12 +20,19 @@ class DatasetFeaturesProvider():
         :param obj config: Data service config for a dataset
         :param DatabaseEngine db_engine: Database engine with DB connections
         """
-        # get SQLAlchemy engine for GeoDB of dataset
-        if config.get('database'):
-            self.db = db_engine.db_engine(config['database'])
+        # get SQLAlchemy engine for GeoDB of dataset for read actions
+        if config.get('database_read'):
+            self.db_read = db_engine.db_engine(config['database_read'])
         else:
             # fallback to default GeoDB
-            self.db = db_engine.geo_db()
+            self.db_read = db_engine.geo_db()
+
+        # get SQLAlchemy engine for GeoDB of dataset for write actions
+        if config.get('database_write'):
+            self.db_write = db_engine.db_engine(config['database_write'])
+        else:
+            # fallback to GeoDB for read actions
+            self.db_write = self.db_read
 
         # assign values from service config
         self.table_name = '"%s"."%s"' % (
@@ -135,7 +142,7 @@ class DatasetFeaturesProvider():
         ))
 
         # connect to database and start transaction (for read-only access)
-        conn = self.db.connect()
+        conn = self.db_read.connect()
         trans = conn.begin()
 
         # execute query
@@ -198,7 +205,7 @@ class DatasetFeaturesProvider():
         ))
 
         # connect to database and start transaction (for read-only access)
-        conn = self.db.connect()
+        conn = self.db_read.connect()
         trans = conn.begin()
 
         # execute query
@@ -236,7 +243,7 @@ class DatasetFeaturesProvider():
         ))
 
         # connect to database
-        conn = self.db.connect()
+        conn = self.db_write.connect()
 
         # execute query
         # NOTE: use bound values
@@ -277,7 +284,7 @@ class DatasetFeaturesProvider():
         update_values[self.primary_key] = id
 
         # connect to database
-        conn = self.db.connect()
+        conn = self.db_write.connect()
 
         # execute query
         # NOTE: use bound values
@@ -305,7 +312,7 @@ class DatasetFeaturesProvider():
         """.format(table=self.table_name, pkey=self.primary_key))
 
         # connect to database
-        conn = self.db.connect()
+        conn = self.db_write.connect()
 
         # execute query
         success = False
@@ -330,7 +337,7 @@ class DatasetFeaturesProvider():
         ))
 
         # connect to database
-        conn = self.db.connect()
+        conn = self.db_read.connect()
 
         # execute query
         result = conn.execute(sql, id=id)
@@ -642,7 +649,7 @@ class DatasetFeaturesProvider():
         json_geom = json.dumps(feature.get('geometry'))
 
         # connect to database and start transaction (for read-only access)
-        conn = self.db.connect()
+        conn = self.db_read.connect()
         trans = conn.begin()
 
         # validate GeoJSON geometry
@@ -719,7 +726,7 @@ class DatasetFeaturesProvider():
             return errors
 
         # connect to database
-        conn = self.db.connect()
+        conn = self.db_read.connect()
 
         for attr in feature['properties']:
             constraints = self.fields.get(attr, {}).get('constraints', {})

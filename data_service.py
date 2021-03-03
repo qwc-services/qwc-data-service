@@ -373,7 +373,8 @@ class DataService():
 
         return {
             "dataset": resource['name'],
-            "database": resource['db_url'],
+            "database_read": resource['db_url'],
+            "database_write": resource.get('db_write_url', resource['db_url']),
             "schema": resource['schema'],
             "table_name": resource['table_name'],
             "primary_key": resource['primary_key'],
