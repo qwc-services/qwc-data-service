@@ -281,7 +281,7 @@ post_relations_parser.add_argument(
 
 # routes
 @api.route('/<dataset>/', defaults={'tenant': ''})
-@api.route('/<tenant>/<dataset>')
+@api.route('/<tenant>/<dataset>/')
 @api.response(400, 'Bad request')
 @api.response(404, 'Dataset not found or permission error')
 @api.param('dataset', 'Dataset ID', default='qwc_demo.edit_points')
