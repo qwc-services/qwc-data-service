@@ -1,6 +1,7 @@
 from collections import OrderedDict
 
-from sqlalchemy.exc import DataError, InternalError, ProgrammingError
+from sqlalchemy.exc import (DataError, IntegrityError,
+                            InternalError, ProgrammingError)
 
 from qwc_services_core.database import DatabaseEngine
 from qwc_services_core.permissions_reader import PermissionsReader
@@ -155,7 +156,8 @@ class DataService():
                 # create new feature
                 try:
                     feature = dataset_features_provider.create(feature)
-                except (DataError, InternalError, ProgrammingError) as e:
+                except (DataError, IntegrityError,
+                        InternalError, ProgrammingError) as e:
                     self.logger.error(e)
                     return {
                         'error': "Feature commit failed",
@@ -200,7 +202,8 @@ class DataService():
                 # update feature
                 try:
                     feature = dataset_features_provider.update(id, feature)
-                except (DataError, InternalError, ProgrammingError) as e:
+                except (DataError, IntegrityError,
+                        InternalError, ProgrammingError) as e:
                     self.logger.error(e)
                     return {
                         'error': "Feature commit failed",
