@@ -53,7 +53,7 @@ Example:
   "config": {
     "attachments_base_dir": "/tmp/qwc_attachments/",
     "allowed_attachment_extensions": ".bmp,.jpg,.pdf",
-    "max_attachment_file_size": "10485760"
+    "max_attachment_file_size": 10485760
   },
   "resources": {
     "datasets": [
