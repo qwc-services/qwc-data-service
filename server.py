@@ -628,6 +628,7 @@ class Relations(Resource):
     @api.expect(get_relations_parser)
     # TODO
     #@api.marshal_with(relationvalues_response, code=201)
+    @optional_auth
     def get(self, tenant, dataset, id):
         dataset = tenant + "/" + dataset if tenant else dataset
         data_service = data_service_handler()
@@ -801,6 +802,7 @@ class KeyValues(Resource):
     @api.expect(get_relations_parser)
     # TODO
     #@api.marshal_with(relationvalues_response, code=201)
+    @optional_auth
     def get(self):
         args = get_relations_parser.parse_args()
 
