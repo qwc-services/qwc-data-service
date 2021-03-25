@@ -1,11 +1,43 @@
 name: build
 
-on: [push]
+on: [push, pull_request]
 
 jobs:
+    test:
+      runs-on: ubuntu-latest
+      steps:
+
+      - uses: actions/checkout@master
+
+      - name: Checkout qwc-docker
+        uses: actions/checkout@master
+        with:
+          repository: qwc-services/qwc-docker
+          path: qwc-docker
+
+      - name: Start demo database
+        run: |
+          cd qwc-docker
+          sed -i 's|host=qwc-postgis|host=localhost|g' pg_service-write.conf
+          sed -i 's|port=5432|port=5439|g' pg_service-write.conf
+          cp pg_service-write.conf ~/.pg_service.conf
+          docker-compose -f docker-compose-example.yml up -d qwc-postgis
+
+      - name: Setting up python 3.6
+        uses: actions/setup-python@v2
+        with:
+            python-version: '3.6'
+
+      - name: Run unittests
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+          python3 test.py
 
     build:
+      needs: test
       runs-on: ubuntu-latest
+      if: github.event_name == 'push'
       steps:
 
       - uses: actions/checkout@master
