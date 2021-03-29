@@ -102,8 +102,11 @@ class AttachmentsService():
 
     def resolve_attachment(self, dataset, slug):
         """Resolve attachment slug to full path"""
-        path = os.path.join(self.attachments_base_dir, self.tenant, dataset, slug)
-        if os.path.isfile(path):
+        path = os.path.realpath(
+            os.path.join(
+                self.attachments_base_dir, self.tenant, dataset, slug))
+        if os.path.isfile(path) and path.startswith(
+                self.attachments_base_dir):
             return path
         return None
 
