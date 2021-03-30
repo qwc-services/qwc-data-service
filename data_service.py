@@ -1,3 +1,4 @@
+import os
 from collections import OrderedDict
 
 from sqlalchemy.exc import (DataError, IntegrityError,
@@ -7,6 +8,10 @@ from qwc_services_core.database import DatabaseEngine
 from qwc_services_core.permissions_reader import PermissionsReader
 from qwc_services_core.runtime_config import RuntimeConfig
 from dataset_features_provider import DatasetFeaturesProvider
+
+
+ERROR_DETAILS_LOG_ONLY = os.environ.get(
+    'ERROR_DETAILS_LOG_ONLY', 'False') == 'True'
 
 
 class DataService():
@@ -168,11 +173,8 @@ class DataService():
                     }
                 return {'feature': feature}
             else:
-                return {
-                    'error': "Feature validation failed",
-                    'error_details': validation_errors,
-                    'error_code': 422
-                }
+                self.error_response(
+                    "Feature validation failed", validation_errors)
         else:
             return {'error': "Dataset not found or permission error"}
 
@@ -217,11 +219,8 @@ class DataService():
                 else:
                     return {'error': "Feature not found"}
             else:
-                return {
-                    'error': "Feature validation failed",
-                    'error_details': validation_errors,
-                    'error_code': 422
-                }
+                self.error_response(
+                    "Feature validation failed", validation_errors)
         else:
             return {'error': "Dataset not found or permission error"}
 
@@ -392,4 +391,16 @@ class DataService():
             "readable": readable,
             "updatable": updatable,
             "deletable": deletable
+        }
+
+    def error_response(self, error, details):
+        self.logger.error("%s: %s", error, details)
+        if ERROR_DETAILS_LOG_ONLY:
+            error_details = 'see log for details'
+        else:
+            error_details = details
+        return {
+            'error': error,
+            'error_details': error_details
+            'error_code': 422
         }
