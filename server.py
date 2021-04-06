@@ -1,5 +1,5 @@
 from collections import OrderedDict
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from uuid import UUID
 import json
@@ -331,14 +331,29 @@ class DataCollection(Resource):
         GeoJSON Feature.
         """
         dataset = tenant + "/" + dataset if tenant else dataset
+
+        config_handler = RuntimeConfig("data", app.logger)
+        config = config_handler.tenant_config(tenant_handler.tenant())
+        edit_user_field = config.get("edit_user_field", None)
+        edit_timestamp_field = config.get("edit_timestamp_field", None)
+
         if request.is_json:
             # parse request data (NOTE: catches invalid JSON)
-            payload = api.payload
-            if isinstance(payload, dict):
+            feature = api.payload
+            if isinstance(feature, dict):
                 data_service = data_service_handler()
+                internal_fields = {}
+                if edit_user_field:
+                    feature["properties"][edit_user_field] = get_auth_user()
+                    internal_fields[edit_user_field] = {'name': edit_user_field, 'data_type': 'text'}
+                if edit_timestamp_field:
+                    feature["properties"][edit_timestamp_field] = str(datetime.now())
+                    internal_fields[edit_timestamp_field] = {'name': edit_timestamp_field, 'data_type': 'text'}
+
                 result = data_service.create(
-                    get_auth_user(), dataset, payload)
+                    get_auth_user(), dataset, feature, internal_fields)
                 if 'error' not in result:
+                    result['feature']['properties'] = dict(filter(lambda x: x[0] not in internal_fields, result['feature']['properties'].items()))
                     return result['feature'], 201
                 else:
                     error_code = result.get('error_code') or 404
@@ -380,6 +395,8 @@ class CreateFeatureMultipart(Resource):
         config_handler = RuntimeConfig("data", app.logger)
         config = config_handler.tenant_config(tenant_handler.tenant())
         upload_user_field_suffix = config.get("upload_user_field_suffix", None)
+        edit_user_field = config.get("edit_user_field", None)
+        edit_timestamp_field = config.get("edit_timestamp_field", None)
 
         # Validate attachments
         attachments = attachments_service_handler()
@@ -406,6 +423,13 @@ class CreateFeatureMultipart(Resource):
                     upload_user_field = field + "__" + upload_user_field_suffix
                     feature["properties"][upload_user_field] = get_auth_user()
                     internal_fields[upload_user_field] = {'name': upload_user_field, 'data_type': 'text'}
+
+        if edit_user_field:
+            feature["properties"][edit_user_field] = get_auth_user()
+            internal_fields[edit_user_field] = {'name': edit_user_field, 'data_type': 'text'}
+        if edit_timestamp_field:
+            feature["properties"][edit_timestamp_field] = str(datetime.now())
+            internal_fields[edit_timestamp_field] = {'name': edit_timestamp_field, 'data_type': 'text'}
 
         data_service = data_service_handler()
         result = data_service.create(
@@ -454,6 +478,8 @@ class EditFeatureMultipart(Resource):
         config_handler = RuntimeConfig("data", app.logger)
         config = config_handler.tenant_config(tenant_handler.tenant())
         upload_user_field_suffix = config.get("upload_user_field_suffix", None)
+        edit_user_field = config.get("edit_user_field", None)
+        edit_timestamp_field = config.get("edit_timestamp_field", None)
 
         # Validate attachments
         attachments = attachments_service_handler()
@@ -496,6 +522,13 @@ class EditFeatureMultipart(Resource):
                         upload_user_field = key + "__" + upload_user_field_suffix
                         feature["properties"][upload_user_field] = get_auth_user()
                         internal_fields[upload_user_field] = {'name': upload_user_field, 'data_type': 'text'}
+
+        if edit_user_field:
+            feature["properties"][edit_user_field] = get_auth_user()
+            internal_fields[edit_user_field] = {'name': edit_user_field, 'data_type': 'text'}
+        if edit_timestamp_field:
+            feature["properties"][edit_timestamp_field] = str(datetime.now())
+            internal_fields[edit_timestamp_field] = {'name': edit_timestamp_field, 'data_type': 'text'}
 
         result = data_service.update(
             get_auth_user(), dataset, id, feature, internal_fields
@@ -558,15 +591,30 @@ class DataMember(Resource):
         a GeoJSON Feature.
         """
         dataset = tenant + "/" + dataset if tenant else dataset
+
+        config_handler = RuntimeConfig("data", app.logger)
+        config = config_handler.tenant_config(tenant_handler.tenant())
+        edit_user_field = config.get("edit_user_field", None)
+        edit_timestamp_field = config.get("edit_timestamp_field", None)
+
         if request.is_json:
             # parse request data (NOTE: catches invalid JSON)
-            payload = api.payload
-            if isinstance(payload, dict):
+            feature = api.payload
+            if isinstance(feature, dict):
                 data_service = data_service_handler()
+                internal_fields = {}
+                if edit_user_field:
+                    feature["properties"][edit_user_field] = get_auth_user()
+                    internal_fields[edit_user_field] = {'name': edit_user_field, 'data_type': 'text'}
+                if edit_timestamp_field:
+                    feature["properties"][edit_timestamp_field] = str(datetime.now())
+                    internal_fields[edit_timestamp_field] = {'name': edit_timestamp_field, 'data_type': 'text'}
+
                 result = data_service.update(
-                    get_auth_user(), dataset, id, api.payload
+                    get_auth_user(), dataset, id, feature, internal_fields
                 )
                 if 'error' not in result:
+                    result['feature']['properties'] = dict(filter(lambda x: x[0] not in internal_fields, result['feature']['properties'].items()))
                     return result['feature']
                 else:
                     error_code = result.get('error_code') or 404
@@ -677,6 +725,8 @@ class Relations(Resource):
         config_handler = RuntimeConfig("data", app.logger)
         config = config_handler.tenant_config(tenant_handler.tenant())
         upload_user_field_suffix = config.get("upload_user_field_suffix", None)
+        edit_user_field = config.get("edit_user_field", None)
+        edit_timestamp_field = config.get("edit_timestamp_field", None)
 
         # Check if dataset with specified id exists
         if not data_service.is_editable(get_auth_user(), dataset, id):
@@ -737,6 +787,13 @@ class Relations(Resource):
                     }
 
                     table_internal_fields = {n[len(tbl_prefix):]: {'name': n[len(tbl_prefix):], 'data_type': 'text'} for n in internal_fields if n.startswith(tbl_prefix)}
+
+                    if edit_user_field:
+                        entry["properties"][edit_user_field] = get_auth_user()
+                        table_internal_fields[edit_user_field] = {'name': edit_user_field, 'data_type': 'text'}
+                    if edit_timestamp_field:
+                        entry["properties"][edit_timestamp_field] = str(datetime.now())
+                        table_internal_fields[edit_timestamp_field] = {'name': edit_timestamp_field, 'data_type': 'text'}
 
                     if not "__status__" in rel_record:
                         ret[rel_table]["records"].append(rel_record)

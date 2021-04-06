@@ -53,7 +53,10 @@ Example:
   "config": {
     "attachments_base_dir": "/tmp/qwc_attachments/",
     "allowed_attachment_extensions": ".bmp,.jpg,.pdf",
-    "max_attachment_file_size": 10485760
+    "max_attachment_file_size": 10485760,
+    "upload_user_field_suffix": "uploaduser",
+    "edit_user_field": "edituser",
+    "edit_timestamp_field": "edittimestamp"
   },
   "resources": {
     "datasets": [
@@ -238,6 +241,11 @@ Edit forms:
     Note: `:/` in the `form` property is resolved to the assets directory of the viewer.
   * Create the designer form in Qt-Designer, using the dataset field names as edit widget names.
 - *Note*: In general, for tables with an auto-incrementing primary key field, you'll want to set the attribute form widget type to "Hidden" in the QGIS layer properties. This way, the data-service won't block the commit if the feature is comitted with an empty PK field value.
+
+Logging the user/timestamp of a mutation:
+
+- If you set `edit_user_field` in the data service config, the username of the last user who performed a mutation to a record with be logged to the `<edit_user_field>` field of the record.
+- If you set `edit_timestamp_field` in the data service config, the timestamp of the last mutation to a record will be logged to the `<edit_timestamp_field>` field of the record.
 
 File uploads:
 
