@@ -173,7 +173,7 @@ class DataService():
                     }
                 return {'feature': feature}
             else:
-                self.error_response(
+                return self.error_response(
                     "Feature validation failed", validation_errors)
         else:
             return {'error': "Dataset not found or permission error"}
@@ -219,7 +219,7 @@ class DataService():
                 else:
                     return {'error': "Feature not found"}
             else:
-                self.error_response(
+                return self.error_response(
                     "Feature validation failed", validation_errors)
         else:
             return {'error': "Dataset not found or permission error"}
