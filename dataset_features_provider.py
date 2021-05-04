@@ -934,18 +934,23 @@ class DatasetFeaturesProvider():
         """
         # get permitted attribute values
         bound_values = OrderedDict()
+        attribute_columns = []
+        placeholdercount = 0
         for attr in self.attributes:
             if attr in feature['properties']:
                 data_type = self.fields.get(attr, {}).get('data_type')
+                attribute_columns.append(attr)
+                placeholder_name = "__val%d" % placeholdercount
+                placeholdercount += 1
                 if data_type in ['json', 'jsonb']:
                     # convert values for fields of type json to string
-                    bound_values[attr] = json.dumps(
+                    bound_values[placeholder_name] = json.dumps(
                         feature['properties'][attr]
                     )
                 else:
-                    bound_values[attr] = feature['properties'][attr]
+                    bound_values[placeholder_name] = feature['properties'][attr]
 
-        attribute_columns = list(bound_values.keys())
+        placeholder_names = list(bound_values.keys())
 
         # columns for permitted attributes
         columns = (', ').join(self.escape_column_names(attribute_columns))
@@ -984,7 +989,7 @@ class DatasetFeaturesProvider():
         # e.g. ['name'] + 'geom'
         #     ==>
         #      ":name, ST_SetSRID(ST_GeomFromGeoJSON(:geom), 2056)"
-        bound_columns = [":%s" % attr for attr in attribute_columns]
+        bound_columns = [":%s" % placeholder_name for placeholder_name in placeholder_names]
         if self.geometry_column and 'geometry' in feature:
             # build geometry from GeoJSON, transformed to dataset CRS
             geometry_value = self.transform_geom_sql(
