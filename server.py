@@ -280,8 +280,7 @@ post_relations_parser.add_argument(
 
 
 # routes
-@api.route('/<dataset>/', defaults={'tenant': ''})
-@api.route('/<tenant>/<dataset>/')
+@api.route('/<path:dataset>/')
 @api.response(400, 'Bad request')
 @api.response(404, 'Dataset not found or permission error')
 @api.param('dataset', 'Dataset ID', default='qwc_demo.edit_points')
@@ -296,13 +295,12 @@ class DataCollection(Resource):
     @api.expect(index_parser)
     @api.marshal_with(geojson_feature_collection_response, skip_none=True)
     @optional_auth
-    def get(self, tenant, dataset):
+    def get(self, dataset):
         """Get dataset features
 
         Return dataset features inside bounding box and matching filter as a
         GeoJSON FeatureCollection.
         """
-        dataset = tenant + "/" + dataset if tenant else dataset
         args = index_parser.parse_args()
         bbox = args['bbox']
         crs = args['crs']
@@ -324,14 +322,12 @@ class DataCollection(Resource):
     @api.expect(geojson_feature_request)
     @api.marshal_with(geojson_feature_response, code=201)
     @optional_auth
-    def post(self, tenant, dataset):
+    def post(self, dataset):
         """Create a new dataset feature
 
         Create new dataset feature from a GeoJSON Feature and return it as a
         GeoJSON Feature.
         """
-        dataset = tenant + "/" + dataset if tenant else dataset
-
         config_handler = RuntimeConfig("data", app.logger)
         config = config_handler.tenant_config(tenant_handler.tenant())
         edit_user_field = config.get("edit_user_field", None)
@@ -365,8 +361,7 @@ class DataCollection(Resource):
             api.abort(400, "Request data is not JSON")
 
 
-@api.route('/<dataset>/multipart', defaults={'tenant': ''})
-@api.route('/<tenant>/<dataset>/multipart')
+@api.route('/<path:dataset>/multipart')
 @api.response(400, 'Bad request')
 @api.response(404, 'Dataset not found or permission error')
 @api.param('dataset', 'Dataset ID', default='qwc_demo.edit_points')
@@ -377,13 +372,12 @@ class CreateFeatureMultipart(Resource):
     @api.expect(feature_multipart_parser)
     @api.marshal_with(geojson_feature_response, code=201)
     @optional_auth
-    def post(self, tenant, dataset):
+    def post(self, dataset):
         """Create a new dataset feature
 
         Create new dataset feature from a GeoJSON Feature and return it as a
         GeoJSON Feature.
         """
-        dataset = tenant + "/" + dataset if tenant else dataset
         args = feature_multipart_parser.parse_args()
         try:
             feature = json.loads(args['feature'])
@@ -447,8 +441,7 @@ class CreateFeatureMultipart(Resource):
             api.abort(error_code, result['error'], **error_details)
 
 
-@api.route('/<dataset>/multipart/<int:id>', defaults={'tenant': ''})
-@api.route('/<tenant>/<dataset>/multipart/<int:id>')
+@api.route('/<path:dataset>/multipart/<int:id>')
 @api.response(404, 'Dataset or feature not found or permission error')
 @api.param('dataset', 'Dataset ID', default='qwc_demo.edit_points')
 @api.param('id', 'Feature ID')
@@ -460,13 +453,12 @@ class EditFeatureMultipart(Resource):
     @api.expect(feature_multipart_parser)
     @api.marshal_with(geojson_feature_response)
     @optional_auth
-    def put(self, tenant, dataset, id):
+    def put(self, dataset, id):
         """Update a dataset feature
 
         Update dataset feature with ID from a GeoJSON Feature and return it as
         a GeoJSON Feature.
         """
-        dataset = tenant + "/" + dataset if tenant else dataset
         args = feature_multipart_parser.parse_args()
         try:
             feature = json.loads(args['feature'])
@@ -545,8 +537,7 @@ class EditFeatureMultipart(Resource):
             api.abort(error_code, result['error'], **error_details)
 
 
-@api.route('/<dataset>/<int:id>', defaults={'tenant': ''})
-@api.route('/<tenant>/<dataset>/<int:id>')
+@api.route('/<path:dataset>/<int:id>')
 @api.response(404, 'Dataset or feature not found or permission error')
 @api.param('dataset', 'Dataset ID', default='qwc_demo.edit_points')
 @api.param('id', 'Feature ID')
@@ -557,7 +548,7 @@ class DataMember(Resource):
     @api.expect(show_parser)
     @api.marshal_with(geojson_feature_response)
     @optional_auth
-    def get(self, tenant, dataset, id):
+    def get(self, dataset, id):
         """Get a dataset feature
 
         Return dataset feature with ID as a GeoJSON Feature.
@@ -566,7 +557,6 @@ class DataMember(Resource):
 
         <b>crs</b>: Client CRS, e.g. <b>EPSG:3857<b>
         """
-        dataset = tenant + "/" + dataset if tenant else dataset
         args = show_parser.parse_args()
         crs = args['crs']
 
@@ -584,14 +574,12 @@ class DataMember(Resource):
     @api.expect(geojson_feature_request)
     @api.marshal_with(geojson_feature_response)
     @optional_auth
-    def put(self, tenant, dataset, id):
+    def put(self, dataset, id):
         """Update a dataset feature
 
         Update dataset feature with ID from a GeoJSON Feature and return it as
         a GeoJSON Feature.
         """
-        dataset = tenant + "/" + dataset if tenant else dataset
-
         config_handler = RuntimeConfig("data", app.logger)
         config = config_handler.tenant_config(tenant_handler.tenant())
         edit_user_field = config.get("edit_user_field", None)
@@ -629,12 +617,11 @@ class DataMember(Resource):
     @api.response(405, 'Dataset not deletable')
     @api.marshal_with(message_response)
     @optional_auth
-    def delete(self, tenant, dataset, id):
+    def delete(self, dataset, id):
         """Delete a dataset feature
 
         Delete dataset feature with ID.
         """
-        dataset = tenant + "/" + dataset if tenant else dataset
         data_service = data_service_handler()
         result = data_service.destroy(get_auth_user(), dataset, id)
         if 'error' not in result:
@@ -646,16 +633,14 @@ class DataMember(Resource):
             api.abort(error_code, result['error'])
 
 
-@api.route('/<dataset>/attachment', defaults={'tenant': ''})
-@api.route('/<tenant>/<dataset>/attachment')
+@api.route('/<path:dataset>/attachment')
 @api.response(404, 'Dataset or feature not found or permission error')
 @api.param('dataset', 'Dataset ID', default='qwc_demo.edit_points')
 class AttachmentDownloader(Resource):
     @api.doc('get_attachment')
     @api.param('file', 'The file to download')
     @api.expect(get_attachment_parser)
-    def get(self, tenant, dataset):
-        dataset = tenant + "/" + dataset if tenant else dataset
+    def get(self, dataset):
         args = get_attachment_parser.parse_args()
         attachments = attachments_service_handler()
         path = attachments.resolve_attachment(dataset, args['file'])
@@ -665,8 +650,7 @@ class AttachmentDownloader(Resource):
         return send_file(path, as_attachment=True, attachment_filename=os.path.basename(path))
 
 
-@api.route('/<dataset>/<int:id>/relations', defaults={'tenant': ''})
-@api.route('/<tenant>/<dataset>/<int:id>/relations')
+@api.route('/<path:dataset>/<int:id>/relations')
 @api.response(404, 'Dataset or feature not found or permission error')
 @api.param('dataset', 'Dataset ID', default='qwc_demo.edit_points')
 @api.param('id', 'Feature ID')
@@ -677,8 +661,7 @@ class Relations(Resource):
     # TODO
     #@api.marshal_with(relationvalues_response, code=201)
     @optional_auth
-    def get(self, tenant, dataset, id):
-        dataset = tenant + "/" + dataset if tenant else dataset
+    def get(self, dataset, id):
         data_service = data_service_handler()
         args = get_relations_parser.parse_args()
         relations = args['tables'] or ""
@@ -705,12 +688,11 @@ class Relations(Resource):
     # TODO
     #@api.marshal_with(relationvalues_response, code=201)
     @optional_auth
-    def post(self, tenant, dataset, id):
+    def post(self, dataset, id):
         """Update relation values for the specified dataset
 
         Return success status for each relation value.
         """
-        dataset = tenant + "/" + dataset if tenant else dataset
         args = post_relations_parser.parse_args()
 
         try:
