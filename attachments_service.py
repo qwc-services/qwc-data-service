@@ -27,7 +27,7 @@ class AttachmentsService():
         self.max_file_size = int(config.get(
             'max_attachment_file_size', 10 * 1024 * 1024
         ))
-        self.allowed_extensions = config.get('allowed_attachment_extensions', '').split(",")
+        self.allowed_extensions = list(filter(lambda x: x, config.get('allowed_attachment_extensions', '').split(",")))
 
     def validate_attachment(self, dataset, file):
         """Validate file size of an attachment file.
