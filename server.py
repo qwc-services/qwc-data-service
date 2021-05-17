@@ -396,8 +396,9 @@ class CreateFeatureMultipart(Resource):
         attachments = attachments_service_handler()
         for key in request.files:
             filedata = request.files[key]
-            if not attachments.validate_attachment(dataset, filedata):
-                api.abort(404, "Attachment validation failed: " + key)
+            attachment_valid, message = attachments.validate_attachment(dataset, filedata)
+            if not attachment_valid:
+                api.abort(404, "Attachment validation failed for " + key + ": " + message)
 
         # Save attachments
         saved_attachments = {}
@@ -477,8 +478,9 @@ class EditFeatureMultipart(Resource):
         attachments = attachments_service_handler()
         for key in request.files:
             filedata = request.files[key]
-            if not attachments.validate_attachment(dataset, filedata):
-                api.abort(404, "Attachment validation failed: " + key)
+            attachment_valid, message = attachments.validate_attachment(dataset, filedata)
+            if not attachment_valid:
+                api.abort(404, "Attachment validation failed for " + key + ": " + message)
 
         # Save attachments
         saved_attachments = {}
@@ -718,8 +720,9 @@ class Relations(Resource):
         attachments = attachments_service_handler()
         for key in request.files:
             filedata = request.files[key]
-            if not attachments.validate_attachment(dataset, filedata):
-                api.abort(404, "Attachment validation failed: " + key)
+            attachment_valid, message = attachments.validate_attachment(dataset, filedata)
+            if not attachment_valid:
+                api.abort(404, "Attachment validation failed for " + key + ": " + message)
 
         # Save attachments
         saved_attachments = {}

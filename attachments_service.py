@@ -44,7 +44,7 @@ class AttachmentsService():
 
             if size > self.max_file_size:
                 self.logger.info("File too large: %s: %d" % (file.filename, size))
-                return False
+                return (False, "File too large")
         except Exception as e:
             self.logger.error("Could not validate attachment: %s" % e)
             return False
@@ -52,9 +52,9 @@ class AttachmentsService():
         ext = os.path.splitext(file.filename)[1].lower()
         if self.allowed_extensions and not ext in self.allowed_extensions:
             self.logger.info("Forbidden file extension: %s: %s" % (file.filename, ext))
-            return False
+            return (False, "Forbidden file extension")
 
-        return True
+        return (True, None)
 
 
     def save_attachment(self, dataset, file):
