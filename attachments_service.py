@@ -23,7 +23,7 @@ class AttachmentsService():
         config_handler = RuntimeConfig("data", self.logger)
         config = config_handler.tenant_config(self.tenant)
 
-        self.attachments_base_dir = config.get('attachments_base_dir', '/tmp/qwc_attachments/')
+        self.attachments_base_dir = os.path.realpath(config.get('attachments_base_dir', '/tmp/qwc_attachments/'))
         self.max_file_size = int(config.get(
             'max_attachment_file_size', 10 * 1024 * 1024
         ))
