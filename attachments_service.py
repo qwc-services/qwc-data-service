@@ -74,7 +74,7 @@ class AttachmentsService():
             file.save(os.path.join(target_dir, filename))
             self.logger.info("Saved attachment: %s" % slug)
 
-            return os.path.join(slug, filename)
+            return slug + "/" + filename
         except Exception as e:
             self.logger.error("Could not save attachment: %s" % e)
             return None
