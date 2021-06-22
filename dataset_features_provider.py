@@ -814,7 +814,7 @@ class DatasetFeaturesProvider():
 
             # values
             values = constraints.get('values', {})
-            if values and str(value) not in [v['value'] for v in values]:
+            if values and str(value) not in [str(v['value']) for v in values]:
                 errors.append("Invalid value for '%s'" % (attr))
 
         # close database connection
