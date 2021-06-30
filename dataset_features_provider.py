@@ -864,7 +864,8 @@ class DatasetFeaturesProvider():
                 '"{geom}"', self.srid, srid
             )
             # add GeoJSON column
-            geom_sql = ", ST_AsGeoJSON(%s) AS json_geom" % transform_geom_sql
+            geom_sql = ", ST_AsGeoJSON(ST_CurveToLine(%s)) AS json_geom" \
+                       % transform_geom_sql
             if with_bbox:
                 # add Box2D column
                 geom_sql += ", Box2D(%s) AS _bbox_" % transform_geom_sql
