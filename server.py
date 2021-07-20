@@ -863,7 +863,7 @@ class KeyValues(Resource):
             )
             if 'feature_collection' in result:
                 for feature in result['feature_collection']['features']:
-                    record = {"key": feature["id"] if key_field_name == "id" else feature['properties'][key_field_name], "value": feature['properties'][value_field_name].strip()}
+                    record = {"key": feature["id"] if key_field_name == "id" else feature['properties'][key_field_name], "value": str(feature['properties'][value_field_name]).strip()}
                     ret[table].append(record)
                 ret[table].sort(key=lambda record: record["value"])
         return {"keyvalues": ret}
