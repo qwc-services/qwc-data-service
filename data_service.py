@@ -371,7 +371,8 @@ class DataService():
 
         for key in internal_fields:
             fields[key] = internal_fields[key]
-            attributes.append(key)
+            if not key in attributes:
+                attributes.append(key)
 
         return {
             "dataset": resource['name'],
