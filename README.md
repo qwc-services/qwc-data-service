@@ -1,5 +1,5 @@
 [![](https://github.com/qwc-services/qwc-data-service/workflows/build/badge.svg)](https://github.com/qwc-services/qwc-data-service/actions)
-[![](https://img.shields.io/docker/pulls/sourcepole/qwc-data-service)](https://hub.docker.com/r/sourcepole/qwc-data-service)
+[![docker](https://img.shields.io/docker/v/sourcepole/qwc-data-service?label=Docker%20image&sort=semver)](https://hub.docker.com/r/sourcepole/qwc-data-service)
 
 QWC Data Service
 ================
