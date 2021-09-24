@@ -820,7 +820,7 @@ class Relations(Resource):
         keys = list(feature["properties"].keys())
         for key in keys:
             if (key in prev_feature["properties"] and feature["properties"][key] != prev_feature["properties"][key]) or record_deleted:
-                if str(prev_feature["properties"][key]).startswith("attachment://"):
+                if key in prev_feature["properties"] and str(prev_feature["properties"][key]).startswith("attachment://"):
                     oldattachments.append(prev_feature["properties"][key])
                     if upload_user_field_suffix:
                         upload_user_field = key + "__" + upload_user_field_suffix
