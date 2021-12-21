@@ -35,6 +35,10 @@
         "upload_user_field_suffix": {
           "description": "Field suffix where to log the username who last changed an upload field, i.e. <fieldname>_<suffix> for the field <fieldname>. If empty, username is not logged.",
           "type": "string"
+        },
+        "geometry_default_allow_null": {
+          "description": "Whether to allow null geometries by default",
+          "type": "boolean"
         }
       }
     },

@@ -20,7 +20,7 @@ class DataService():
     Manage reading and writing of dataset features.
     """
 
-    def __init__(self, tenant, logger):
+    def __init__(self, tenant, logger, config):
         """Constructor
 
         :param str tenant: Tenant ID
@@ -28,6 +28,7 @@ class DataService():
         """
         self.tenant = tenant
         self.logger = logger
+        self.config = config
         self.resources = self.load_resources()
         self.permissions_handler = PermissionsReader(tenant, logger)
         self.db_engine = DatabaseEngine()
@@ -386,7 +387,7 @@ class DataService():
             "geometry_column": geometry.get('geometry_column'),
             "geometry_type": geometry.get('geometry_type'),
             "srid": geometry.get('srid'),
-            "allow_null_geometry": geometry.get('allow_null', False),
+            "allow_null_geometry": geometry.get('allow_null', self.config.get('geometry_default_allow_null', False)),
             "writable": writable,
             "creatable": creatable,
             "readable": readable,

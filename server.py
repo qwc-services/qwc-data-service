@@ -115,8 +115,10 @@ def data_service_handler():
     tenant = tenant_handler.tenant()
     handler = tenant_handler.handler('data', 'data', tenant)
     if handler is None:
+        config_handler = RuntimeConfig("data", app.logger)
+        config = config_handler.tenant_config(tenant)
         handler = tenant_handler.register_handler(
-            'data', tenant, DataService(tenant, app.logger))
+            'data', tenant, DataService(tenant, app.logger, config))
     return handler
 
 
