@@ -1,6 +1,6 @@
 # WSGI service environment
 
-FROM sourcepole/qwc-uwsgi-base:alpine-v2022.01.08
+FROM sourcepole/qwc-uwsgi-base:alpine-v2022.01.26
 
 # Required for pip with git repos
 RUN apk add --no-cache --update git
