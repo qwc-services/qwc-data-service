@@ -32,6 +32,10 @@
           "description": "Maximum attachment file size in bytes",
           "type": "number"
         },
+        "clamd_host": {
+          "description": "Hostname of ClamD server listening on TCP port 3310. If set, uploaded files are checked by ClamAV",
+          "type": "string"
+        },
         "upload_user_field_suffix": {
           "description": "Field suffix where to log the username who last changed an upload field, i.e. <fieldname>_<suffix> for the field <fieldname>. If empty, username is not logged.",
           "type": "string"

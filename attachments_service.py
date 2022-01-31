@@ -4,6 +4,7 @@ import string
 
 from werkzeug.utils import secure_filename
 from qwc_services_core.runtime_config import RuntimeConfig
+from clamav import scan_file
 
 
 class AttachmentsService():
@@ -23,11 +24,14 @@ class AttachmentsService():
         config_handler = RuntimeConfig("data", self.logger)
         config = config_handler.tenant_config(self.tenant)
 
-        self.attachments_base_dir = os.path.realpath(config.get('attachments_base_dir', '/tmp/qwc_attachments/'))
+        self.attachments_base_dir = os.path.realpath(
+            config.get('attachments_base_dir', '/tmp/qwc_attachments/'))
         self.max_file_size = int(config.get(
             'max_attachment_file_size', 10 * 1024 * 1024
         ))
-        self.allowed_extensions = list(filter(lambda x: x, config.get('allowed_attachment_extensions', '').split(",")))
+        self.allowed_extensions = list(filter(lambda x: x, config.get(
+            'allowed_attachment_extensions', '').split(",")))
+        self.clamav = config.get('clamd_host')
 
     def validate_attachment(self, dataset, file):
         """Validate file size of an attachment file.
@@ -43,19 +47,24 @@ class AttachmentsService():
             file.seek(0)
 
             if size > self.max_file_size:
-                self.logger.info("File too large: %s: %d" % (file.filename, size))
+                self.logger.info(
+                    "File too large: %s: %d" % (file.filename, size))
                 return (False, "File too large")
         except Exception as e:
             self.logger.error("Could not validate attachment: %s" % e)
             return False
 
         ext = os.path.splitext(file.filename)[1].lower()
-        if self.allowed_extensions and not ext in self.allowed_extensions:
-            self.logger.info("Forbidden file extension: %s: %s" % (file.filename, ext))
+        if self.allowed_extensions and ext not in self.allowed_extensions:
+            self.logger.info(
+                "Forbidden file extension: %s: %s" % (file.filename, ext))
             return (False, "Forbidden file extension")
+        if self.clamav and scan_file(self.clamav, file.filename):
+            self.logger.warn(
+                "ClamAV check failed: %s" % file.filename)
+            return (False, "Forbidden file content")
 
         return (True, None)
-
 
     def save_attachment(self, dataset, file):
         """Save attachment file for a dataset and return its slug.
@@ -66,7 +75,8 @@ class AttachmentsService():
         try:
             # create target dir
             slug = self.generate_slug(20)
-            target_dir = os.path.join(self.attachments_base_dir, self.tenant, dataset, slug)
+            target_dir = os.path.join(
+                self.attachments_base_dir, self.tenant, dataset, slug)
             os.makedirs(target_dir, 0o750, True)
 
             # save attachment file
@@ -85,7 +95,8 @@ class AttachmentsService():
         :param str dataset: Dataset ID
         :param slug: File slug (identifier)
         """
-        target_dir = os.path.join(self.attachments_base_dir, self.tenant, dataset)
+        target_dir = os.path.join(
+            self.attachments_base_dir, self.tenant, dataset)
         try:
             os.remove(os.path.join(target_dir, slug))
             self.logger.info("Removed attachment: %s" % slug)
