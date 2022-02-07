@@ -35,9 +35,9 @@ class DatasetFeaturesProvider():
             self.db_write = self.db_read
 
         # assign values from service config
-        self.table_name = '"%s"."%s"' % (
-            config['schema'], config['table_name']
-        )
+        self.schema = config['schema']
+        self.table_name = config['table_name']
+        self.table = '"%s"."%s"' % (self.schema, self.table_name)
         self.primary_key = config['primary_key']
         # permitted attributes only
         self.attributes = config['attributes']
@@ -137,7 +137,7 @@ class DatasetFeaturesProvider():
             FROM {table}
             {where_clause};
         """ % geom_sql).format(
-            columns=columns, geom=self.geometry_column, table=self.table_name,
+            columns=columns, geom=self.geometry_column, table=self.table,
             where_clause=where_clause
         ))
 
@@ -200,7 +200,7 @@ class DatasetFeaturesProvider():
             WHERE {pkey} = :id
             LIMIT 1;
         """ % geom_sql).format(
-            columns=columns, geom=self.geometry_column, table=self.table_name,
+            columns=columns, geom=self.geometry_column, table=self.table,
             pkey=self.primary_key
         ))
 
@@ -226,8 +226,11 @@ class DatasetFeaturesProvider():
 
         :param object feature: GeoJSON Feature
         """
+        # connect to database
+        conn = self.db_write.connect()
+
         # build query SQL
-        sql_params = self.sql_params_for_feature(feature)
+        sql_params = self.sql_params_for_feature(feature, conn)
         srid = sql_params['client_srid']
 
         geom_sql = self.geom_column_sql(srid)
@@ -236,14 +239,11 @@ class DatasetFeaturesProvider():
                 VALUES ({values_sql})
             RETURNING {return_columns}%s;
         """ % geom_sql).format(
-            table=self.table_name, columns=sql_params['columns'],
+            table=self.table, columns=sql_params['columns'],
             values_sql=sql_params['values_sql'],
             return_columns=sql_params['return_columns'],
             geom=self.geometry_column
         ))
-
-        # connect to database
-        conn = self.db_write.connect()
 
         # execute query
         # NOTE: use bound values
@@ -263,8 +263,11 @@ class DatasetFeaturesProvider():
         :param int id: Dataset feature ID
         :param object feature: GeoJSON Feature
         """
+        # connect to database
+        conn = self.db_write.connect()
+
         # build query SQL
-        sql_params = self.sql_params_for_feature(feature)
+        sql_params = self.sql_params_for_feature(feature, conn)
         srid = sql_params['client_srid']
 
         geom_sql = self.geom_column_sql(srid)
@@ -274,7 +277,7 @@ class DatasetFeaturesProvider():
             WHERE {pkey} = :{pkey}
             RETURNING {return_columns}%s;
         """ % geom_sql).format(
-            table=self.table_name, columns=sql_params['columns'],
+            table=self.table, columns=sql_params['columns'],
             values_sql=sql_params['values_sql'], pkey=self.primary_key,
             return_columns=sql_params['return_columns'],
             geom=self.geometry_column
@@ -282,9 +285,6 @@ class DatasetFeaturesProvider():
 
         update_values = sql_params['bound_values']
         update_values[self.primary_key] = id
-
-        # connect to database
-        conn = self.db_write.connect()
 
         # execute query
         # NOTE: use bound values
@@ -309,7 +309,7 @@ class DatasetFeaturesProvider():
             DELETE FROM {table}
             WHERE "{pkey}" = :id
             RETURNING "{pkey}";
-        """.format(table=self.table_name, pkey=self.primary_key))
+        """.format(table=self.table, pkey=self.primary_key))
 
         # connect to database
         conn = self.db_write.connect()
@@ -333,7 +333,7 @@ class DatasetFeaturesProvider():
         sql = sql_text(("""
             SELECT EXISTS(SELECT 1 FROM {table} WHERE {pkey}=:id)
         """).format(
-            table=self.table_name, pkey=self.primary_key
+            table=self.table, pkey=self.primary_key
         ))
 
         # connect to database
@@ -897,6 +897,9 @@ class DatasetFeaturesProvider():
         """
         props = OrderedDict()
         for attr in self.attributes:
+            only_if_exists = self.fields.get(attr, {}).get('only_if_exists', False)
+            if only_if_exists and not attr in row:
+                continue
             props[attr] = row[attr]
 
         geometry = None
@@ -927,18 +930,38 @@ class DatasetFeaturesProvider():
             'bbox': bbox
         }
 
-    def sql_params_for_feature(self, feature):
+    def sql_params_for_feature(self, feature, conn):
         """Build SQL fragments and values for feature INSERT or UPDATE and
         get client SRID from GeoJSON CRS.
 
         :param object feature: GeoJSON Feature
         """
+
         # get permitted attribute values
         bound_values = OrderedDict()
         attribute_columns = []
+        return_columns = list(self.attributes)
         placeholdercount = 0
+
         for attr in self.attributes:
             if attr in feature['properties']:
+                only_if_exists = self.fields.get(attr, {}).get('only_if_exists', False)
+                if only_if_exists:
+                    sql = sql_text(("""
+                        SELECT EXISTS (SELECT 1
+                        FROM information_schema.columns
+                        WHERE table_schema='{schema}' AND table_name='{table}' AND column_name='{column}');
+                    """).format(
+                        schema=self.schema, table=self.table_name, column=attr
+                    ))
+                    result = conn.execute(sql)
+                    exists = result.fetchone()[0]
+                    if not exists:
+                        return_columns.remove(attr)
+                        print("Skipping field %s which does not exist in %s.%s" % (attr, self.schema, self.table_name))
+                        continue
+
+
                 data_type = self.fields.get(attr, {}).get('data_type')
                 attribute_columns.append(attr)
                 placeholder_name = "__val%d" % placeholdercount
@@ -1002,7 +1025,7 @@ class DatasetFeaturesProvider():
 
         # return id and permitted attributes
         return_columns = (', ').join(
-            self.escape_column_names([self.primary_key] + self.attributes)
+            self.escape_column_names([self.primary_key] + return_columns)
         )
 
         return {

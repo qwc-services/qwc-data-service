@@ -343,10 +343,10 @@ class DataCollection(Resource):
                 internal_fields = {}
                 if edit_user_field:
                     feature["properties"][edit_user_field] = get_auth_user()
-                    internal_fields[edit_user_field] = {'name': edit_user_field, 'data_type': 'text'}
+                    internal_fields[edit_user_field] = {'name': edit_user_field, 'data_type': 'text', 'only_if_exists': True}
                 if edit_timestamp_field:
                     feature["properties"][edit_timestamp_field] = str(datetime.now())
-                    internal_fields[edit_timestamp_field] = {'name': edit_timestamp_field, 'data_type': 'text'}
+                    internal_fields[edit_timestamp_field] = {'name': edit_timestamp_field, 'data_type': 'text', 'only_if_exists': True}
 
                 result = data_service.create(
                     get_auth_user(), dataset, feature, internal_fields)
@@ -419,14 +419,14 @@ class CreateFeatureMultipart(Resource):
                 if upload_user_field_suffix:
                     upload_user_field = field + "__" + upload_user_field_suffix
                     feature["properties"][upload_user_field] = get_auth_user()
-                    internal_fields[upload_user_field] = {'name': upload_user_field, 'data_type': 'text'}
+                    internal_fields[upload_user_field] = {'name': upload_user_field, 'data_type': 'text', 'only_if_exists': True}
 
         if edit_user_field:
             feature["properties"][edit_user_field] = get_auth_user()
             internal_fields[edit_user_field] = {'name': edit_user_field, 'data_type': 'text'}
         if edit_timestamp_field:
             feature["properties"][edit_timestamp_field] = str(datetime.now())
-            internal_fields[edit_timestamp_field] = {'name': edit_timestamp_field, 'data_type': 'text'}
+            internal_fields[edit_timestamp_field] = {'name': edit_timestamp_field, 'data_type': 'text', 'only_if_exists': True}
 
         data_service = data_service_handler()
         result = data_service.create(
@@ -501,7 +501,7 @@ class EditFeatureMultipart(Resource):
                 if upload_user_field_suffix:
                     upload_user_field = field + "__" + upload_user_field_suffix
                     feature["properties"][upload_user_field] = get_auth_user()
-                    internal_fields[upload_user_field] = {'name': upload_user_field, 'data_type': 'text'}
+                    internal_fields[upload_user_field] = {'name': upload_user_field, 'data_type': 'text', 'only_if_exists': True}
 
 
         data_service = data_service_handler()
@@ -517,14 +517,14 @@ class EditFeatureMultipart(Resource):
                     if upload_user_field_suffix:
                         upload_user_field = key + "__" + upload_user_field_suffix
                         feature["properties"][upload_user_field] = get_auth_user()
-                        internal_fields[upload_user_field] = {'name': upload_user_field, 'data_type': 'text'}
+                        internal_fields[upload_user_field] = {'name': upload_user_field, 'data_type': 'text', 'only_if_exists': True}
 
         if edit_user_field:
             feature["properties"][edit_user_field] = get_auth_user()
-            internal_fields[edit_user_field] = {'name': edit_user_field, 'data_type': 'text'}
+            internal_fields[edit_user_field] = {'name': edit_user_field, 'data_type': 'text', 'only_if_exists': True}
         if edit_timestamp_field:
             feature["properties"][edit_timestamp_field] = str(datetime.now())
-            internal_fields[edit_timestamp_field] = {'name': edit_timestamp_field, 'data_type': 'text'}
+            internal_fields[edit_timestamp_field] = {'name': edit_timestamp_field, 'data_type': 'text', 'only_if_exists': True}
 
         result = data_service.update(
             get_auth_user(), dataset, id, feature, internal_fields
@@ -597,10 +597,10 @@ class DataMember(Resource):
                 internal_fields = {}
                 if edit_user_field:
                     feature["properties"][edit_user_field] = get_auth_user()
-                    internal_fields[edit_user_field] = {'name': edit_user_field, 'data_type': 'text'}
+                    internal_fields[edit_user_field] = {'name': edit_user_field, 'data_type': 'text', 'only_if_exists': True}
                 if edit_timestamp_field:
                     feature["properties"][edit_timestamp_field] = str(datetime.now())
-                    internal_fields[edit_timestamp_field] = {'name': edit_timestamp_field, 'data_type': 'text'}
+                    internal_fields[edit_timestamp_field] = {'name': edit_timestamp_field, 'data_type': 'text', 'only_if_exists': True}
 
                 result = data_service.update(
                     get_auth_user(), dataset, id, feature, internal_fields
@@ -773,7 +773,7 @@ class Relations(Resource):
                         "properties": {k[len(tbl_prefix):]: v for k, v in rel_record.items() if k.startswith(tbl_prefix)}
                     }
 
-                    table_internal_fields = {n[len(tbl_prefix):]: {'name': n[len(tbl_prefix):], 'data_type': 'text'} for n in internal_fields if n.startswith(tbl_prefix)}
+                    table_internal_fields = {n[len(tbl_prefix):]: {'name': n[len(tbl_prefix):], 'data_type': 'text', 'only_if_exists': True} for n in internal_fields if n.startswith(tbl_prefix)}
 
                     if edit_user_field:
                         entry["properties"][edit_user_field] = get_auth_user()
@@ -827,7 +827,7 @@ class Relations(Resource):
                     if upload_user_field_suffix:
                         upload_user_field = key + "__" + upload_user_field_suffix
                         feature["properties"][upload_user_field] = get_auth_user()
-                        internal_fields[upload_user_field] = {'name': upload_user_field, 'data_type': 'text'}
+                        internal_fields[upload_user_field] = {'name': upload_user_field, 'data_type': 'text', 'only_if_exists': True}
 
                 if str(feature["properties"][key]).startswith("attachment://"):
                     newattachments.append(feature["properties"][key])
