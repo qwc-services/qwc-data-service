@@ -367,6 +367,25 @@ class DataService():
             if field['name'] in permitted_attributes:
                 fields[field['name']] = field
 
+                # Resolve keyvalrels
+                keyvalrel = field.get('constraints', {}).get('keyvalrel', None)
+                if keyvalrel:
+                    fields[field['name']] = dict(fields[field['name']])
+                    fields[field['name']]['constraints'] = dict(fields[field['name']]['constraints'])
+                    try:
+                        table, key_field_name, value_field_name = keyvalrel.split(":")
+                        result = self.index(
+                            identity, table, None, None, None
+                        )
+                        values = list(map(lambda feature: {
+                            'value': feature['properties'][key_field_name],
+                            'label': feature['properties'][value_field_name],
+                        }, result['feature_collection']['features']))
+                        fields[field['name']]['constraints']['values'] = values
+                    except Exception as e:
+                        self.logger.error("Unable to resolve keyvalrel '%s': %s" % (keyvalrel, str(e)))
+                        fields[field['name']]['constraints']['values'] = []
+
         # NOTE: 'geometry' is None for datasets without geometry
         geometry = resource.get('geometry', {})
 
