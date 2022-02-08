@@ -423,7 +423,7 @@ class CreateFeatureMultipart(Resource):
 
         if edit_user_field:
             feature["properties"][edit_user_field] = get_auth_user()
-            internal_fields[edit_user_field] = {'name': edit_user_field, 'data_type': 'text'}
+            internal_fields[edit_user_field] = {'name': edit_user_field, 'data_type': 'text', 'only_if_exists': True}
         if edit_timestamp_field:
             feature["properties"][edit_timestamp_field] = str(datetime.now())
             internal_fields[edit_timestamp_field] = {'name': edit_timestamp_field, 'data_type': 'text', 'only_if_exists': True}
@@ -777,10 +777,10 @@ class Relations(Resource):
 
                     if edit_user_field:
                         entry["properties"][edit_user_field] = get_auth_user()
-                        table_internal_fields[edit_user_field] = {'name': edit_user_field, 'data_type': 'text'}
+                        table_internal_fields[edit_user_field] = {'name': edit_user_field, 'data_type': 'text', 'only_if_exists': True}
                     if edit_timestamp_field:
                         entry["properties"][edit_timestamp_field] = str(datetime.now())
-                        table_internal_fields[edit_timestamp_field] = {'name': edit_timestamp_field, 'data_type': 'text'}
+                        table_internal_fields[edit_timestamp_field] = {'name': edit_timestamp_field, 'data_type': 'text', 'only_if_exists': True}
 
                     if not "__status__" in rel_record:
                         ret[rel_table]["records"].append(rel_record)
