@@ -14,11 +14,12 @@ class DatasetFeaturesProvider():
     Return features as GeoJSON FeatureCollection or Feature.
     """
 
-    def __init__(self, config, db_engine):
+    def __init__(self, config, db_engine, logger):
         """Constructor
 
         :param obj config: Data service config for a dataset
         :param DatabaseEngine db_engine: Database engine with DB connections
+        :param Logger logger: Application logger
         """
         # get SQLAlchemy engine for GeoDB of dataset for read actions
         if config.get('database_read'):
@@ -33,6 +34,8 @@ class DatasetFeaturesProvider():
         else:
             # fallback to GeoDB for read actions
             self.db_write = self.db_read
+
+        self.logger = logger
 
         # assign values from service config
         self.schema = config['schema']
@@ -958,7 +961,7 @@ class DatasetFeaturesProvider():
                     exists = result.fetchone()[0]
                     if not exists:
                         return_columns.remove(attr)
-                        print("Skipping field %s which does not exist in %s.%s" % (attr, self.schema, self.table_name))
+                        self.logger.info("Skipping field %s which does not exist in %s.%s" % (attr, self.schema, self.table_name))
                         continue
 
 

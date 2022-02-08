@@ -282,7 +282,7 @@ class DataService():
         if permissions:
             # create DatasetFeaturesProvider
             dataset_features_provider = DatasetFeaturesProvider(
-                permissions, self.db_engine
+                permissions, self.db_engine, self.logger
             )
 
         return dataset_features_provider
