@@ -1,5 +1,6 @@
 import unittest
 
+from flask.logging import logging
 from qwc_services_core.database import DatabaseEngine
 from dataset_features_provider import DatasetFeaturesProvider
 
@@ -103,7 +104,7 @@ class FeatureValidationTestCase(unittest.TestCase):
                     'numeric_scale': 2
                 }
             dataset_features_provider = DatasetFeaturesProvider(
-                config, self.db_engine
+                config, self.db_engine, logging.getLogger()
             )
 
             for value in valid_values:
@@ -168,7 +169,7 @@ class FeatureValidationTestCase(unittest.TestCase):
                 'constraints': constraints
             })
             dataset_features_provider = DatasetFeaturesProvider(
-                config, self.db_engine
+                config, self.db_engine, logging.getLogger()
             )
 
             for value in valid_values:
@@ -221,7 +222,7 @@ class FeatureValidationTestCase(unittest.TestCase):
         })
 
         dataset_features_provider = DatasetFeaturesProvider(
-            config, self.db_engine
+            config, self.db_engine, logging.getLogger()
         )
         errors = dataset_features_provider.validate(feature)
 
@@ -255,7 +256,7 @@ class FeatureValidationTestCase(unittest.TestCase):
         feature = self.build_feature()
 
         dataset_features_provider = DatasetFeaturesProvider(
-            config, self.db_engine
+            config, self.db_engine, logging.getLogger()
         )
 
         # required field not in properties
