@@ -751,8 +751,6 @@ class DatasetFeaturesProvider():
             elif data_type in ['json', 'jsonb']:
                 # convert values for fields of type json to string
                 input_value = json.dumps(input_value)
-            elif data_type == 'file':
-                data_type = 'text'
 
             # readOnly
             if constraints.get('readOnly', False):
@@ -948,23 +946,6 @@ class DatasetFeaturesProvider():
 
         for attr in self.attributes:
             if attr in feature['properties']:
-                only_if_exists = self.fields.get(attr, {}).get('only_if_exists', False)
-                if only_if_exists:
-                    sql = sql_text(("""
-                        SELECT EXISTS (SELECT 1
-                        FROM information_schema.columns
-                        WHERE table_schema='{schema}' AND table_name='{table}' AND column_name='{column}');
-                    """).format(
-                        schema=self.schema, table=self.table_name, column=attr
-                    ))
-                    result = conn.execute(sql)
-                    exists = result.fetchone()[0]
-                    if not exists:
-                        return_columns.remove(attr)
-                        self.logger.info("Skipping field %s which does not exist in %s.%s" % (attr, self.schema, self.table_name))
-                        continue
-
-
                 data_type = self.fields.get(attr, {}).get('data_type')
                 attribute_columns.append(attr)
                 placeholder_name = "__val%d" % placeholdercount

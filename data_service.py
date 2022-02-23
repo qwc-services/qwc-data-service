@@ -1,4 +1,5 @@
 import os
+from datetime import datetime
 from collections import OrderedDict
 
 from sqlalchemy.exc import (DataError, IntegrityError,
@@ -8,6 +9,7 @@ from qwc_services_core.database import DatabaseEngine
 from qwc_services_core.permissions_reader import PermissionsReader
 from qwc_services_core.runtime_config import RuntimeConfig
 from dataset_features_provider import DatasetFeaturesProvider
+from attachments_service import AttachmentsService
 
 
 ERROR_DETAILS_LOG_ONLY = os.environ.get(
@@ -31,6 +33,7 @@ class DataService():
         self.config = config
         self.resources = self.load_resources()
         self.permissions_handler = PermissionsReader(tenant, logger)
+        self.attachments_service = AttachmentsService(tenant, logger)
         self.db_engine = DatabaseEngine()
 
     def index(self, identity, dataset, bbox, crs, filterexpr):
@@ -135,95 +138,153 @@ class DataService():
         else:
             return {'error': "Dataset not found or permission error"}
 
-    def create(self, identity, dataset, feature, internal_fields={}):
+    def create(self, identity, dataset, feature, files={}):
         """Create a new dataset feature.
 
         :param str identity: User identity
         :param str dataset: Dataset ID
         :param object feature: GeoJSON Feature
-        :param object internal_fields: Internal fields to inject into permissions
+        :param object files: Upload files
         """
-        dataset_features_provider = self.dataset_features_provider(
-            identity, dataset, internal_fields
-        )
-        if dataset_features_provider is not None:
-            # check create permission
-            if not dataset_features_provider.creatable():
-                return {
-                    'error': "Dataset not creatable",
-                    'error_code': 405
-                }
 
-            # validate input feature
-            validation_errors = dataset_features_provider.validate(
-                feature, new_feature=True
-            )
-            if not validation_errors:
-                # create new feature
-                try:
-                    feature = dataset_features_provider.create(feature)
-                except (DataError, IntegrityError,
-                        InternalError, ProgrammingError) as e:
-                    self.logger.error(e)
-                    return {
-                        'error': "Feature commit failed",
-                        'error_details': {
-                            'data_errors': ["Feature could not be created"],
-                        },
-                        'error_code': 422
-                    }
-                return {'feature': feature}
-            else:
-                return self.error_response(
-                    "Feature validation failed", validation_errors)
-        else:
+        dataset_features_provider = self.dataset_features_provider(
+            identity, dataset
+        )
+        if dataset_features_provider is None:
             return {'error': "Dataset not found or permission error"}
 
-    def update(self, identity, dataset, id, feature, internal_fields={}):
+        # check create permission
+        if not dataset_features_provider.creatable():
+            return {
+                'error': "Dataset not creatable",
+                'error_code': 405
+            }
+
+        # validate input feature and attachments
+        validation_errors = dataset_features_provider.validate(
+            feature, new_feature=True
+        )
+        validation_errors.update(self.validate_attachments(files, dataset_features_provider))
+
+        if validation_errors:
+            return self.error_response(
+                "Feature validation failed", validation_errors)
+
+        added_fields = []
+
+        # Save attachments
+        saved_attachments = {}
+        save_errors = self.save_attachments(files, dataset, feature, identity, saved_attachments, added_fields)
+        if save_errors:
+            return self.error_response("Feature commit failed", save_errors)
+
+        self.add_logging_fields(feature, identity, added_fields)
+
+        # create new feature
+        try:
+            feature = dataset_features_provider.create(feature)
+        except (DataError, IntegrityError,
+                InternalError, ProgrammingError) as e:
+            self.logger.error(e)
+            for slug in saved_attachments.values():
+                self.attachments_service.remove_attachment(dataset, slug)
+            return {
+                'error': "Feature commit failed",
+                'error_details': {
+                    'data_errors': ["Feature could not be created"],
+                },
+                'error_code': 422
+            }
+        # Filter internal fields
+        feature['properties'] = dict(
+            filter(lambda x: x[0] not in added_fields,
+                    feature['properties'].items())
+        )
+        return {'feature': feature}
+
+    def update(self, identity, dataset, id, feature, files={}):
         """Update a dataset feature.
 
         :param str identity: User identity
         :param str dataset: Dataset ID
         :param int id: Dataset feature ID
         :param object feature: GeoJSON Feature
-        :param object internal_fields: Internal fields to inject into permissions
+        :param object files: Upload files
         """
-        dataset_features_provider = self.dataset_features_provider(
-            identity, dataset, internal_fields
-        )
-        if dataset_features_provider is not None:
-            # check update permission
-            if not dataset_features_provider.updatable():
-                return {
-                    'error': "Dataset not updatable",
-                    'error_code': 405
-                }
 
-            # validate input feature
-            validation_errors = dataset_features_provider.validate(feature)
-            if not validation_errors:
-                # update feature
-                try:
-                    feature = dataset_features_provider.update(id, feature)
-                except (DataError, IntegrityError,
-                        InternalError, ProgrammingError) as e:
-                    self.logger.error(e)
-                    return {
-                        'error': "Feature commit failed",
-                        'error_details': {
-                            'data_errors': ["Feature could not be updated"],
-                        },
-                        'error_code': 422
-                    }
-                if feature is not None:
-                    return {'feature': feature}
-                else:
-                    return {'error': "Feature not found"}
-            else:
-                return self.error_response(
-                    "Feature validation failed", validation_errors)
-        else:
+        dataset_features_provider = self.dataset_features_provider(
+            identity, dataset
+        )
+        if dataset_features_provider is None:
             return {'error': "Dataset not found or permission error"}
+
+        # check update permission
+        if not dataset_features_provider.updatable():
+            return {
+                'error': "Dataset not updatable",
+                'error_code': 405
+            }
+
+        # validate input feature and attachments
+        validation_errors = dataset_features_provider.validate(feature)
+        validation_errors.update(self.validate_attachments(files, dataset_features_provider))
+
+        if validation_errors:
+            return self.error_response(
+                "Feature validation failed", validation_errors)
+
+        if validation_errors:
+            return self.error_response(
+                "Feature validation failed", validation_errors)
+
+        added_fields = []
+
+        # Save attachments
+        saved_attachments = {}
+        save_errors = self.save_attachments(files, dataset, feature, identity, saved_attachments, added_fields)
+        if save_errors:
+            return self.error_response("Feature commit failed", save_errors)
+
+        # Cleanup previous attachments
+        upload_user_field_suffix = self.config.get("upload_user_field_suffix", None)
+        show_result = self.show(identity, dataset, id, None)
+        for key, value in show_result.get('feature', {}).get('properties', {}).items():
+            if isinstance(value, str) and value.startswith("attachment://") and feature["properties"][key] != value:
+                self.attachments_service.remove_attachment(dataset, value[13:])
+                if upload_user_field_suffix:
+                    upload_user_field = key + "__" + upload_user_field_suffix
+                    if not upload_user_field in added_fields:
+                        feature["properties"][upload_user_field] = identity
+                        added_fields.append(upload_user_field)
+                        feature["optional_properties"] = feature.get("optional_properties", []) + [upload_user_field]
+
+
+        self.add_logging_fields(feature, identity, added_fields)
+
+        # update feature
+        try:
+            feature = dataset_features_provider.update(id, feature)
+        except (DataError, IntegrityError,
+                InternalError, ProgrammingError) as e:
+            self.logger.error(e)
+            for slug in saved_attachments.values():
+                attachments.remove_attachment(dataset, slug)
+            return {
+                'error': "Feature commit failed",
+                'error_details': {
+                    'data_errors': ["Feature could not be updated"],
+                },
+                'error_code': 422
+            }
+        if feature is not None:
+            # Filter internal fields
+            feature['properties'] = dict(
+                filter(lambda x: x[0] not in added_fields,
+                    feature['properties'].items())
+            )
+            return {'feature': feature}
+        else:
+            return {'error': "Feature not found"}
 
     def destroy(self, identity, dataset, id):
         """Delete a dataset feature.
@@ -235,20 +296,27 @@ class DataService():
         dataset_features_provider = self.dataset_features_provider(
             identity, dataset
         )
-        if dataset_features_provider is not None:
-            # check delete permission
-            if not dataset_features_provider.deletable():
-                return {
-                    'error': "Dataset not deletable",
-                    'error_code': 405
-                }
-
-            if dataset_features_provider.destroy(id):
-                return {}
-            else:
-                return {'error': "Feature not found"}
-        else:
+        if dataset_features_provider is None:
             return {'error': "Dataset not found or permission error"}
+
+        # check delete permission
+        if not dataset_features_provider.deletable():
+            return {
+                'error': "Dataset not deletable",
+                'error_code': 405
+            }
+
+        show_result = self.show(identity, dataset, id, None)
+
+        if not dataset_features_provider.destroy(id):
+            return {'error': "Feature not found"}
+
+        # cleanup attachments
+        for key, value in show_result.get('feature', {}).get('properties', {}).items():
+            if isinstance(value, str) and value.startswith("attachment://"):
+                self.attachments_service.remove_attachment(dataset, value[13:])
+
+        return {}
 
     def is_editable(self, identity, dataset, id):
         """Returns whether a dataset is editable.
@@ -266,18 +334,17 @@ class DataService():
 
         return dataset_features_provider.exists(id)
 
-    def dataset_features_provider(self, identity, dataset, internal_fields={}):
+    def dataset_features_provider(self, identity, dataset):
         """Return DatasetFeaturesProvider if available and permitted.
 
         :param str identity: User identity
         :param str dataset: Dataset ID
-        :param object internal_fields: Internal fields to inject into permissions
         """
         dataset_features_provider = None
 
         # check permissions
         permissions = self.dataset_edit_permissions(
-            dataset, identity, internal_fields
+            dataset, identity
         )
         if permissions:
             # create DatasetFeaturesProvider
@@ -302,12 +369,11 @@ class DataService():
             'datasets': datasets
         }
 
-    def dataset_edit_permissions(self, dataset, identity, internal_fields):
+    def dataset_edit_permissions(self, dataset, identity):
         """Return dataset edit permissions if available and permitted.
 
         :param str dataset: Dataset ID
         :param obj identity: User identity
-        :param object internal_fields: Internal fields to inject into permissions
         """
         # find resource for requested dataset
         resource = self.resources['datasets'].get(dataset)
@@ -389,11 +455,6 @@ class DataService():
         # NOTE: 'geometry' is None for datasets without geometry
         geometry = resource.get('geometry', {})
 
-        for key in internal_fields:
-            fields[key] = internal_fields[key]
-            if not key in attributes:
-                attributes.append(key)
-
         return {
             "dataset": resource['name'],
             "database_read": resource['db_url'],
@@ -413,6 +474,82 @@ class DataService():
             "updatable": updatable,
             "deletable": deletable
         }
+
+    def validate_attachments(self, files, dataset_features_provider):
+        """Validates the specified attachment files
+
+        :param list files: Uploaded files
+        :param obj dataset_features_provider: Dataset features provider
+        """
+        attachment_errors = []
+        for key in files:
+            filedata = files[key]
+            field = key[5:] # remove file: prefix
+            attachment_valid, message = self.attachments_service.validate_attachment(filedata, dataset_features_provider.fields[field])
+            if not attachment_valid:
+                attachment_errors.append("Attachment validation failed for " + key + ": " + message)
+        if attachment_errors:
+            return {
+                'attachment_errors': attachment_errors
+            }
+        return {}
+
+    def save_attachments(self, files, dataset, feature, identity, saved_attachments, added_fields):
+        """Saves the specified attachment files
+
+        :param list files: Uploaded files
+        :param str dataset: Dataset ID
+        :param dict feature: Feature object
+        :param dict saved_attachments: Saved attachments
+        :param dict added_fields: Added feature fields
+        """
+        upload_user_field_suffix = self.config.get("upload_user_field_suffix", None)
+
+        for key in files:
+            filedata = files[key]
+            slug = self.attachments_service.save_attachment(dataset, filedata)
+            if not slug:
+                for slug in saved_attachments.values():
+                    self.attachments_service.remove_attachment(dataset, slug)
+                return {'attachment_errors': ["Failed to save attachment: " + key]}
+            else:
+                saved_attachments[key] = slug
+                field = key.lstrip("file:")
+                feature["properties"][field] = "attachment://" + slug
+                if upload_user_field_suffix:
+                    upload_user_field = field + "__" + upload_user_field_suffix
+                    feature["properties"][upload_user_field] = identity
+                    added_fields.append(upload_user_field)
+                    feature["optional_properties"] = feature.get("optional_properties", []) + [upload_user_field]
+
+        return {}
+
+    def resolve_attachment(self, dataset, slug):
+        """Retrieves the attachment file path from the specified slug
+
+        :param str dataset: Dataset ID
+        :param str slug: Attachment slug
+        """
+        return self.attachments_service.resolve_attachment(dataset, slug)
+
+    def add_logging_fields(self, feature, identity, added_fields):
+        """Adds logging fields to the feature
+
+        :param dict feature: Feature object
+        :param str identity: User identity
+        :param dict added_fields: Added feature fields
+        """
+        edit_user_field = self.config.get("edit_user_field", None)
+        edit_timestamp_field = self.config.get("edit_timestamp_field", None)
+
+        if edit_user_field:
+            feature["properties"][edit_user_field] = identity
+            added_fields.append(edit_user_field)
+            feature["optional_properties"] = feature.get("optional_properties", []) + [edit_user_field]
+        if edit_timestamp_field:
+            feature["properties"][edit_timestamp_field] = str(datetime.now())
+            added_fields.append(edit_timestamp_field)
+            feature["optional_properties"] = feature.get("optional_properties", []) + [edit_timestamp_field]
 
     def error_response(self, error, details):
         self.logger.error("%s: %s", error, details)

@@ -16,6 +16,7 @@ class AttachmentsService():
     def __init__(self, tenant, logger):
         """Constructor
 
+        :param str tenant: Tenant
         :param Logger logger: Application logger
         """
         self.tenant = tenant
@@ -33,12 +34,14 @@ class AttachmentsService():
             'allowed_attachment_extensions', '').split(",")))
         self.clamav = config.get('clamd_host')
 
-    def validate_attachment(self, dataset, file):
+    def validate_attachment(self, file, fieldconfig):
         """Validate file size of an attachment file.
 
         :param str dataset: Dataset ID
         :param FileStorage file: Attached file
+        :param dict fieldconfig: Field configuration
         """
+        # Check file size
         try:
             # get actual file size from file,
             # as Content-Length header is usually not set
@@ -54,11 +57,23 @@ class AttachmentsService():
             self.logger.error("Could not validate attachment: %s" % e)
             return False
 
-        ext = os.path.splitext(file.filename)[1].lower()
+        # Check file extension (global service configuration)
+        base, ext = os.path.splitext(file.filename.lower())
+        if base.endswith(".tar"):
+            ext = ".tar" + ext
         if self.allowed_extensions and ext not in self.allowed_extensions:
             self.logger.info(
                 "Forbidden file extension: %s: %s" % (file.filename, ext))
             return (False, "Forbidden file extension")
+
+        # Check file extension (local field configuration)
+        fileextensions = fieldconfig.get('fileextensions', [])
+        if fileextensions and ext not in fileextensions:
+            self.logger.info(
+                "Forbidden file extension: %s: %s" % (file.filename, ext))
+            return (False, "Forbidden file extension")
+
+        # ClamAV virus check
         if self.clamav and scan_file(self.clamav, file.filename):
             self.logger.warn(
                 "ClamAV check failed: %s" % file.filename)

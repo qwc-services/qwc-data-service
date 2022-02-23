@@ -1,5 +1,5 @@
 from collections import OrderedDict
-from datetime import date, datetime
+from datetime import date
 from decimal import Decimal
 from uuid import UUID
 import json
@@ -15,7 +15,6 @@ from qwc_services_core.auth import auth_manager, optional_auth, get_auth_user
 from qwc_services_core.runtime_config import RuntimeConfig
 from qwc_services_core.tenant_handler import TenantHandler
 from data_service import DataService
-from attachments_service import AttachmentsService
 
 
 class Request(RequestBase):
@@ -119,16 +118,6 @@ def data_service_handler():
         config = config_handler.tenant_config(tenant)
         handler = tenant_handler.register_handler(
             'data', tenant, DataService(tenant, app.logger, config))
-    return handler
-
-
-def attachments_service_handler():
-    """Get or create a DataService instance for a tenant."""
-    tenant = tenant_handler.tenant()
-    handler = tenant_handler.handler('data', 'attachments', tenant)
-    if handler is None:
-        handler = tenant_handler.register_handler(
-            'attachments', tenant, AttachmentsService(tenant, app.logger))
     return handler
 
 
@@ -280,7 +269,6 @@ post_relations_parser.add_argument(
 )
 
 
-
 # routes
 @api.route('/<path:dataset>/')
 @api.response(400, 'Bad request')
@@ -332,26 +320,16 @@ class DataCollection(Resource):
         """
         config_handler = RuntimeConfig("data", app.logger)
         config = config_handler.tenant_config(tenant_handler.tenant())
-        edit_user_field = config.get("edit_user_field", None)
-        edit_timestamp_field = config.get("edit_timestamp_field", None)
 
         if request.is_json:
             # parse request data (NOTE: catches invalid JSON)
             feature = api.payload
             if isinstance(feature, dict):
                 data_service = data_service_handler()
-                internal_fields = {}
-                if edit_user_field:
-                    feature["properties"][edit_user_field] = get_auth_user()
-                    internal_fields[edit_user_field] = {'name': edit_user_field, 'data_type': 'text', 'only_if_exists': True}
-                if edit_timestamp_field:
-                    feature["properties"][edit_timestamp_field] = str(datetime.now())
-                    internal_fields[edit_timestamp_field] = {'name': edit_timestamp_field, 'data_type': 'text', 'only_if_exists': True}
 
                 result = data_service.create(
-                    get_auth_user(), dataset, feature, internal_fields)
+                    get_auth_user(), dataset, feature)
                 if 'error' not in result:
-                    result['feature']['properties'] = dict(filter(lambda x: x[0] not in internal_fields, result['feature']['properties'].items()))
                     return result['feature'], 201
                 else:
                     error_code = result.get('error_code') or 404
@@ -361,184 +339,6 @@ class DataCollection(Resource):
                 api.abort(400, "JSON is not an object")
         else:
             api.abort(400, "Request data is not JSON")
-
-
-@api.route('/<path:dataset>/multipart')
-@api.response(400, 'Bad request')
-@api.response(404, 'Dataset not found or permission error')
-@api.param('dataset', 'Dataset ID', default='qwc_demo.edit_points')
-class CreateFeatureMultipart(Resource):
-    @api.doc('create')
-    @api.response(405, 'Dataset not creatable')
-    @api.response(422, 'Feature validation failed', feature_validation_response)
-    @api.expect(feature_multipart_parser)
-    @api.marshal_with(geojson_feature_response, code=201)
-    @optional_auth
-    def post(self, dataset):
-        """Create a new dataset feature
-
-        Create new dataset feature from a GeoJSON Feature and return it as a
-        GeoJSON Feature.
-        """
-        args = feature_multipart_parser.parse_args()
-        try:
-            feature = json.loads(args['feature'])
-        except:
-            feature = None
-        if not isinstance(feature, dict):
-            api.abort(400, "feature is not an object")
-
-        config_handler = RuntimeConfig("data", app.logger)
-        config = config_handler.tenant_config(tenant_handler.tenant())
-        upload_user_field_suffix = config.get("upload_user_field_suffix", None)
-        edit_user_field = config.get("edit_user_field", None)
-        edit_timestamp_field = config.get("edit_timestamp_field", None)
-
-        # Validate attachments
-        attachments = attachments_service_handler()
-        for key in request.files:
-            filedata = request.files[key]
-            attachment_valid, message = attachments.validate_attachment(dataset, filedata)
-            if not attachment_valid:
-                api.abort(404, "Attachment validation failed for " + key + ": " + message)
-
-        # Save attachments
-        saved_attachments = {}
-        internal_fields = {}
-        for key in request.files:
-            filedata = request.files[key]
-            slug = attachments.save_attachment(dataset, filedata)
-            if not slug:
-                for slug in saved_attachments.values():
-                    attachments.remove_attachment(dataset, slug)
-                api.abort(404, "Failed to save attachment: " + key)
-            else:
-                saved_attachments[key] = slug
-                field = key.lstrip("file:")
-                feature["properties"][field] = "attachment://" + slug
-                if upload_user_field_suffix:
-                    upload_user_field = field + "__" + upload_user_field_suffix
-                    feature["properties"][upload_user_field] = get_auth_user()
-                    internal_fields[upload_user_field] = {'name': upload_user_field, 'data_type': 'text', 'only_if_exists': True}
-
-        if edit_user_field:
-            feature["properties"][edit_user_field] = get_auth_user()
-            internal_fields[edit_user_field] = {'name': edit_user_field, 'data_type': 'text', 'only_if_exists': True}
-        if edit_timestamp_field:
-            feature["properties"][edit_timestamp_field] = str(datetime.now())
-            internal_fields[edit_timestamp_field] = {'name': edit_timestamp_field, 'data_type': 'text', 'only_if_exists': True}
-
-        data_service = data_service_handler()
-        result = data_service.create(
-            get_auth_user(), dataset, feature, internal_fields
-        )
-
-        if 'error' not in result:
-            result['feature']['properties'] = dict(filter(lambda x: x[0] not in internal_fields, result['feature']['properties'].items()))
-            return result['feature'], 201
-        else:
-            for slug in saved_attachments.values():
-                attachments.remove_attachment(dataset, slug)
-            error_code = result.get('error_code') or 404
-            error_details = result.get('error_details') or {}
-            api.abort(error_code, result['error'], **error_details)
-
-
-@api.route('/<path:dataset>/multipart/<int:id>')
-@api.response(404, 'Dataset or feature not found or permission error')
-@api.param('dataset', 'Dataset ID', default='qwc_demo.edit_points')
-@api.param('id', 'Feature ID')
-class EditFeatureMultipart(Resource):
-    @api.doc('update')
-    @api.response(400, 'Bad request')
-    @api.response(405, 'Dataset not updatable')
-    @api.response(422, 'Feature validation failed', feature_validation_response)
-    @api.expect(feature_multipart_parser)
-    @api.marshal_with(geojson_feature_response)
-    @optional_auth
-    def put(self, dataset, id):
-        """Update a dataset feature
-
-        Update dataset feature with ID from a GeoJSON Feature and return it as
-        a GeoJSON Feature.
-        """
-        args = feature_multipart_parser.parse_args()
-        try:
-            feature = json.loads(args['feature'])
-        except:
-            feature = None
-        if not isinstance(feature, dict):
-            api.abort(400, "feature is not an object")
-
-        config_handler = RuntimeConfig("data", app.logger)
-        config = config_handler.tenant_config(tenant_handler.tenant())
-        upload_user_field_suffix = config.get("upload_user_field_suffix", None)
-        edit_user_field = config.get("edit_user_field", None)
-        edit_timestamp_field = config.get("edit_timestamp_field", None)
-
-        # Validate attachments
-        attachments = attachments_service_handler()
-        for key in request.files:
-            filedata = request.files[key]
-            attachment_valid, message = attachments.validate_attachment(dataset, filedata)
-            if not attachment_valid:
-                api.abort(404, "Attachment validation failed for " + key + ": " + message)
-
-        # Save attachments
-        saved_attachments = {}
-        internal_fields = {}
-        for key in request.files:
-            filedata = request.files[key]
-            slug = attachments.save_attachment(dataset, filedata)
-            if not slug:
-                for slug in saved_attachments.values():
-                    attachments.remove_attachment(dataset, slug)
-                api.abort(404, "Failed to save attachment: " + key)
-            else:
-                saved_attachments[key] = slug
-                field = key.lstrip("file:")
-                feature["properties"][field] = "attachment://" + slug
-                if upload_user_field_suffix:
-                    upload_user_field = field + "__" + upload_user_field_suffix
-                    feature["properties"][upload_user_field] = get_auth_user()
-                    internal_fields[upload_user_field] = {'name': upload_user_field, 'data_type': 'text', 'only_if_exists': True}
-
-
-        data_service = data_service_handler()
-
-        prev = data_service.show(get_auth_user(), dataset, id, None)
-        if prev:
-            prev_feature = prev["feature"]
-            # If a non-empty attachment field value is changed, delete the attachment
-            keys = list(feature["properties"].keys())
-            for key in keys:
-                if key in prev_feature["properties"] and prev_feature["properties"][key] and str(prev_feature["properties"][key]).startswith("attachment://") and feature["properties"][key] != prev_feature["properties"][key]:
-                    attachments.remove_attachment(dataset, prev_feature["properties"][key].lstrip("attachment://"))
-                    if upload_user_field_suffix:
-                        upload_user_field = key + "__" + upload_user_field_suffix
-                        feature["properties"][upload_user_field] = get_auth_user()
-                        internal_fields[upload_user_field] = {'name': upload_user_field, 'data_type': 'text', 'only_if_exists': True}
-
-        if edit_user_field:
-            feature["properties"][edit_user_field] = get_auth_user()
-            internal_fields[edit_user_field] = {'name': edit_user_field, 'data_type': 'text', 'only_if_exists': True}
-        if edit_timestamp_field:
-            feature["properties"][edit_timestamp_field] = str(datetime.now())
-            internal_fields[edit_timestamp_field] = {'name': edit_timestamp_field, 'data_type': 'text', 'only_if_exists': True}
-
-        result = data_service.update(
-            get_auth_user(), dataset, id, feature, internal_fields
-        )
-
-        if 'error' not in result:
-            result['feature']['properties'] = dict(filter(lambda x: x[0] not in internal_fields, result['feature']['properties'].items()))
-            return result['feature']
-        else:
-            for slug in saved_attachments.values():
-                attachments.remove_attachment(dataset, slug)
-            error_code = result.get('error_code') or 404
-            error_details = result.get('error_details') or {}
-            api.abort(error_code, result['error'], **error_details)
 
 
 @api.route('/<path:dataset>/<int:id>')
@@ -584,29 +384,16 @@ class DataMember(Resource):
         Update dataset feature with ID from a GeoJSON Feature and return it as
         a GeoJSON Feature.
         """
-        config_handler = RuntimeConfig("data", app.logger)
-        config = config_handler.tenant_config(tenant_handler.tenant())
-        edit_user_field = config.get("edit_user_field", None)
-        edit_timestamp_field = config.get("edit_timestamp_field", None)
-
         if request.is_json:
             # parse request data (NOTE: catches invalid JSON)
             feature = api.payload
             if isinstance(feature, dict):
                 data_service = data_service_handler()
-                internal_fields = {}
-                if edit_user_field:
-                    feature["properties"][edit_user_field] = get_auth_user()
-                    internal_fields[edit_user_field] = {'name': edit_user_field, 'data_type': 'text', 'only_if_exists': True}
-                if edit_timestamp_field:
-                    feature["properties"][edit_timestamp_field] = str(datetime.now())
-                    internal_fields[edit_timestamp_field] = {'name': edit_timestamp_field, 'data_type': 'text', 'only_if_exists': True}
 
                 result = data_service.update(
-                    get_auth_user(), dataset, id, feature, internal_fields
+                    get_auth_user(), dataset, id, feature
                 )
                 if 'error' not in result:
-                    result['feature']['properties'] = dict(filter(lambda x: x[0] not in internal_fields, result['feature']['properties'].items()))
                     return result['feature']
                 else:
                     error_code = result.get('error_code') or 404
@@ -637,6 +424,81 @@ class DataMember(Resource):
             api.abort(error_code, result['error'])
 
 
+@api.route('/<path:dataset>/multipart')
+@api.response(400, 'Bad request')
+@api.response(404, 'Dataset not found or permission error')
+@api.param('dataset', 'Dataset ID', default='qwc_demo.edit_points')
+class CreateFeatureMultipart(Resource):
+    @api.doc('create')
+    @api.response(405, 'Dataset not creatable')
+    @api.response(422, 'Feature validation failed', feature_validation_response)
+    @api.expect(feature_multipart_parser)
+    @api.marshal_with(geojson_feature_response, code=201)
+    @optional_auth
+    def post(self, dataset):
+        """Create a new dataset feature
+
+        Create new dataset feature from a GeoJSON Feature and return it as a
+        GeoJSON Feature.
+        """
+        args = feature_multipart_parser.parse_args()
+        try:
+            feature = json.loads(args['feature'])
+        except:
+            feature = None
+        if not isinstance(feature, dict):
+            api.abort(400, "feature is not an object")
+
+        data_service = data_service_handler()
+        result = data_service.create(
+            get_auth_user(), dataset, feature, request.files
+        )
+        if 'error' not in result:
+            return result['feature'], 201
+        else:
+            error_code = result.get('error_code') or 404
+            error_details = result.get('error_details') or {}
+            api.abort(error_code, result['error'], **error_details)
+
+
+@api.route('/<path:dataset>/multipart/<int:id>')
+@api.response(404, 'Dataset or feature not found or permission error')
+@api.param('dataset', 'Dataset ID', default='qwc_demo.edit_points')
+@api.param('id', 'Feature ID')
+class EditFeatureMultipart(Resource):
+    @api.doc('update')
+    @api.response(400, 'Bad request')
+    @api.response(405, 'Dataset not updatable')
+    @api.response(422, 'Feature validation failed', feature_validation_response)
+    @api.expect(feature_multipart_parser)
+    @api.marshal_with(geojson_feature_response)
+    @optional_auth
+    def put(self, dataset, id):
+        """Update a dataset feature
+
+        Update dataset feature with ID from a GeoJSON Feature and return it as
+        a GeoJSON Feature.
+        """
+        args = feature_multipart_parser.parse_args()
+        try:
+            feature = json.loads(args['feature'])
+        except:
+            feature = None
+        if not isinstance(feature, dict):
+            api.abort(400, "feature is not an object")
+
+        data_service = data_service_handler()
+        result = data_service.update(
+            get_auth_user(), dataset, id, feature, request.files
+        )
+        if 'error' not in result:
+            return result['feature']
+        else:
+            error_code = result.get('error_code') or 404
+            error_details = result.get('error_details') or {}
+            api.abort(error_code, result['error'], **error_details)
+
+
 @api.route('/<path:dataset>/attachment')
 @api.response(404, 'Dataset or feature not found or permission error')
 @api.param('dataset', 'Dataset ID', default='qwc_demo.edit_points')
@@ -646,8 +508,8 @@ class AttachmentDownloader(Resource):
     @api.expect(get_attachment_parser)
     def get(self, dataset):
         args = get_attachment_parser.parse_args()
-        attachments = attachments_service_handler()
-        path = attachments.resolve_attachment(dataset, args['file'])
+        data_service = data_service_handler()
+        path = data_service.resolve_attachment(dataset, args['file'])
         if not path:
             api.abort(404, 'Unable to read file')
 
@@ -708,45 +570,9 @@ class Relations(Resource):
 
         data_service = data_service_handler()
 
-        config_handler = RuntimeConfig("data", app.logger)
-        config = config_handler.tenant_config(tenant_handler.tenant())
-        upload_user_field_suffix = config.get("upload_user_field_suffix", None)
-        edit_user_field = config.get("edit_user_field", None)
-        edit_timestamp_field = config.get("edit_timestamp_field", None)
-
         # Check if dataset with specified id exists
         if not data_service.is_editable(get_auth_user(), dataset, id):
             api.abort(404, "Dataset or feature not found or permission error")
-
-        # Validate attachments
-        attachments = attachments_service_handler()
-        for key in request.files:
-            filedata = request.files[key]
-            attachment_valid, message = attachments.validate_attachment(dataset, filedata)
-            if not attachment_valid:
-                api.abort(404, "Attachment validation failed for " + key + ": " + message)
-
-        # Save attachments
-        saved_attachments = {}
-        internal_fields = []
-        for key in request.files:
-            filedata = request.files[key]
-            slug = attachments.save_attachment(dataset, filedata)
-            if not slug:
-                for slug in saved_attachments.values():
-                    attachments.remove_attachment(dataset, slug)
-                api.abort(404, "Failed to save attachment: " + key)
-            else:
-                saved_attachments[key] = slug
-                parts = key.lstrip("file:").split("__")
-                table = parts[0]
-                field = parts[1]
-                index = parts[2]
-                payload[table]["records"][int(index)][table + "__" + field] = "attachment://" + slug
-                if upload_user_field_suffix:
-                    upload_user_field = table + "__" + field + "__" + upload_user_field_suffix
-                    payload[table]["records"][int(index)][upload_user_field] = get_auth_user()
-                    internal_fields.append(upload_user_field)
 
         ret = {}
         haserrors = False
@@ -757,7 +583,7 @@ class Relations(Resource):
                 "records": []
             }
             tbl_prefix = rel_table + "__"
-            for rel_record in rel_data.get("records", []):
+            for (record_idx, rel_record) in enumerate(rel_data.get("records", [])):
                 # Set foreign key for new records
                 if rel_record.get("__status__", "") == "new":
                     rel_record[tbl_prefix + fk_field] = id
@@ -766,76 +592,46 @@ class Relations(Resource):
                     rel_record["__error__"] = "FK validation failed"
                     ret[rel_table]["records"].append(rel_record)
                     haserrors = True
+                    continue
+
+                entry = {
+                    "type": "Feature",
+                    "id": rel_record["id"] if "id" in rel_record else None,
+                    "properties": {k[len(tbl_prefix):]: v for k, v in rel_record.items() if k.startswith(tbl_prefix)}
+                }
+
+                # Get record files
+                files = {}
+                for key in request.files:
+                    parts = key.lstrip("file:").split("__")
+                    table = parts[0]
+                    field = parts[1]
+                    index = parts[2]
+                    if table == rel_table and index == str(record_idx):
+                        files["file:" + field] = request.files[key]
+
+                if not "__status__" in rel_record:
+                    ret[rel_table]["records"].append(rel_record)
+                    continue
+                elif rel_record["__status__"] == "new":
+                    result = data_service.create(get_auth_user(), rel_table, entry, files)
+                elif rel_record["__status__"] == "changed":
+                    result = data_service.update(get_auth_user(), rel_table, rel_record["id"], entry, files)
+                elif rel_record["__status__"].startswith("deleted"):
+                    result = data_service.destroy(get_auth_user(), rel_table, rel_record["id"])
                 else:
-                    entry = {
-                        "type": "Feature",
-                        "id": rel_record["id"] if "id" in rel_record else None,
-                        "properties": {k[len(tbl_prefix):]: v for k, v in rel_record.items() if k.startswith(tbl_prefix)}
-                    }
-
-                    table_internal_fields = {n[len(tbl_prefix):]: {'name': n[len(tbl_prefix):], 'data_type': 'text', 'only_if_exists': True} for n in internal_fields if n.startswith(tbl_prefix)}
-
-                    if edit_user_field:
-                        entry["properties"][edit_user_field] = get_auth_user()
-                        table_internal_fields[edit_user_field] = {'name': edit_user_field, 'data_type': 'text', 'only_if_exists': True}
-                    if edit_timestamp_field:
-                        entry["properties"][edit_timestamp_field] = str(datetime.now())
-                        table_internal_fields[edit_timestamp_field] = {'name': edit_timestamp_field, 'data_type': 'text', 'only_if_exists': True}
-
-                    if not "__status__" in rel_record:
-                        ret[rel_table]["records"].append(rel_record)
-                        continue
-                    elif rel_record["__status__"] == "new":
-                        result = data_service.create(get_auth_user(), rel_table, entry, table_internal_fields)
-                    elif rel_record["__status__"] == "changed":
-                        (newattachments, oldattachments) = self.attachments_diff(data_service, attachments, dataset, rel_table, rel_record["id"], entry, table_internal_fields, upload_user_field_suffix)
-                        result = data_service.update(get_auth_user(), rel_table, rel_record["id"], entry, table_internal_fields)
-                        self.cleanup_attachments(attachments, dataset, newattachments if "error" in result else oldattachments)
-                    elif rel_record["__status__"].startswith("deleted"):
-                        (newattachments, oldattachments) = self.attachments_diff(data_service, attachments, dataset, rel_table, rel_record["id"], entry, table_internal_fields, upload_user_field_suffix, True)
-                        if upload_user_field_suffix:
-                            data_service.update(get_auth_user(), rel_table, rel_record["id"], entry, table_internal_fields)
-                        result = data_service.destroy(get_auth_user(), rel_table, rel_record["id"])
-                        self.cleanup_attachments(attachments, dataset, newattachments if "error" in result else oldattachments)
-                    else:
-                        continue
-                    if "error" in result:
-                        rel_record["error"] = result["error"]
-                        rel_record["error_details"] = result.get('error_details') or {}
-                        ret[rel_table]["records"].append(rel_record)
-                        haserrors = True
-                    elif "feature" in result:
-                        rel_record = {(rel_table + "__" + k): v for k, v in result['feature']['properties'].items() if not k in table_internal_fields}
-                        rel_record["id"] = result['feature']["id"]
-                        ret[rel_table]["records"].append(rel_record)
+                    continue
+                if "error" in result:
+                    rel_record["error"] = result["error"]
+                    rel_record["error_details"] = result.get('error_details') or {}
+                    ret[rel_table]["records"].append(rel_record)
+                    haserrors = True
+                elif "feature" in result:
+                    rel_record = {(rel_table + "__" + k): v for k, v in result['feature']['properties'].items()}
+                    rel_record["id"] = result['feature']["id"]
+                    ret[rel_table]["records"].append(rel_record)
 
         return {"relationvalues": ret, "success": not haserrors}
-
-    def attachments_diff(self, data_service, attachments, dataset, rel_table, rel_record_id, feature, internal_fields, upload_user_field_suffix, record_deleted=False):
-        newattachments = []
-        oldattachments = []
-        prev = data_service.show(get_auth_user(), rel_table, rel_record_id, None)
-        if not prev:
-            return (newattachments, oldattachments)
-        prev_feature = prev["feature"]
-        # If a attachment field value is changed, delete the attachment
-        keys = list(feature["properties"].keys())
-        for key in keys:
-            if (key in prev_feature["properties"] and feature["properties"][key] != prev_feature["properties"][key]) or record_deleted:
-                if key in prev_feature["properties"] and str(prev_feature["properties"][key]).startswith("attachment://"):
-                    oldattachments.append(prev_feature["properties"][key])
-                    if upload_user_field_suffix:
-                        upload_user_field = key + "__" + upload_user_field_suffix
-                        feature["properties"][upload_user_field] = get_auth_user()
-                        internal_fields[upload_user_field] = {'name': upload_user_field, 'data_type': 'text', 'only_if_exists': True}
-
-                if str(feature["properties"][key]).startswith("attachment://"):
-                    newattachments.append(feature["properties"][key])
-        return (newattachments, oldattachments)
-
-    def cleanup_attachments(self, attachments, dataset, slugs):
-        for slug in slugs:
-            attachments.remove_attachment(dataset, slug.lstrip("attachment://"))
 
 
 @api.route('/keyvals')
