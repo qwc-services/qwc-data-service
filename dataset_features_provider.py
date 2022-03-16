@@ -898,8 +898,8 @@ class DatasetFeaturesProvider():
         """
         props = OrderedDict()
         for attr in self.attributes:
-            only_if_exists = self.fields.get(attr, {}).get('only_if_exists', False)
-            if only_if_exists and not attr in row:
+            # Omit hidden fields
+            if self.fields.get(attr, {}).get('constraints', {}).get('hidden', False) == True:
                 continue
             props[attr] = row[attr]
 

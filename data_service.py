@@ -170,15 +170,13 @@ class DataService():
             return self.error_response(
                 "Feature validation failed", validation_errors)
 
-        added_fields = []
-
         # Save attachments
         saved_attachments = {}
-        save_errors = self.save_attachments(files, dataset, feature, identity, saved_attachments, added_fields)
+        save_errors = self.save_attachments(files, dataset, feature, identity, saved_attachments)
         if save_errors:
             return self.error_response("Feature commit failed", save_errors)
 
-        self.add_logging_fields(feature, identity, added_fields)
+        self.add_logging_fields(feature, identity)
 
         # create new feature
         try:
@@ -195,11 +193,6 @@ class DataService():
                 },
                 'error_code': 422
             }
-        # Filter internal fields
-        feature['properties'] = dict(
-            filter(lambda x: x[0] not in added_fields,
-                    feature['properties'].items())
-        )
         return {'feature': feature}
 
     def update(self, identity, dataset, id, feature, files={}):
@@ -237,11 +230,9 @@ class DataService():
             return self.error_response(
                 "Feature validation failed", validation_errors)
 
-        added_fields = []
-
         # Save attachments
         saved_attachments = {}
-        save_errors = self.save_attachments(files, dataset, feature, identity, saved_attachments, added_fields)
+        save_errors = self.save_attachments(files, dataset, feature, identity, saved_attachments)
         if save_errors:
             return self.error_response("Feature commit failed", save_errors)
 
@@ -253,13 +244,9 @@ class DataService():
                 self.attachments_service.remove_attachment(dataset, value[13:])
                 if upload_user_field_suffix:
                     upload_user_field = key + "__" + upload_user_field_suffix
-                    if not upload_user_field in added_fields:
-                        feature["properties"][upload_user_field] = identity
-                        added_fields.append(upload_user_field)
-                        feature["optional_properties"] = feature.get("optional_properties", []) + [upload_user_field]
+                    feature["properties"][upload_user_field] = identity
 
-
-        self.add_logging_fields(feature, identity, added_fields)
+        self.add_logging_fields(feature, identity)
 
         # update feature
         try:
@@ -277,11 +264,6 @@ class DataService():
                 'error_code': 422
             }
         if feature is not None:
-            # Filter internal fields
-            feature['properties'] = dict(
-                filter(lambda x: x[0] not in added_fields,
-                    feature['properties'].items())
-            )
             return {'feature': feature}
         else:
             return {'error': "Feature not found"}
@@ -494,14 +476,13 @@ class DataService():
             }
         return {}
 
-    def save_attachments(self, files, dataset, feature, identity, saved_attachments, added_fields):
+    def save_attachments(self, files, dataset, feature, identity, saved_attachments):
         """Saves the specified attachment files
 
         :param list files: Uploaded files
         :param str dataset: Dataset ID
         :param dict feature: Feature object
         :param dict saved_attachments: Saved attachments
-        :param dict added_fields: Added feature fields
         """
         upload_user_field_suffix = self.config.get("upload_user_field_suffix", None)
 
@@ -519,8 +500,6 @@ class DataService():
                 if upload_user_field_suffix:
                     upload_user_field = field + "__" + upload_user_field_suffix
                     feature["properties"][upload_user_field] = identity
-                    added_fields.append(upload_user_field)
-                    feature["optional_properties"] = feature.get("optional_properties", []) + [upload_user_field]
 
         return {}
 
@@ -532,24 +511,19 @@ class DataService():
         """
         return self.attachments_service.resolve_attachment(dataset, slug)
 
-    def add_logging_fields(self, feature, identity, added_fields):
+    def add_logging_fields(self, feature, identity):
         """Adds logging fields to the feature
 
         :param dict feature: Feature object
         :param str identity: User identity
-        :param dict added_fields: Added feature fields
         """
         edit_user_field = self.config.get("edit_user_field", None)
         edit_timestamp_field = self.config.get("edit_timestamp_field", None)
 
         if edit_user_field:
             feature["properties"][edit_user_field] = identity
-            added_fields.append(edit_user_field)
-            feature["optional_properties"] = feature.get("optional_properties", []) + [edit_user_field]
         if edit_timestamp_field:
             feature["properties"][edit_timestamp_field] = str(datetime.now())
-            added_fields.append(edit_timestamp_field)
-            feature["optional_properties"] = feature.get("optional_properties", []) + [edit_timestamp_field]
 
     def error_response(self, error, details):
         self.logger.error("%s: %s", error, details)
