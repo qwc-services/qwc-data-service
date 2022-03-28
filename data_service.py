@@ -164,7 +164,7 @@ class DataService():
         validation_errors = dataset_features_provider.validate(
             feature, new_feature=True
         )
-        validation_errors.update(self.validate_attachments(files, dataset_features_provider))
+        validation_errors.update(self.validate_attachments(files, dataset_features_provider, dataset))
 
         if validation_errors:
             return self.error_response(
@@ -220,7 +220,7 @@ class DataService():
 
         # validate input feature and attachments
         validation_errors = dataset_features_provider.validate(feature)
-        validation_errors.update(self.validate_attachments(files, dataset_features_provider))
+        validation_errors.update(self.validate_attachments(files, dataset_features_provider, dataset))
 
         if validation_errors:
             return self.error_response(
@@ -457,7 +457,7 @@ class DataService():
             "deletable": deletable
         }
 
-    def validate_attachments(self, files, dataset_features_provider):
+    def validate_attachments(self, files, dataset_features_provider, dataset):
         """Validates the specified attachment files
 
         :param list files: Uploaded files
@@ -467,7 +467,7 @@ class DataService():
         for key in files:
             filedata = files[key]
             field = key[5:] # remove file: prefix
-            attachment_valid, message = self.attachments_service.validate_attachment(filedata, dataset_features_provider.fields[field])
+            attachment_valid, message = self.attachments_service.validate_attachment(filedata, dataset_features_provider.fields[field], dataset)
             if not attachment_valid:
                 attachment_errors.append("Attachment validation failed for " + key + ": " + message)
         if attachment_errors:

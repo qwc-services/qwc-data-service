@@ -32,36 +32,62 @@ class AttachmentsService():
         ))
         self.allowed_extensions = list(filter(lambda x: x, config.get(
             'allowed_attachment_extensions', '').split(",")))
+
+        self.max_file_size_per_dataset = config.get(
+            'max_attachment_file_size_per_dataset', {}
+        )
+        self.allowed_extensions_per_dataset = config.get(
+            'allowed_extensions_per_dataset', {}
+        )
+        for dataset in self.allowed_extensions_per_dataset:
+            self.allowed_extensions_per_dataset[dataset] = self.allowed_extensions_per_dataset[dataset].split(",")
+
         self.clamav = config.get('clamd_host')
 
-    def validate_attachment(self, file, fieldconfig):
+    def validate_attachment(self, file, fieldconfig, dataset):
         """Validate file size of an attachment file.
 
         :param str dataset: Dataset ID
         :param FileStorage file: Attached file
         :param dict fieldconfig: Field configuration
         """
-        # Check file size
+        # Get file size
         try:
             # get actual file size from file,
             # as Content-Length header is usually not set
             file.seek(0, 2)
             size = file.tell()
             file.seek(0)
-
-            if size > self.max_file_size:
-                self.logger.info(
-                    "File too large: %s: %d" % (file.filename, size))
-                return (False, "File too large")
         except Exception as e:
             self.logger.error("Could not validate attachment: %s" % e)
             return False
 
-        # Check file extension (global service configuration)
+        # Check file size (global service configuration)
+        if size > self.max_file_size:
+            self.logger.info(
+                "File too large: %s: %d" % (file.filename, size))
+            return (False, "File too large")
+
+        # Check file size (dataset configuration)
+        if dataset in self.max_file_size_per_dataset and size > self.max_file_size_per_dataset[dataset]:
+            self.logger.info(
+                "File too large: %s: %d" % (file.filename, size))
+            return (False, "File too large")
+
+
+        # Get file extension
         base, ext = os.path.splitext(file.filename.lower())
         if base.endswith(".tar"):
             ext = ".tar" + ext
+
+        # Check file extension (global service configuration)
         if self.allowed_extensions and ext not in self.allowed_extensions:
+            self.logger.info(
+                "Forbidden file extension: %s: %s" % (file.filename, ext))
+            return (False, "Forbidden file extension")
+
+        # Check file extension (dataset configuration)
+        if dataset in self.allowed_extensions_per_dataset and ext not in self.allowed_extensions_per_dataset[dataset]:
             self.logger.info(
                 "Forbidden file extension: %s: %s" % (file.filename, ext))
             return (False, "Forbidden file extension")
