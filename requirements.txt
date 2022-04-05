@@ -7,4 +7,4 @@ requests==2.26.0
 SQLAlchemy==1.4.28
 Werkzeug==2.0.2
 clamd==1.0.2
-qwc-services-core==1.3.5
+qwc-services-core==1.3.6
