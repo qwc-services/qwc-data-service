@@ -361,6 +361,7 @@ class Timevals(Resource):
         'filter', 'JSON serialized array of filter expressions: '
         '`[["<name>", "<op>", <value>],"and|or",["<name>","<op>",<value>]]`')
     @api.expect(timevals_parser)
+    @api.marshal_with(geojson_feature_collection_response, skip_none=True)
     @optional_auth
     def get(self, dataset):
         """Get dataset features
