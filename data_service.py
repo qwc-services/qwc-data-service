@@ -1,5 +1,4 @@
 import os
-import json
 from datetime import datetime
 from collections import OrderedDict
 
@@ -11,7 +10,6 @@ from qwc_services_core.permissions_reader import PermissionsReader
 from qwc_services_core.runtime_config import RuntimeConfig
 from dataset_features_provider import DatasetFeaturesProvider
 from attachments_service import AttachmentsService
-from utils import geom_center
 
 
 ERROR_DETAILS_LOG_ONLY = os.environ.get(
@@ -103,61 +101,6 @@ class DataService():
             return {'feature_collection': feature_collection}
         else:
             return {'error': "Dataset not found or permission error"}
-
-    def timevals(self, identity, dataset, bbox, crs, filterexpr, datetime):
-
-        resource = self.resources['datasets'].get(dataset)
-        if not resource:
-            return {'error': "Dataset not found or permission error"}
-
-        filterexprobj = json.loads(filterexpr if filterexpr else "[]")
-        resource_dimensions = resource.get('dimensions', {})
-        startattr = None
-        endattr = None
-        for key in resource_dimensions:
-            dimension = resource_dimensions[key]
-            if dimension['units'] == "ISO8601":
-                if dimension['startfield']:
-                    startattr = dimension['startfield']
-                    if datetime:
-                        if filterexprobj:
-                            filterexprobj.append('and')
-                        filterexprobj.append([dimension['startfield'], "<=", datetime])
-                if dimension['endfield']:
-                    endattr = dimension['endfield']
-                    if datetime:
-                        if filterexprobj:
-                            filterexprobj.append('and')
-                        filterexprobj.append([dimension['endfield'], ">", datetime])
-
-        filterexpr = json.dumps(filterexprobj) if filterexprobj else None
-
-        index = self.index(identity, dataset, bbox, crs, filterexpr)
-        if 'error' in index:
-            return index
-
-        features = []
-        for feature in index['feature_collection']['features']:
-            if "properties" in feature and "geometry" in feature:
-                features.append({
-                    "type": "Feature",
-                    "id": feature["id"],
-                    "geometry": {
-                        "type": "Point",
-                        "coordinates": geom_center(feature["geometry"]["type"], feature["geometry"]["coordinates"])
-                    },
-                    "properties": {
-                        "start": feature["properties"][startattr].isoformat() if startattr else None,
-                        "end": feature["properties"][endattr].isoformat() if endattr else None
-                    }
-                })
-        return {
-            'feature_collection': {
-                'type': 'FeatureCollection',
-                'features': features,
-                'crs': index['feature_collection']['crs']
-            }
-        }
 
     def show(self, identity, dataset, id, crs):
         """Get a dataset feature.

@@ -242,12 +242,6 @@ index_parser.add_argument('bbox')
 index_parser.add_argument('crs')
 index_parser.add_argument('filter')
 
-timevals_parser = reqparse.RequestParser(argument_class=CaseInsensitiveArgument)
-timevals_parser.add_argument('bbox')
-timevals_parser.add_argument('crs')
-timevals_parser.add_argument('filter')
-timevals_parser.add_argument('datetime')
-
 feature_multipart_parser = reqparse.RequestParser(argument_class=CaseInsensitiveArgument)
 feature_multipart_parser.add_argument('feature', help='Feature', required=True, location='form')
 feature_multipart_parser.add_argument('file_document', help='File attachments', type=FileStorage, location='files')
@@ -345,44 +339,6 @@ class DataCollection(Resource):
                 api.abort(400, "JSON is not an object")
         else:
             api.abort(400, "Request data is not JSON")
-
-
-@api.route('/<path:dataset>/timevals')
-@api.response(400, 'Bad request')
-@api.response(404, 'Dataset not found or permission error')
-@api.param('dataset', 'Dataset ID', default='qwc_demo.edit_points')
-class Timevals(Resource):
-    @api.doc('timevals')
-    @api.response(405, 'Dataset not readable')
-    @api.param('bbox', 'Bounding box as `<minx>,<miny>,<maxx>,<maxy>`')
-    @api.param('datetime', 'The date/time at which to return data')
-    @api.param('crs', 'Client coordinate reference system, e.g. `EPSG:3857`')
-    @api.param(
-        'filter', 'JSON serialized array of filter expressions: '
-        '`[["<name>", "<op>", <value>],"and|or",["<name>","<op>",<value>]]`')
-    @api.expect(timevals_parser)
-    @optional_auth
-    def get(self, dataset):
-        """Get dataset features
-
-        Return dataset features inside bounding box and matching filter as a
-        GeoJSON FeatureCollection.
-        """
-        args = timevals_parser.parse_args()
-        bbox = args['bbox']
-        crs = args['crs']
-        filterexpr = args['filter']
-        datetime = args['datetime']
-
-        data_service = data_service_handler()
-        result = data_service.timevals(
-            get_auth_user(), dataset, bbox, crs, filterexpr, datetime
-        )
-        if 'error' not in result:
-            return result['feature_collection']
-        else:
-            error_code = result.get('error_code') or 404
-            api.abort(error_code, result['error'])
 
 
 @api.route('/<path:dataset>/<int:id>')
