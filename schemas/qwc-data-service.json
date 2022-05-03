@@ -189,11 +189,17 @@
                     "type": "string",
                     "enum": [
                       "POINT",
+                      "POINTZ",
                       "LINESTRING",
+                      "LINESTRINGZ",
                       "POLYGON",
+                      "POLYGONZ",
                       "MULTIPOINT",
+                      "MULTIPOINTZ",
                       "MULTILINESTRING",
-                      "MULTIPOLYGON"
+                      "MULTILINESTRINGZ",
+                      "MULTIPOLYGON",
+                      "MULTIPOLYGONZ"
                     ]
                   },
                   "srid": {

@@ -690,6 +690,11 @@ class DatasetFeaturesProvider():
                 wkt_geom = row['wkt_geom']
                 geom_type = row['geom_type']
 
+                # GeoJSON geometry type does not specify whether there is a Z coordinate, need
+                # to look at the length of a coordinate
+                if self.has_z(feature.get('geometry')['coordinates']):
+                    geom_type += "Z"
+
         if not errors:
             # check WKT for repeated vertices
             groups = re.findall(r'(?<=\()([\d\.,\s]+)(?=\))', wkt_geom)
@@ -716,6 +721,12 @@ class DatasetFeaturesProvider():
         conn.close()
 
         return errors
+
+    def has_z(self, coordinates):
+        if type(coordinates[0]) is list:
+            return self.has_z(coordinates[0])
+        else:
+            return len(coordinates) == 3
 
     def validate_fields(self, feature):
         """Validate data types and constraints of GeoJSON Feature properties.
