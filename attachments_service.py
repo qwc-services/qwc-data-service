@@ -62,14 +62,17 @@ class AttachmentsService():
             self.logger.error("Could not validate attachment: %s" % e)
             return False
 
-        # Check file size (global service configuration)
-        if size > self.max_file_size:
-            self.logger.info(
-                "File too large: %s: %d" % (file.filename, size))
-            return (False, "File too large")
-
-        # Check file size (dataset configuration)
-        if dataset in self.max_file_size_per_dataset and size > self.max_file_size_per_dataset[dataset]:
+        # Check file size:
+        # - If a per dataset configuration is set, only check size against that limit
+        # - Otherwise, check against global limit
+        # Dataset configuration:
+        if dataset in self.max_file_size_per_dataset:
+            if size > self.max_file_size_per_dataset[dataset]:
+                self.logger.info(
+                    "File too large: %s: %d" % (file.filename, size))
+                return (False, "File too large")
+        # Global service configuration:
+        elif size > self.max_file_size:
             self.logger.info(
                 "File too large: %s: %d" % (file.filename, size))
             return (False, "File too large")
@@ -80,24 +83,29 @@ class AttachmentsService():
         if base.endswith(".tar"):
             ext = ".tar" + ext
 
-        # Check file extension (global service configuration)
-        if self.allowed_extensions and ext not in self.allowed_extensions:
-            self.logger.info(
-                "Forbidden file extension: %s: %s" % (file.filename, ext))
-            return (False, "Forbidden file extension")
-
-        # Check file extension (dataset configuration)
-        if dataset in self.allowed_extensions_per_dataset and ext not in self.allowed_extensions_per_dataset[dataset]:
-            self.logger.info(
-                "Forbidden file extension: %s: %s" % (file.filename, ext))
-            return (False, "Forbidden file extension")
-
-        # Check file extension (local field configuration)
+        # Check file extension:
+        # - If a per field configuration is set, only validate against that list
+        # - If a per dataset configuration is set, only validate against that list
+        # - If a per global configuration is set, only validate against that list
+        # Local field configuration
         fileextensions = fieldconfig.get('fileextensions', [])
-        if fileextensions and ext not in fileextensions:
-            self.logger.info(
-                "Forbidden file extension: %s: %s" % (file.filename, ext))
-            return (False, "Forbidden file extension")
+        if fileextensions:
+            if ext not in fileextensions:
+                self.logger.info(
+                    "Forbidden file extension: %s: %s" % (file.filename, ext))
+                return (False, "Forbidden file extension")
+        # Dataset configuration:
+        elif dataset in self.allowed_extensions_per_dataset:
+            if ext not in self.allowed_extensions_per_dataset[dataset]:
+                self.logger.info(
+                    "Forbidden file extension: %s: %s" % (file.filename, ext))
+                return (False, "Forbidden file extension")
+        # Global service configuration:
+        elif self.allowed_extensions:
+            if ext not in self.allowed_extensions:
+                self.logger.info(
+                    "Forbidden file extension: %s: %s" % (file.filename, ext))
+                return (False, "Forbidden file extension")
 
         # ClamAV virus check
         if self.clamav and scan_file(self.clamav, file.filename):

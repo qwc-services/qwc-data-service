@@ -252,7 +252,7 @@ File uploads:
 - For manually created Qt Designed Ui forms, use a `QLineEdit` widget named `<fieldname>__upload`, and optionally as the text value of the `QLineEdit` set a comma separated list of suggested file extensions.
 - *Note*: Make sure the client uses the EditingInterface.js shipped with [QWC2 submodule f053fdc or newer](https://github.com/qgis/qwc2/commit/f053fdceba4a2d8112fb516c793702b9fd118609) to support file uploads.
 - You can set the allowed attachment extensions and maximum file sizes globally by setting `allowed_attachment_extensions` and `max_attachment_file_size` in the data service configuration.
-- You can also set the allowed attachment extensions and maximum file sizes per dataset by setting `max_attachment_file_size_per_dataset` and `allowed_extensions_per_dataset` in the dataset service configuration.
+- You can also set the allowed attachment extensions and maximum file sizes per dataset by setting `max_attachment_file_size_per_dataset` and `allowed_extensions_per_dataset` in the dataset service configuration. If you set the per dataset values, the global settings will be disregarded (i.e. if a attachment satisfies the per dataset constraint it will be considered valid, even if it violates the global constraint).
 
 Logging mutations:
 
