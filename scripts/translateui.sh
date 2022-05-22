@@ -5,11 +5,21 @@ if [ $# -lt 2 ]; then
   exit 1
 fi
 
-if [ -z $(which uic-qt5) ] || [ -z $(which lupdate-qt5) ]; then
-  echo "uic-qt5 and lupdate-qt5 need to exist in PATH"
+UIC=""
+LUPDATE=""
+if [ -x $(which uic 2>/dev/null) ] && [ -x $(which lupdate 2>/dev/null) ]; then
+  UIC="uic"
+  LUPDATE="lupdate"
+elif [ -x $(which uic-qt5 2>/dev/null) ] && [ -x $(which lupdate-qt5 2>/dev/null) ]; then
+  UIC="uic-qt5"
+  LUPDATE="lupdate-qt5"
+elif [ -x $(which uic-qt6 2>/dev/null) ] && [ -x $(which lupdate-qt6 2>/dev/null) ]; then
+  UIC="uic-qt6"
+  LUPDATE="lupdate-qt6"
+else
+  echo "Could not find uic and/or lupdate in PATH"
   exit 1
 fi
-
 
 cd $(dirname $1)
 ui=$(basename $1)
@@ -28,14 +38,14 @@ tsfiles () {
   done
 }
 
-uic-qt5 $ui > ui_${ui/.ui/.h}
+$UIC $ui > ui_${ui/.ui/.h}
 
 cat > ${ui/.ui/.pro} <<EOF
 SOURCES += ui_${ui/.ui/.h}
 TRANSLATIONS += $(tsfiles $@)
 EOF
 
-lupdate-qt5 ${ui/.ui/.pro}
+$LUPDATE ${ui/.ui/.pro}
 
 rm ui_${ui/.ui/.h}
 rm ${ui/.ui/.pro}
