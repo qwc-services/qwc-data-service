@@ -216,6 +216,24 @@ relationvalues_response = create_model(api, 'Relation values', [
                                      description='Relation table entry')]
 ])
 
+
+# keyvals response
+keyval_records = create_model(api, 'Keyval table record', [
+    ['key', fields.Raw(required=True, description='Key')],
+    ['value', fields.String(required=True, description='Value')]
+])
+
+keyvals_table_entry = create_model(api, 'Keyvals table entry', [
+    ['*',  fields.Wildcard(fields.List(fields.Nested(keyval_records),
+                      required=True, description='Keyval records'))]
+])
+
+keyvals_response = create_model(api, 'Keyval relation values', [
+    ['keyvalues', fields.Nested(keyvals_table_entry,
+                                     required=True,
+                                     description='Keyval table entry')]
+])
+
 # message response
 message_response = create_model(api, 'Message', [
     ['message', fields.String(required=True, description='Response message',
@@ -644,8 +662,7 @@ class KeyValues(Resource):
     @api.doc('get_relations')
     @api.param('tables', 'Comma separated list of keyvalue tables of the form "tablename:key_field_name:value_field_name"')
     @api.expect(get_relations_parser)
-    # TODO
-    #@api.marshal_with(relationvalues_response, code=201)
+    @api.marshal_with(keyvals_response, code=201)
     @optional_auth
     def get(self):
         args = get_relations_parser.parse_args()
