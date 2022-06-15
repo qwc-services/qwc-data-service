@@ -193,6 +193,29 @@ geojson_feature_collection_response = create_model(api, 'FeatureCollection', [
                         example=[950598.0, 6003950.0, 950758.0, 6004010.0])]
 ])
 
+# relation value response
+relation_table_values = create_model(api, 'Relation table value', [
+    ['fk', fields.String(required=True, description='Foreign key field name')],
+    ['records', fields.List(fields.Nested(geojson_property, required=True,
+                                     description='Feature properties',
+                                     example={'name': 'Example', 'type': 2,
+                                              'num': 4}
+                                     ),
+                            required=True, description='Records')]
+])
+
+relation_table_entry = create_model(api, 'Relation table entry', [
+    ['*', fields.Wildcard(fields.Nested(relation_table_values,
+                        required=True,
+                        description='Relation table values'))]
+])
+
+relationvalues_response = create_model(api, 'Relation values', [
+    ['relationvalues', fields.Nested(relation_table_entry,
+                                     required=True,
+                                     description='Relation table entry')]
+])
+
 # message response
 message_response = create_model(api, 'Message', [
     ['message', fields.String(required=True, description='Response message',
@@ -507,8 +530,7 @@ class Relations(Resource):
     @api.doc('get_relations')
     @api.param('tables', 'Comma separated list of relation tables of the form "tablename:fk_field_name"')
     @api.expect(get_relations_parser)
-    # TODO
-    #@api.marshal_with(relationvalues_response, code=201)
+    @api.marshal_with(relationvalues_response, code=201)
     @optional_auth
     def get(self, dataset, id):
         data_service = data_service_handler()
@@ -534,8 +556,7 @@ class Relations(Resource):
 
     @api.doc('post_relations')
     @api.expect(post_relations_parser)
-    # TODO
-    #@api.marshal_with(relationvalues_response, code=201)
+    @api.marshal_with(relationvalues_response, code=201)
     @optional_auth
     def post(self, dataset, id):
         """Update relation values for the specified dataset
