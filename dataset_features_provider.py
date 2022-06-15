@@ -1,6 +1,9 @@
 from collections import OrderedDict
 import re
 from json.decoder import JSONDecodeError
+from datetime import date
+from decimal import Decimal
+from uuid import UUID
 
 from flask import json
 from sqlalchemy.exc import DataError, InternalError, ProgrammingError
@@ -912,7 +915,16 @@ class DatasetFeaturesProvider():
             # Omit hidden fields
             if self.fields.get(attr, {}).get('constraints', {}).get('hidden', False) == True:
                 continue
-            props[attr] = row[attr]
+            value = row[attr]
+            # Ensure values are JSON serializable
+            if isinstance(value, date):
+                props[attr] = value.isoformat()
+            elif isinstance(value, Decimal):
+                props[attr] = float(value)
+            elif isinstance(value, UUID):
+                props[attr] = str(value)
+            else:
+                props[attr] = value
 
         geometry = None
         crs = None

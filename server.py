@@ -1,7 +1,4 @@
 from collections import OrderedDict
-from datetime import date
-from decimal import Decimal
-from uuid import UUID
 import json
 import os
 
@@ -22,24 +19,6 @@ class Request(RequestBase):
     def on_json_loading_failed(self, e):
         """Always return detailed JSON decode error, not only in debug mode"""
         raise BadRequest('Failed to decode JSON object: {0}'.format(e))
-
-
-class FeatureProperties(fields.Raw):
-    """Custom Flask-RESTPlus Field for feature properties"""
-    def format(self, properties):
-        """Formats feature property values to be JSON serializable."""
-        res = OrderedDict()
-        for attr, value in properties.items():
-            if isinstance(value, date):
-                res[attr] = value.isoformat()
-            elif isinstance(value, Decimal):
-                res[attr] = float(value)
-            elif isinstance(value, UUID):
-                res[attr] = str(value)
-            else:
-                res[attr] = value
-
-        return res
 
 
 # Flask application
@@ -141,6 +120,10 @@ geojson_geometry = create_model(api, 'Geometry', [
                                example=[950598.0, 6004010.0])]
 ])
 
+geojson_property = create_model(api, 'Property', [
+    ['*', fields.Wildcard(fields.Raw)]
+])
+
 # Feature response
 geojson_feature_response = create_model(api, 'Feature', [
     ['type', fields.String(required=True, description='Feature',
@@ -150,7 +133,7 @@ geojson_feature_response = create_model(api, 'Feature', [
     ['geometry', fields.Nested(geojson_geometry, required=False,
                                allow_null=True,
                                description='Feature geometry')],
-    ['properties', FeatureProperties(required=True,
+    ['properties', fields.Nested(geojson_property, required=True,
                                      description='Feature properties',
                                      example={'name': 'Example', 'type': 2,
                                               'num': 4}
@@ -189,7 +172,7 @@ geojson_feature_member = create_model(api, 'Member Feature', [
     ['geometry', fields.Nested(geojson_geometry, required=False,
                                allow_null=True,
                                description='Feature geometry')],
-    ['properties', FeatureProperties(required=True,
+    ['properties', fields.Nested(geojson_property, required=True,
                                      description='Feature properties',
                                      example={'name': 'Example', 'type': 2,
                                               'num': 4}
