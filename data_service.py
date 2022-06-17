@@ -364,45 +364,54 @@ class DataService():
             return {}
 
         # get permissions for dataset
-        resource_permissions = self.permissions_handler.resource_permissions(
-            'data_datasets', identity, dataset
-        )
-        if not resource_permissions:
-            # dataset not permitted
-            return {}
+        if resource.get('readonlypermitted', False):
+            writable = False
+            creatable = False
+            readable = True
+            updatable = False
+            deletable = False
+            permitted_attributes = list(map(lambda field: field["name"], resource['fields']))
 
-        # combine permissions
-        permitted_attributes = set()
-        writable = False
-        creatable = False
-        readable = False
-        updatable = False
-        deletable = False
+        else:
+            resource_permissions = self.permissions_handler.resource_permissions(
+                'data_datasets', identity, dataset
+            )
+            if not resource_permissions:
+                # dataset not permitted
+                return {}
 
-        for permission in resource_permissions:
-            # collect permitted attributes
-            permitted_attributes.update(permission.get('attributes', []))
+            # combine permissions
+            permitted_attributes = set()
+            writable = False
+            creatable = False
+            readable = False
+            updatable = False
+            deletable = False
 
-            # allow writable and CRUD actions if any role permits them
-            writable |= permission.get('writable', False)
-            creatable |= permission.get('creatable', False)
-            readable |= permission.get('readable', False)
-            updatable |= permission.get('updatable', False)
-            deletable |= permission.get('deletable', False)
+            for permission in resource_permissions:
+                # collect permitted attributes
+                permitted_attributes.update(permission.get('attributes', []))
 
-        # make writable consistent with CRUD actions
-        writable |= creatable and readable and updatable and deletable
+                # allow writable and CRUD actions if any role permits them
+                writable |= permission.get('writable', False)
+                creatable |= permission.get('creatable', False)
+                readable |= permission.get('readable', False)
+                updatable |= permission.get('updatable', False)
+                deletable |= permission.get('deletable', False)
 
-        # make CRUD actions consistent with writable
-        creatable |= writable
-        readable |= writable
-        updatable |= writable
-        deletable |= writable
+            # make writable consistent with CRUD actions
+            writable |= creatable and readable and updatable and deletable
 
-        permitted = creatable or readable or updatable or deletable
-        if not permitted:
-            # no CRUD action permitted
-            return {}
+            # make CRUD actions consistent with writable
+            creatable |= writable
+            readable |= writable
+            updatable |= writable
+            deletable |= writable
+
+            permitted = creatable or readable or updatable or deletable
+            if not permitted:
+                # no CRUD action permitted
+                return {}
 
         # filter by permissions
         attributes = [
