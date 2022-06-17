@@ -120,10 +120,6 @@ geojson_geometry = create_model(api, 'Geometry', [
                                example=[950598.0, 6004010.0])]
 ])
 
-geojson_property = create_model(api, 'Property', [
-    ['*', fields.Wildcard(fields.Raw)]
-])
-
 # Feature response
 geojson_feature_response = create_model(api, 'Feature', [
     ['type', fields.String(required=True, description='Feature',
@@ -133,7 +129,7 @@ geojson_feature_response = create_model(api, 'Feature', [
     ['geometry', fields.Nested(geojson_geometry, required=False,
                                allow_null=True,
                                description='Feature geometry')],
-    ['properties', fields.Nested(geojson_property, required=True,
+    ['properties', fields.Raw(required=True,
                                      description='Feature properties',
                                      example={'name': 'Example', 'type': 2,
                                               'num': 4}
@@ -172,7 +168,7 @@ geojson_feature_member = create_model(api, 'Member Feature', [
     ['geometry', fields.Nested(geojson_geometry, required=False,
                                allow_null=True,
                                description='Feature geometry')],
-    ['properties', fields.Nested(geojson_property, required=True,
+    ['properties', fields.Raw(required=True,
                                      description='Feature properties',
                                      example={'name': 'Example', 'type': 2,
                                               'num': 4}
@@ -196,7 +192,7 @@ geojson_feature_collection_response = create_model(api, 'FeatureCollection', [
 # relation value response
 relation_table_values = create_model(api, 'Relation table value', [
     ['fk', fields.String(required=True, description='Foreign key field name')],
-    ['records', fields.List(fields.Nested(geojson_property, required=True,
+    ['records', fields.List(fields.Raw(required=True,
                                      description='Feature properties',
                                      example={'name': 'Example', 'type': 2,
                                               'num': 4}
