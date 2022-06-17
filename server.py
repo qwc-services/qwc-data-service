@@ -213,7 +213,8 @@ relation_table_entry = create_model(api, 'Relation table entry', [
 relationvalues_response = create_model(api, 'Relation values', [
     ['relationvalues', fields.Nested(relation_table_entry,
                                      required=True,
-                                     description='Relation table entry')]
+                                     description='Relation table entry')],
+    ['success', fields.Boolean(required=False, description='Relation values commit success status')]
 ])
 
 
