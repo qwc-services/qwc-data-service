@@ -184,6 +184,37 @@ class DatasetFeaturesProvider():
             'bbox': overall_bbox
         }
 
+    def keyvals(self, key, value):
+        """ Get key-value pairs.
+
+        :param key: The key column name
+        :param value: The value column name
+        """
+
+        columns = (', ').join(
+            self.escape_column_names([key, value])
+        )
+        sql = sql_text(("""
+            SELECT {columns}
+            FROM {table};
+        """).format(
+            columns=columns, table=self.table
+        ))
+
+        # connect to database and start transaction (for read-only access)
+        conn = self.db_read.connect()
+        trans = conn.begin()
+        result = conn.execute(sql)
+        records = []
+        for row in result:
+            records.append({'value': row[key], 'label': row[value]})
+
+        # roll back transaction and close database connection
+        trans.rollback()
+        conn.close()
+
+        return records
+
     def show(self, id, client_srid):
         """Get a feature.
 

@@ -431,13 +431,10 @@ class DataService():
                     fields[field['name']]['constraints'] = dict(fields[field['name']]['constraints'])
                     try:
                         table, key_field_name, value_field_name = keyvalrel.split(":")
-                        result = self.index(
-                            identity, table, None, None, None
+                        dataset_features_provider = self.dataset_features_provider(
+                            identity, table
                         )
-                        values = list(map(lambda feature: {
-                            'value': feature['properties'][key_field_name],
-                            'label': feature['properties'][value_field_name],
-                        }, result['feature_collection']['features']))
+                        values = dataset_features_provider.keyvals(key_field_name, value_field_name)
                         fields[field['name']]['constraints']['values'] = values
                     except Exception as e:
                         self.logger.error("Unable to resolve keyvalrel '%s': %s" % (keyvalrel, str(e)))
