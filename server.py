@@ -190,14 +190,35 @@ geojson_feature_collection_response = create_model(api, 'FeatureCollection', [
 ])
 
 # relation value response
-relation_table_values = create_model(api, 'Relation table value', [
-    ['fk', fields.String(required=True, description='Foreign key field name')],
-    ['records', fields.List(fields.Raw(required=True,
+relation_feature_response = create_model(api, 'Feature', [
+    ['type', fields.String(required=True, description='Feature',
+                           example='Feature')],
+    ['id', fields.Integer(required=True, description='Feature ID',
+                          example=123)],
+    ['geometry', fields.Nested(geojson_geometry, required=False,
+                               allow_null=True,
+                               description='Feature geometry')],
+    ['properties', fields.Raw(required=True,
                                      description='Feature properties',
                                      example={'name': 'Example', 'type': 2,
                                               'num': 4}
-                                     ),
-                            required=True, description='Records')]
+                                     )],
+    ['crs', fields.Nested(geojson_crs, required=False, allow_null=True,
+                          description='Coordinate reference system')],
+    ['bbox', fields.Raw(required=False, allow_null=True,
+                        description=(
+                            'Extent of feature as [minx, miny, maxx, maxy]'
+                        ),
+                        example=[950598.0, 6003950.0, 950758.0, 6004010.0])],
+    ['__status__', fields.String(required=False, description='Feature status')],
+    ['error', fields.String(required=False, description='Commit error')],
+    ['error_details', fields.Raw(required=False,
+                                     description='Commit error details properties')]
+])
+
+relation_table_values = create_model(api, 'Relation table value', [
+    ['fk', fields.String(required=True, description='Foreign key field name')],
+    ['features', fields.List(fields.Nested(relation_feature_response), required=True, description='Relation features')]
 ])
 
 relation_table_entry = create_model(api, 'Relation table entry', [
@@ -557,16 +578,11 @@ class Relations(Resource):
                 table, fk_field_name = relation.split(":")
             except:
                 continue
-            ret[table] = {"fk": fk_field_name, "records": []}
             result = data_service.index(
                 get_auth_user(), table, None, None, '[["%s", "=", %d]]' % (fk_field_name, id)
             )
-            if 'feature_collection' in result:
-                for feature in result['feature_collection']['features']:
-                    record = {(table + "__" + k): v for k, v in feature['properties'].items()}
-                    record["id"] = feature["id"]
-                    ret[table]['records'].append(record)
-                ret[table]['records'].sort(key=lambda r: r["id"])
+            ret[table] = {"fk": fk_field_name, "features": result['feature_collection']['features'] if 'feature_collection' in result else []}
+            ret[table]['features'].sort(key=lambda f: f["id"])
         return {"relationvalues": ret}
 
     @api.doc('post_relations')
@@ -599,25 +615,19 @@ class Relations(Resource):
             fk_field = rel_data.get("fk", None)
             ret[rel_table] = {
                 "fk": fk_field,
-                "records": []
+                "features": []
             }
             tbl_prefix = rel_table + "__"
-            for (record_idx, rel_record) in enumerate(rel_data.get("records", [])):
+            for (record_idx, rel_feature) in enumerate(rel_data.get("features", [])):
                 # Set foreign key for new records
-                if rel_record.get("__status__", "") == "new":
-                    rel_record[tbl_prefix + fk_field] = id
+                if rel_feature.get("__status__", "") == "new":
+                    rel_feature['properties'][fk_field] = id
 
-                if rel_record.get(tbl_prefix + fk_field, None) != id:
-                    rel_record["__error__"] = "FK validation failed"
-                    ret[rel_table]["records"].append(rel_record)
+                if rel_feature['properties'].get(fk_field, None) != id:
+                    rel_feature["__error__"] = "FK validation failed"
+                    ret[rel_table]["features"].append(rel_feature)
                     haserrors = True
                     continue
-
-                entry = {
-                    "type": "Feature",
-                    "id": rel_record["id"] if "id" in rel_record else None,
-                    "properties": {k[len(tbl_prefix):]: v for k, v in rel_record.items() if k.startswith(tbl_prefix)}
-                }
 
                 # Get record files
                 files = {}
@@ -629,26 +639,24 @@ class Relations(Resource):
                     if table == rel_table and index == str(record_idx):
                         files["file:" + field] = request.files[key]
 
-                if not "__status__" in rel_record:
-                    ret[rel_table]["records"].append(rel_record)
+                if not "__status__" in rel_feature:
+                    ret[rel_table]["features"].append(rel_feature)
                     continue
-                elif rel_record["__status__"] == "new":
-                    result = data_service.create(get_auth_user(), rel_table, entry, files)
-                elif rel_record["__status__"] == "changed":
-                    result = data_service.update(get_auth_user(), rel_table, rel_record["id"], entry, files)
-                elif rel_record["__status__"].startswith("deleted"):
-                    result = data_service.destroy(get_auth_user(), rel_table, rel_record["id"])
+                elif rel_feature["__status__"] == "new":
+                    result = data_service.create(get_auth_user(), rel_table, rel_feature, files)
+                elif rel_feature["__status__"] == "changed":
+                    result = data_service.update(get_auth_user(), rel_table, rel_feature["id"], rel_feature, files)
+                elif rel_feature["__status__"].startswith("deleted"):
+                    result = data_service.destroy(get_auth_user(), rel_table, rel_feature["id"])
                 else:
                     continue
                 if "error" in result:
-                    rel_record["error"] = result["error"]
-                    rel_record["error_details"] = result.get('error_details') or {}
-                    ret[rel_table]["records"].append(rel_record)
+                    rel_feature["error"] = result["error"]
+                    rel_feature["error_details"] = result.get('error_details') or {}
+                    ret[rel_table]["features"].append(rel_feature)
                     haserrors = True
                 elif "feature" in result:
-                    rel_record = {(rel_table + "__" + k): v for k, v in result['feature']['properties'].items()}
-                    rel_record["id"] = result['feature']["id"]
-                    ret[rel_table]["records"].append(rel_record)
+                    ret[rel_table]["features"].append(result['feature'])
 
         return {"relationvalues": ret, "success": not haserrors}
 
