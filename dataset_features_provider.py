@@ -782,10 +782,12 @@ class DatasetFeaturesProvider():
             input_value = feature['properties'][attr]
             value = None
 
-            if data_type == 'numeric':
+            if data_type == 'numeric' and \
+                constraints.get('numeric_precision', None) and \
+                constraints.get('numeric_scale', None):
                 data_type = 'numeric(%d,%d)' % (
-                    constraints.get('numeric_precision', 1),
-                    constraints.get('numeric_scale', 0)
+                    constraints['numeric_precision'],
+                    constraints['numeric_scale']
                 )
             elif data_type == 'bigint':
                 # parse bigint constraints from string
