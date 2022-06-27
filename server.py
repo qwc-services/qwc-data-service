@@ -628,8 +628,9 @@ class Relations(Resource):
             }
             tbl_prefix = rel_table + "__"
             for (record_idx, rel_feature) in enumerate(rel_data.get("features", [])):
+                rel_feature_status = rel_feature.get("__status__", "") or ""
                 # Set foreign key for new records
-                if rel_feature.get("__status__", "") == "new":
+                if rel_feature_status == "new":
                     rel_feature['properties'][fk_field] = id
 
                 if rel_feature['properties'].get(fk_field, None) != id:
@@ -648,14 +649,14 @@ class Relations(Resource):
                     if table == rel_table and index == str(record_idx):
                         files["file:" + field] = request.files[key]
 
-                if not "__status__" in rel_feature:
+                if not rel_feature_status:
                     ret[rel_table]["features"].append(rel_feature)
                     continue
-                elif rel_feature["__status__"] == "new":
+                elif rel_feature_status == "new":
                     result = data_service.create(get_auth_user(), rel_table, rel_feature, files)
-                elif rel_feature["__status__"] == "changed":
+                elif rel_feature_status == "changed":
                     result = data_service.update(get_auth_user(), rel_table, rel_feature["id"], rel_feature, files)
-                elif rel_feature["__status__"].startswith("deleted"):
+                elif rel_feature_status.startswith("deleted"):
                     result = data_service.destroy(get_auth_user(), rel_table, rel_feature["id"])
                 else:
                     continue
