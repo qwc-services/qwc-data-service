@@ -305,10 +305,10 @@ get_attachment_parser.add_argument('file', required=True)
 # Relations
 get_relations_parser = reqparse.RequestParser(argument_class=CaseInsensitiveArgument)
 get_relations_parser.add_argument('tables', required=True)
+get_relations_parser.add_argument('crs')
 
-post_relations_parser = reqparse.RequestParser(
-    argument_class=CaseInsensitiveArgument
-)
+post_relations_parser = reqparse.RequestParser(argument_class=CaseInsensitiveArgument)
+post_relations_parser.add_argument('crs')
 post_relations_parser.add_argument(
     'values', help='Relations', required=True, location='form'
 )
@@ -579,6 +579,7 @@ class Relations(Resource):
         data_service = data_service_handler()
         args = get_relations_parser.parse_args()
         relations = args['tables'] or ""
+        crs = args['crs'] or None
         ret = {}
         for relation in relations.split(","):
             try:
@@ -586,7 +587,7 @@ class Relations(Resource):
             except:
                 continue
             result = data_service.index(
-                get_auth_user(), table, None, None, '[["%s", "=", %d]]' % (fk_field_name, id)
+                get_auth_user(), table, None, crs, '[["%s", "=", %d]]' % (fk_field_name, id)
             )
             ret[table] = {"fk": fk_field_name, "features": result['feature_collection']['features'] if 'feature_collection' in result else []}
             ret[table]['features'].sort(key=lambda f: f["id"])
@@ -602,6 +603,7 @@ class Relations(Resource):
         Return success status for each relation value.
         """
         args = post_relations_parser.parse_args()
+        crs = args['crs'] or None
 
         try:
             payload = json.loads(args['values'])
