@@ -650,8 +650,7 @@ class Relations(Resource):
                         files["file:" + field] = request.files[key]
 
                 if not rel_feature_status:
-                    ret[rel_table]["features"].append(rel_feature)
-                    continue
+                    result = data_service.show(get_auth_user(), rel_table, rel_feature["id"], crs)
                 elif rel_feature_status == "new":
                     result = data_service.create(get_auth_user(), rel_table, rel_feature, files)
                 elif rel_feature_status == "changed":
