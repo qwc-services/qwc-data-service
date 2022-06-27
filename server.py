@@ -100,6 +100,13 @@ def data_service_handler():
     return handler
 
 
+class FeatureId(fields.Raw):
+    def format(self, value):
+        if isinstance(value, int):
+            return value
+        else:
+            return str(value)
+
 # Api models
 geojson_crs_properties = create_model(api, 'CRS Properties', [
     ['name', fields.String(required=True, description='OGC CRS URN',
@@ -124,7 +131,7 @@ geojson_geometry = create_model(api, 'Geometry', [
 geojson_feature_response = create_model(api, 'Feature', [
     ['type', fields.String(required=True, description='Feature',
                            example='Feature')],
-    ['id', fields.Integer(required=True, description='Feature ID',
+    ['id', FeatureId(required=True, description='Feature ID',
                           example=123)],
     ['geometry', fields.Nested(geojson_geometry, required=False,
                                allow_null=True,
@@ -163,7 +170,7 @@ geojson_feature_request = create_model(api, 'Input Feature', [
 geojson_feature_member = create_model(api, 'Member Feature', [
     ['type', fields.String(required=True, description='Feature',
                            example='Feature')],
-    ['id', fields.Integer(required=True, description='Feature ID',
+    ['id', FeatureId(required=True, description='Feature ID',
                           example=123)],
     ['geometry', fields.Nested(geojson_geometry, required=False,
                                allow_null=True,
@@ -193,7 +200,7 @@ geojson_feature_collection_response = create_model(api, 'FeatureCollection', [
 relation_feature_response = create_model(api, 'Feature', [
     ['type', fields.String(required=True, description='Feature',
                            example='Feature')],
-    ['id', fields.Integer(required=True, description='Feature ID',
+    ['id', FeatureId(required=True, description='Feature ID',
                           example=123)],
     ['geometry', fields.Nested(geojson_geometry, required=False,
                                allow_null=True,
