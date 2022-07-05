@@ -7,13 +7,13 @@ fi
 
 UIC=""
 LUPDATE=""
-if [ -x $(which uic 2>/dev/null) ] && [ -x $(which lupdate 2>/dev/null) ]; then
+if command -v uic && command -v lupdate; then
   UIC="uic"
   LUPDATE="lupdate"
-elif [ -x $(which uic-qt5 2>/dev/null) ] && [ -x $(which lupdate-qt5 2>/dev/null) ]; then
+elif command -v uic-qt5 && command -v lupdate-qt5; then
   UIC="uic-qt5"
   LUPDATE="lupdate-qt5"
-elif [ -x $(which uic-qt6 2>/dev/null) ] && [ -x $(which lupdate-qt6 2>/dev/null) ]; then
+elif command -v uic-qt6 && command -v lupdate-qt6; then
   UIC="uic-qt6"
   LUPDATE="lupdate-qt6"
 else
@@ -34,7 +34,7 @@ shift
 tsfiles () {
   for i in $@
   do
-    echo ${ui/.ui/}_$i.ts
+    echo -n "${ui/.ui/_$i.ts} "
   done
 }
 
