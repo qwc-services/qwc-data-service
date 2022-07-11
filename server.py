@@ -583,14 +583,17 @@ class Relations(Resource):
         ret = {}
         for relation in relations.split(","):
             try:
-                table, fk_field_name = relation.split(":")
+                table, fk_field_name, sortcol = (relation + ":").split(":")[0:3]
             except:
                 continue
             result = data_service.index(
                 get_auth_user(), table, None, crs, '[["%s", "=", %d]]' % (fk_field_name, id)
             )
             ret[table] = {"fk": fk_field_name, "features": result['feature_collection']['features'] if 'feature_collection' in result else []}
-            ret[table]['features'].sort(key=lambda f: f["id"])
+            if sortcol:
+                ret[table]['features'].sort(key=lambda f: f["properties"][sortcol])
+            else:
+                ret[table]['features'].sort(key=lambda f: f["id"])
         return {"relationvalues": ret}
 
     @api.doc('post_relations')
