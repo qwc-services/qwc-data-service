@@ -648,6 +648,8 @@ class Relations(Resource):
                     index = parts[2]
                     if table == rel_table and index == str(record_idx):
                         files["file:" + field] = request.files[key]
+                        # Set a placeholder value to make attribute validation for required upload fields pass
+                        rel_feature['properties'][field] = request.files[key].filename
 
                 if not rel_feature_status:
                     result = data_service.show(get_auth_user(), rel_table, rel_feature["id"], crs)
