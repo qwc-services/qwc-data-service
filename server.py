@@ -642,7 +642,7 @@ class Relations(Resource):
                 # Get record files
                 files = {}
                 for key in request.files:
-                    parts = key.lstrip("file:").split("__")
+                    parts = key.split("__")
                     table = parts[0]
                     field = parts[1]
                     index = parts[2]
