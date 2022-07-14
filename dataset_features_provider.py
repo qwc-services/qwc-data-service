@@ -354,7 +354,7 @@ class DatasetFeaturesProvider():
         # execute query
         success = False
         result = conn.execute(sql, id=id)
-        for row in result:
+        if result.one():
             # NOTE: result is empty if not found
             success = True
 
