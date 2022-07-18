@@ -1,6 +1,7 @@
 from collections import OrderedDict
 import json
 import os
+import re
 
 from flask import Flask, Request as RequestBase, request, jsonify, send_file
 from flask_restx import Api, Resource, fields, reqparse
@@ -703,7 +704,8 @@ class KeyValues(Resource):
                 for feature in result['feature_collection']['features']:
                     record = {"key": feature["id"] if key_field_name == "id" else feature['properties'][key_field_name], "value": str(feature['properties'][value_field_name]).strip()}
                     ret[table].append(record)
-                ret[table].sort(key=lambda record: record["value"])
+                natsort = lambda s: [int(t) if t.isdigit() else t.lower() for t in re.split('(\d+)', s)]
+                ret[table].sort(key=lambda record: natsort(record["value"]))
         return {"keyvalues": ret}
 
 
