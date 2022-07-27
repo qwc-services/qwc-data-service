@@ -151,6 +151,14 @@ geojson_feature_response = create_model(api, 'Feature', [
                         example=[950598.0, 6003950.0, 950758.0, 6004010.0])]
 ])
 
+extent_response = create_model(api, 'BBOX', [
+    ['bbox', fields.Raw(required=True, allow_null=True,
+                        description=(
+                            'Extent of feature as [minx, miny, maxx, maxy]'
+                        ),
+                        example=[950598.0, 6003950.0, 950758.0, 6004010.0])]
+])
+
 # Feature request
 # NOTE: 'id' field not included, as ID is always defined by route
 geojson_feature_request = create_model(api, 'Input Feature', [
@@ -389,6 +397,41 @@ class DataCollection(Resource):
                 api.abort(400, "JSON is not an object")
         else:
             api.abort(400, "Request data is not JSON")
+
+
+@api.route('/<path:dataset>/extent')
+@api.response(400, 'Bad request')
+@api.response(404, 'Dataset not found or permission error')
+@api.param('dataset', 'Dataset ID', default='qwc_demo.edit_points')
+class DataCollection(Resource):
+    @api.doc('index')
+    @api.response(405, 'Dataset not readable')
+    @api.param('crs', 'Client coordinate reference system, e.g. `EPSG:3857`')
+    @api.param(
+        'filter', 'JSON serialized array of filter expressions: '
+        '`[["<name>", "<op>", <value>],"and|or",["<name>","<op>",<value>]]`')
+    @api.expect(index_parser)
+    @api.marshal_with(extent_response)
+    @optional_auth
+    def get(self, dataset):
+        """Get dataset features
+
+        Return dataset features inside bounding box and matching filter as a
+        GeoJSON FeatureCollection.
+        """
+        args = index_parser.parse_args()
+        crs = args['crs']
+        filterexpr = args['filter']
+
+        data_service = data_service_handler()
+        result = data_service.extent(
+            get_auth_user(), dataset, crs, filterexpr
+        )
+        if 'error' not in result:
+            return result['extent']
+        else:
+            error_code = result.get('error_code') or 404
+            api.abort(error_code, result['error'])
 
 
 @api.route('/<path:dataset>/<int:id>')

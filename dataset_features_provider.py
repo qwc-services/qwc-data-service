@@ -184,6 +184,62 @@ class DatasetFeaturesProvider():
             'bbox': overall_bbox
         }
 
+    def extent(self, client_srid, filterexpr):
+        """Get extent of dataset features.
+
+        :param int client_srid: Client SRID or None for dataset SRID
+        :param (sql, params) filterexpr: A filter expression as a tuple
+                                         (sql_expr, bind_params)
+        """
+        srid = client_srid or self.srid
+
+        # build query SQL
+
+        # select id and permitted attributes
+        where_clauses = []
+        params = {}
+
+        if filterexpr is not None:
+            where_clauses.append(filterexpr[0])
+            params.update(filterexpr[1])
+
+        where_clause = ""
+        if where_clauses:
+            where_clause = "WHERE " + " AND ".join(where_clauses)
+
+        if not self.geometry_column:
+            return None
+
+        # select overall extent
+        bbox = (
+            'ST_Extent(%s) AS bbox' %
+            self.transform_geom_sql('"{geom}"', self.srid, srid)
+        )
+
+        sql = sql_text(("""
+            SELECT %s
+            FROM {table}
+            {where_clause};
+        """ % bbox).format(
+            geom=self.geometry_column, table=self.table,
+            where_clause=where_clause
+        ))
+
+        # connect to database and start transaction (for read-only access)
+        conn = self.db_read.connect()
+        trans = conn.begin()
+
+        # execute query
+        features = []
+        result = conn.execute(sql, **params)
+
+        row = result.fetchone()
+
+        if row and 'bbox' in row:
+            return self.parse_box2d(row['bbox'])
+        else:
+            return None
+
     def keyvals(self, key, value):
         """ Get key-value pairs.
 

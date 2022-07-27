@@ -67,7 +67,7 @@ class DataService():
                     }
             srid = None
             if crs is not None:
-                # parse and validate unput CRS
+                # parse and validate input CRS
                 srid = dataset_features_provider.parse_crs(crs)
                 if srid is None:
                     return {
@@ -99,6 +99,63 @@ class DataService():
                     'error_code': 400
                 }
             return {'feature_collection': feature_collection}
+        else:
+            return {'error': "Dataset not found or permission error"}
+
+    def extent(self, identity, dataset, crs, filterexpr):
+        """Get extent of dataset features.
+
+        :param str identity: User identity
+        :param str dataset: Dataset ID
+        :param str crs: Client CRS as 'EPSG:<srid>' or None
+        :param str filterexpr: JSON serialized array of filter expressions:
+        [["<attr>", "<op>", "<value>"], "and|or", ["<attr>", "<op>", "<value>"]]
+        """
+        dataset_features_provider = self.dataset_features_provider(
+            identity, dataset
+        )
+        if dataset_features_provider is not None:
+            # check read permission
+            if not dataset_features_provider.readable():
+                return {
+                    'error': "Dataset not readable",
+                    'error_code': 405
+                }
+
+            srid = None
+            if crs is not None:
+                # parse and validate input CRS
+                srid = dataset_features_provider.parse_crs(crs)
+                if srid is None:
+                    return {
+                        'error': "Invalid CRS",
+                        'error_code': 400
+                    }
+            if filterexpr is not None:
+                # parse and validate input filter
+                filterexpr = dataset_features_provider.parse_filter(filterexpr)
+                if filterexpr[0] is None:
+                    return {
+                        'error': (
+                            "Invalid filter expression: %s" % filterexpr[1]
+                        ),
+                        'error_code': 400
+                    }
+
+            try:
+                extent = dataset_features_provider.extent(
+                    srid, filterexpr
+                )
+            except (DataError, ProgrammingError) as e:
+                self.logger.error(e)
+                return {
+                    'error': (
+                        "Feature query failed. Please check filter expression "
+                        "values and operators."
+                    ),
+                    'error_code': 400
+                }
+            return {'extent': {'bbox': extent}}
         else:
             return {'error': "Dataset not found or permission error"}
 
