@@ -108,10 +108,12 @@ class AttachmentsService():
                 return (False, "Forbidden file extension")
 
         # ClamAV virus check
-        if self.clamav and scan_file(self.clamav, file.filename):
-            self.logger.warn(
-                "ClamAV check failed: %s" % file.filename)
-            return (False, "Forbidden file content")
+        if self.clamav:
+            result = scan_file(self.clamav, file)
+            if result:
+                self.logger.warn(
+                    "ClamAV check failed for %s: %s" % (file.filename, result))
+                return (False, "Forbidden file content")
 
         return (True, None)
 
