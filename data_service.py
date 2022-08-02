@@ -241,12 +241,15 @@ class DataService():
         except (DataError, IntegrityError,
                 InternalError, ProgrammingError) as e:
             self.logger.error(e)
+            reason = "Feature could not be created"
+            if isinstance(e, IntegrityError):
+                reason += ": " + e.orig.diag.message_detail
             for slug in saved_attachments.values():
                 self.attachments_service.remove_attachment(dataset, slug)
             return {
                 'error': "Feature commit failed",
                 'error_details': {
-                    'data_errors': ["Feature could not be created"],
+                    'data_errors': [reason],
                 },
                 'error_code': 422
             }
