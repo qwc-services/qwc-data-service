@@ -17,12 +17,13 @@ class DatasetFeaturesProvider():
     Return features as GeoJSON FeatureCollection or Feature.
     """
 
-    def __init__(self, config, db_engine, logger):
+    def __init__(self, config, db_engine, logger, translator):
         """Constructor
 
         :param obj config: Data service config for a dataset
         :param DatabaseEngine db_engine: Database engine with DB connections
         :param Logger logger: Application logger
+        :param obj translator: Translator
         """
         # get SQLAlchemy engine for GeoDB of dataset for read actions
         if config.get('database_read'):
@@ -39,6 +40,7 @@ class DatasetFeaturesProvider():
             self.db_write = self.db_read
 
         self.logger = logger
+        self.translator = translator
 
         # assign values from service config
         self.schema = config['schema']
@@ -633,7 +635,7 @@ class DatasetFeaturesProvider():
 
         # validate GeoJSON
         if feature.get('type') != 'Feature':
-            errors.append("GeoJSON must be of type Feature")
+            errors.append(self.translator.tr("validation.geojson_must_be_feature"))
 
         crs_required = True
 
@@ -645,18 +647,18 @@ class DatasetFeaturesProvider():
             if new_feature and not self.allow_null_geometry:
                 # geometry required on create,
                 # unless NULL geometries are allowed
-                errors.append("Missing GeoJSON geometry")
+                errors.append(self.translator.tr("validation.missing_geojson_geom"))
             else:
                 # geometry always optional on update
                 crs_required = False
         elif feature.get('geometry') is None:
             if not self.allow_null_geometry:
-                errors.append("Geometry may not be NULL")
+                errors.append(self.translator.tr("validation.geom_not_null"))
             else:
                 # geometry is NULL
                 crs_required = False
         elif not isinstance(feature.get('geometry'), dict):
-            errors.append("Invalid GeoJSON geometry")
+            errors.append(self.translator.tr("validation.invalid_geojson_geom"))
         else:
             geo_json_geometry_types = [
                 'Point',
@@ -669,25 +671,25 @@ class DatasetFeaturesProvider():
             ]
             geometry = feature['geometry']
             if 'type' not in geometry:
-                errors.append("Missing GeoJSON geometry type")
+                errors.append(self.translator.tr("validation.missing_geojson_geom_type"))
             elif geometry.get('type') not in geo_json_geometry_types:
-                errors.append("Invalid GeoJSON geometry type")
+                errors.append(self.translator.tr("validation.invalid_geojson_geom_type"))
             if 'coordinates' not in geometry:
-                errors.append("Missing GeoJSON geometry coordinates")
+                errors.append(self.translator.tr("validation.missing_geojson_geom_coo"))
             elif not isinstance(geometry.get('coordinates'), list):
-                errors.append("Invalid GeoJSON geometry coordinates")
+                errors.append(self.translator.tr("validation.invalid_geojson_geom_coo"))
 
         # validate properties
         if 'properties' not in feature:
-            errors.append("Missing GeoJSON properties")
+            errors.append(self.translator.tr("validation.missing_geojson_props"))
         elif not isinstance(feature.get('properties'), dict):
-            errors.append("Invalid GeoJSON properties")
+            errors.append(self.translator.tr("validation.invalid_geojson_props"))
         else:
             # validate feature attributes
             for attr, value in feature.get('properties').items():
                 if attr not in self.attributes:
                     # unknown attribute or not permitted
-                    errors.append("Feature property '%s' can not be set" %
+                    errors.append(self.translator.tr("validation.feature_prop_cannot_be_set") %
                                   attr)
                 elif value is not None:
                     data_type = self.fields.get(attr, {}).get('data_type')
@@ -697,7 +699,7 @@ class DatasetFeaturesProvider():
                         and not isinstance(value, (str, int, float, bool))
                     ):
                         errors.append(
-                            "Invalid type for feature property '%s'" % attr
+                            self.translator.tr("validation.invalid_type_for_prop") % attr
                         )
 
         # validate CRS
@@ -707,21 +709,20 @@ class DatasetFeaturesProvider():
         elif 'crs' not in feature:
             # CRS not required if geometry is omitted or NULL
             if crs_required:
-                errors.append("Missing GeoJSON CRS")
+                errors.append(self.translator.tr("validation.missing_geojson_crs"))
         elif not isinstance(feature.get('crs'), dict):
-            errors.append("Invalid GeoJSON CRS")
+            errors.append(self.translator.tr("validation.invalid_geojson_crs"))
         else:
             crs = feature['crs']
             if crs.get('type') != 'name':
-                errors.append("GeoJSON CRS must be of type 'name'")
+                errors.append(self.translator.tr("validation.geojson_crs_must_be_type_name"))
             if 'properties' not in crs:
-                errors.append("Missing GeoJSON CRS properties")
+                errors.append(self.translator.tr("validation.missing_geojson_crs_props"))
             elif not isinstance(crs.get('properties'), dict):
-                errors.append("Invalid GeoJSON CRS properties")
+                errors.append(self.translator.tr("validation.invalid_geojson_crs_props"))
             elif not re.match(r'^urn:ogc:def:crs:EPSG::\d{1,6}$',
                               str(crs['properties'].get('name'))):
-                errors.append("GeoJSON CRS is not an OGC CRS URN "
-                              "(e.g. 'urn:ogc:def:crs:EPSG::4326')")
+                errors.append(self.translator.tr("validation.geojson_crs_is_not_ogc_urn"))
 
         return errors
 
@@ -775,7 +776,7 @@ class DatasetFeaturesProvider():
                         error['location'] = row['location']
                     errors.append(error)
                 elif row['is_empty']:
-                    errors.append({'reason': "Empty or incomplete geometry"})
+                    errors.append({'reason': self.translator.tr("validation.empty_or_incomplete_geom")})
 
                 wkt_geom = row['wkt_geom']
                 geom_type = row['geom_type']
@@ -793,7 +794,7 @@ class DatasetFeaturesProvider():
                 for i, v in enumerate(vertices):
                     if i > 0 and vertices[i-1] == v:
                         errors.append({
-                            'reason': "Duplicated point",
+                            'reason': self.translator.tr("validation.duplicate_point"),
                             'location': 'POINT(%s)' % v
                         })
 
@@ -802,7 +803,7 @@ class DatasetFeaturesProvider():
             if (self.geometry_type != 'Geometry' and
                geom_type != self.geometry_type):
                 errors.append({
-                    'reason': "Invalid geometry type: %s is not a %s" %
+                    'reason': self.translator.tr("validation.invalid_geom_type") %
                               (geom_type, self.geometry_type)
                 })
 
@@ -873,7 +874,7 @@ class DatasetFeaturesProvider():
                     value = row['value']
             except (DataError, ProgrammingError) as e:
                 # NOTE: current transaction is aborted
-                errors.append("Invalid value for '%s' for type %s" %
+                errors.append(self.translator.tr("validation.invalid_value") %
                               (attr, data_type))
             finally:
                 # roll back transaction
@@ -886,7 +887,7 @@ class DatasetFeaturesProvider():
             if data_type == 'boolean' and type(input_value) is int:
                 # prevent 'column "..." is of type boolean but expression is of
                 #          type integer'
-                errors.append("Invalid value for '%s' for type %s" %
+                errors.append(self.translator.tr("validation.invalid_value") %
                               (attr, data_type))
                 continue
 
@@ -896,7 +897,7 @@ class DatasetFeaturesProvider():
             maxlength = constraints.get('maxlength')
             if maxlength is not None and len(str(value)) > int(maxlength):
                 errors.append(
-                    "Value for '%s' must be shorter than %d characters" %
+                    self.translator.tr("validation.value_must_be_shorter_than") %
                     (attr, maxlength)
                 )
 
@@ -904,7 +905,7 @@ class DatasetFeaturesProvider():
             minimum = constraints.get('min')
             if minimum is not None and value < minimum:
                 errors.append(
-                    "Value for '%s' must be greater than or equal to %s" %
+                    self.translator.tr("validation.value_must_be_geq_to") %
                     (attr, minimum)
                 )
 
@@ -912,14 +913,14 @@ class DatasetFeaturesProvider():
             maximum = constraints.get('max')
             if maximum is not None and value > maximum:
                 errors.append(
-                    "Value for '%s' must be less than or equal to %s" %
+                    self.translator.tr("validation.value_must_be_leq_to") %
                     (attr, maximum)
                 )
 
             # values
             values = constraints.get('values', {})
             if values and str(value) not in [str(v['value']) for v in values]:
-                errors.append("Invalid value for '%s'" % (attr))
+                errors.append(self.translator.tr("validation.invalid_value_for") % (attr))
 
         # close database connection
         conn.close()
@@ -934,11 +935,11 @@ class DatasetFeaturesProvider():
             elif constraints.get('required', False):
                 # check if required value is present and not blank
                 if attr not in feature['properties']:
-                    errors.append("Missing required value for '%s'" % (attr))
+                    errors.append(self.translator.tr("validation.missing_required_value_for") % (attr))
                 elif feature['properties'][attr] is None:
-                    errors.append("Missing required value for '%s'" % (attr))
+                    errors.append(self.translator.tr("validation.missing_required_value_for") % (attr))
                 elif feature['properties'][attr] == "":
-                    errors.append("Value for '%s' can not be blank" % (attr))
+                    errors.append(self.translator.tr("validation.value_for_cannot_be_blank") % (attr))
 
         return errors
 

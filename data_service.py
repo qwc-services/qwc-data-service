@@ -36,10 +36,11 @@ class DataService():
         self.attachments_service = AttachmentsService(tenant, logger)
         self.db_engine = DatabaseEngine()
 
-    def index(self, identity, dataset, bbox, crs, filterexpr):
+    def index(self, identity, translator, dataset, bbox, crs, filterexpr):
         """Find dataset features inside bounding box.
 
         :param str identity: User identity
+        :param object translator: Translator
         :param str dataset: Dataset ID
         :param str bbox: Bounding box as '<minx>,<miny>,<maxx>,<maxy>' or None
         :param str crs: Client CRS as 'EPSG:<srid>' or None
@@ -47,13 +48,13 @@ class DataService():
         [["<attr>", "<op>", "<value>"], "and|or", ["<attr>", "<op>", "<value>"]]
         """
         dataset_features_provider = self.dataset_features_provider(
-            identity, dataset
+            identity, translator, dataset
         )
         if dataset_features_provider is not None:
             # check read permission
             if not dataset_features_provider.readable():
                 return {
-                    'error': "Dataset not readable",
+                    'error': translator.tr("error.dataset_not_readable"),
                     'error_code': 405
                 }
 
@@ -62,7 +63,7 @@ class DataService():
                 bbox = dataset_features_provider.parse_bbox(bbox)
                 if bbox is None:
                     return {
-                        'error': "Invalid bounding box",
+                        'error': translator.tr("error.invalid_bounding_box"),
                         'error_code': 400
                     }
             srid = None
@@ -71,7 +72,7 @@ class DataService():
                 srid = dataset_features_provider.parse_crs(crs)
                 if srid is None:
                     return {
-                        'error': "Invalid CRS",
+                        'error': translator.tr("error.invalid_crs"),
                         'error_code': 400
                     }
             if filterexpr is not None:
@@ -80,7 +81,7 @@ class DataService():
                 if filterexpr[0] is None:
                     return {
                         'error': (
-                            "Invalid filter expression: %s" % filterexpr[1]
+                            translator.tr("error.invalid_filter_expression") + ": " + filterexpr[1]
                         ),
                         'error_code': 400
                     }
@@ -93,32 +94,32 @@ class DataService():
                 self.logger.error(e)
                 return {
                     'error': (
-                        "Feature query failed. Please check filter expression "
-                        "values and operators."
+                        translator.tr("error.feature_query_failed")
                     ),
                     'error_code': 400
                 }
             return {'feature_collection': feature_collection}
         else:
-            return {'error': "Dataset not found or permission error"}
+            return {'error': translator.tr("error.dataset_not_found")}
 
-    def extent(self, identity, dataset, crs, filterexpr):
+    def extent(self, identity, translator, dataset, crs, filterexpr):
         """Get extent of dataset features.
 
         :param str identity: User identity
+        :param object translator: Translator
         :param str dataset: Dataset ID
         :param str crs: Client CRS as 'EPSG:<srid>' or None
         :param str filterexpr: JSON serialized array of filter expressions:
         [["<attr>", "<op>", "<value>"], "and|or", ["<attr>", "<op>", "<value>"]]
         """
         dataset_features_provider = self.dataset_features_provider(
-            identity, dataset
+            identity, translator, dataset
         )
         if dataset_features_provider is not None:
             # check read permission
             if not dataset_features_provider.readable():
                 return {
-                    'error': "Dataset not readable",
+                    'error': translator.tr("error.dataset_not_readable"),
                     'error_code': 405
                 }
 
@@ -128,7 +129,7 @@ class DataService():
                 srid = dataset_features_provider.parse_crs(crs)
                 if srid is None:
                     return {
-                        'error': "Invalid CRS",
+                        'error': translator.tr("error.invalid_crs"),
                         'error_code': 400
                     }
             if filterexpr is not None:
@@ -137,7 +138,7 @@ class DataService():
                 if filterexpr[0] is None:
                     return {
                         'error': (
-                            "Invalid filter expression: %s" % filterexpr[1]
+                            translator.tr("error.invalid_filter_expression") % filterexpr[1]
                         ),
                         'error_code': 400
                     }
@@ -150,25 +151,25 @@ class DataService():
                 self.logger.error(e)
                 return {
                     'error': (
-                        "Feature query failed. Please check filter expression "
-                        "values and operators."
+                        translator.tr("error.feature_query_failed")
                     ),
                     'error_code': 400
                 }
             return {'extent': {'bbox': extent}}
         else:
-            return {'error': "Dataset not found or permission error"}
+            return {'error': translator.tr("error.dataset_not_found")}
 
-    def show(self, identity, dataset, id, crs):
+    def show(self, identity, translator, dataset, id, crs):
         """Get a dataset feature.
 
         :param str identity: User identity
+        :param object translator: Translator
         :param str dataset: Dataset ID
         :param int id: Dataset feature ID
         :param str crs: Client CRS as 'EPSG:<srid>' or None
         """
         dataset_features_provider = self.dataset_features_provider(
-            identity, dataset
+            identity, translator, dataset
         )
         srid = None
         if crs is not None:
@@ -183,7 +184,7 @@ class DataService():
             # check read permission
             if not dataset_features_provider.readable():
                 return {
-                    'error': "Dataset not readable",
+                    'error': translator.tr("error.dataset_not_readable"),
                     'error_code': 405
                 }
 
@@ -191,47 +192,48 @@ class DataService():
             if feature is not None:
                 return {'feature': feature}
             else:
-                return {'error': "Feature not found"}
+                return {'error': translator.tr("error.feature_not_found")}
         else:
-            return {'error': "Dataset not found or permission error"}
+            return {'error': translator.tr("error.dataset_not_found")}
 
-    def create(self, identity, dataset, feature, files={}):
+    def create(self, identity, translator, dataset, feature, files={}):
         """Create a new dataset feature.
 
         :param str identity: User identity
+        :param object translator: Translator
         :param str dataset: Dataset ID
         :param object feature: GeoJSON Feature
         :param object files: Upload files
         """
 
         dataset_features_provider = self.dataset_features_provider(
-            identity, dataset
+            identity, translator, dataset
         )
         if dataset_features_provider is None:
-            return {'error': "Dataset not found or permission error"}
+            return {'error': translator.tr("error.dataset_not_found")}
 
         # check create permission
         if not dataset_features_provider.creatable():
             return {
-                'error': "Dataset not creatable",
+                'error': translator.tr("error.dataset_not_creatable"),
                 'error_code': 405
             }
 
         # validate input feature and attachments
         validation_errors = dataset_features_provider.validate(
-            feature, new_feature=True
+            translator, feature, new_feature=True
         )
-        validation_errors.update(self.validate_attachments(files, dataset_features_provider, dataset))
+        validation_errors.update(self.validate_attachments(translator, files, dataset_features_provider, dataset))
 
         if validation_errors:
             return self.error_response(
-                "Feature validation failed", validation_errors)
+                translator.tr("error.feature_validation_failed"), validation_errors)
 
         # Save attachments
         saved_attachments = {}
-        save_errors = self.save_attachments(files, dataset, feature, identity, saved_attachments)
+        save_errors = self.save_attachments(translator, files, dataset, feature, identity, saved_attachments)
         if save_errors:
-            return self.error_response("Feature commit failed", save_errors)
+            return self.error_response(translator.tr("error.feature_commit_failed"), save_errors)
 
         self.add_logging_fields(feature, identity)
 
@@ -241,13 +243,13 @@ class DataService():
         except (DataError, IntegrityError,
                 InternalError, ProgrammingError) as e:
             self.logger.error(e)
-            reason = "Feature could not be created"
+            reason = translator.tr("error.feature_could_not_be_created")
             if isinstance(e, IntegrityError):
                 reason += ": " + e.orig.diag.message_detail
             for slug in saved_attachments.values():
                 self.attachments_service.remove_attachment(dataset, slug)
             return {
-                'error': "Feature commit failed",
+                'error': translator.tr("error.feature_commit_failed"),
                 'error_details': {
                     'data_errors': [reason],
                 },
@@ -255,10 +257,11 @@ class DataService():
             }
         return {'feature': feature}
 
-    def update(self, identity, dataset, id, feature, files={}):
+    def update(self, identity, translator, dataset, id, feature, files={}):
         """Update a dataset feature.
 
         :param str identity: User identity
+        :param object translator: Translator
         :param str dataset: Dataset ID
         :param int id: Dataset feature ID
         :param object feature: GeoJSON Feature
@@ -266,39 +269,39 @@ class DataService():
         """
 
         dataset_features_provider = self.dataset_features_provider(
-            identity, dataset
+            identity, translator, dataset
         )
         if dataset_features_provider is None:
-            return {'error': "Dataset not found or permission error"}
+            return {'error': translator.tr("error.dataset_not_found")}
 
         # check update permission
         if not dataset_features_provider.updatable():
             return {
-                'error': "Dataset not updatable",
+                'error': translator.tr("error.dataset_not_updatable"),
                 'error_code': 405
             }
 
         # validate input feature and attachments
         validation_errors = dataset_features_provider.validate(feature)
-        validation_errors.update(self.validate_attachments(files, dataset_features_provider, dataset))
+        validation_errors.update(self.validate_attachments(translator, files, dataset_features_provider, dataset))
 
         if validation_errors:
             return self.error_response(
-                "Feature validation failed", validation_errors)
+                translator.tr("error.feature_validation_failed"), validation_errors)
 
         if validation_errors:
             return self.error_response(
-                "Feature validation failed", validation_errors)
+                translator.tr("error.feature_validation_failed"), validation_errors)
 
         # Save attachments
         saved_attachments = {}
-        save_errors = self.save_attachments(files, dataset, feature, identity, saved_attachments)
+        save_errors = self.save_attachments(translator, files, dataset, feature, identity, saved_attachments)
         if save_errors:
-            return self.error_response("Feature commit failed", save_errors)
+            return self.error_response(translator.tr("error.feature_commit_failed"), save_errors)
 
         # Cleanup previous attachments
         upload_user_field_suffix = self.config.get("upload_user_field_suffix", None)
-        show_result = self.show(identity, dataset, id, None)
+        show_result = self.show(identity, translator, dataset, id, None)
         for key, value in show_result.get('feature', {}).get('properties', {}).items():
             if isinstance(value, str) and value.startswith("attachment://") and feature["properties"][key] != value:
                 self.attachments_service.remove_attachment(dataset, value[13:])
@@ -314,13 +317,13 @@ class DataService():
         except (DataError, IntegrityError,
                 InternalError, ProgrammingError) as e:
             self.logger.error(e)
-            reason = "Feature could not be updated"
+            reason = translator.tr("error.feature_could_not_be_updated")
             if isinstance(e, IntegrityError):
                 reason += ": " + e.orig.diag.message_detail
             for slug in saved_attachments.values():
                 attachments.remove_attachment(dataset, slug)
             return {
-                'error': "Feature commit failed",
+                'error': translator.tr("error.feature_commit_failed"),
                 'error_details': {
                     'data_errors': [reason],
                 },
@@ -329,32 +332,33 @@ class DataService():
         if feature is not None:
             return {'feature': feature}
         else:
-            return {'error': "Feature not found"}
+            return {'error': translator.tr("error.feature_not_found")}
 
-    def destroy(self, identity, dataset, id):
+    def destroy(self, identity, translator, dataset, id):
         """Delete a dataset feature.
 
         :param str identity: User identity
+        :param object translator: Translator
         :param str dataset: Dataset ID
         :param int id: Dataset feature ID
         """
         dataset_features_provider = self.dataset_features_provider(
-            identity, dataset
+            identity, translator, dataset
         )
         if dataset_features_provider is None:
-            return {'error': "Dataset not found or permission error"}
+            return {'error': translator.tr("error.dataset_not_found")}
 
         # check delete permission
         if not dataset_features_provider.deletable():
             return {
-                'error': "Dataset not deletable",
+                'error': translator.tr("error.dataset_not_deletable"),
                 'error_code': 405
             }
 
-        show_result = self.show(identity, dataset, id, None)
+        show_result = self.show(identity, translator, dataset, id, None)
 
         if not dataset_features_provider.destroy(id):
-            return {'error': "Feature not found"}
+            return {'error': translator.tr("error.feature_not_found")}
 
         # cleanup attachments
         for key, value in show_result.get('feature', {}).get('properties', {}).items():
@@ -363,14 +367,15 @@ class DataService():
 
         return {}
 
-    def is_editable(self, identity, dataset, id):
+    def is_editable(self, identity, translator, dataset, id):
         """Returns whether a dataset is editable.
         :param str identity: User identity
+        :param object translator: Translator
         :param str dataset: Dataset ID
         :param int id: Dataset feature ID
         """
         dataset_features_provider = self.dataset_features_provider(
-            identity, dataset
+            identity, translator, dataset
         )
         if dataset_features_provider is not None:
             # check update permission
@@ -379,22 +384,23 @@ class DataService():
 
         return dataset_features_provider.exists(id)
 
-    def dataset_features_provider(self, identity, dataset):
+    def dataset_features_provider(self, identity, translator, dataset):
         """Return DatasetFeaturesProvider if available and permitted.
 
         :param str identity: User identity
+        :param object translator: Translator
         :param str dataset: Dataset ID
         """
         dataset_features_provider = None
 
         # check permissions
         permissions = self.dataset_edit_permissions(
-            dataset, identity
+            dataset, identity, translator
         )
         if permissions:
             # create DatasetFeaturesProvider
             dataset_features_provider = DatasetFeaturesProvider(
-                permissions, self.db_engine, self.logger
+                permissions, self.db_engine, self.logger, translator
             )
 
         return dataset_features_provider
@@ -414,11 +420,12 @@ class DataService():
             'datasets': datasets
         }
 
-    def dataset_edit_permissions(self, dataset, identity):
+    def dataset_edit_permissions(self, dataset, identity, translator):
         """Return dataset edit permissions if available and permitted.
 
         :param str dataset: Dataset ID
         :param obj identity: User identity
+        :param object translator: Translator
         """
         # find resource for requested dataset
         resource = self.resources['datasets'].get(dataset)
@@ -495,7 +502,7 @@ class DataService():
                     try:
                         table, key_field_name, value_field_name = keyvalrel.split(":")
                         dataset_features_provider = self.dataset_features_provider(
-                            identity, table
+                            identity, translator, table
                         )
                         values = dataset_features_provider.keyvals(key_field_name, value_field_name)
                         fields[field['name']]['constraints']['values'] = values
@@ -526,9 +533,10 @@ class DataService():
             "deletable": deletable
         }
 
-    def validate_attachments(self, files, dataset_features_provider, dataset):
+    def validate_attachments(self, translator, files, dataset_features_provider, dataset):
         """Validates the specified attachment files
 
+        :param object translator: Translator
         :param list files: Uploaded files
         :param obj dataset_features_provider: Dataset features provider
         """
@@ -536,18 +544,19 @@ class DataService():
         for key in files:
             filedata = files[key]
             field = key[5:] # remove file: prefix
-            attachment_valid, message = self.attachments_service.validate_attachment(filedata, dataset_features_provider.fields[field], dataset)
+            attachment_valid, message = self.attachments_service.validate_attachment(translator, filedata, dataset_features_provider.fields[field], dataset)
             if not attachment_valid:
-                attachment_errors.append("Attachment validation failed for " + key + ": " + message)
+                attachment_errors.append(translator.tr("error.attachment_validation_failed") % key + ": " + message)
         if attachment_errors:
             return {
                 'attachment_errors': attachment_errors
             }
         return {}
 
-    def save_attachments(self, files, dataset, feature, identity, saved_attachments):
+    def save_attachments(self, translator, files, dataset, feature, identity, saved_attachments):
         """Saves the specified attachment files
 
+        :param object translator: Translator
         :param list files: Uploaded files
         :param str dataset: Dataset ID
         :param dict feature: Feature object
@@ -557,11 +566,11 @@ class DataService():
 
         for key in files:
             filedata = files[key]
-            slug = self.attachments_service.save_attachment(dataset, filedata)
+            slug = self.attachments_service.save_attachment(dataset, filedata, feature["properties"])
             if not slug:
                 for slug in saved_attachments.values():
                     self.attachments_service.remove_attachment(dataset, slug)
-                return {'attachment_errors': ["Failed to save attachment: " + key]}
+                return {'attachment_errors': [translator.tr("error.failed_to_save_attachment") + ": " + key]}
             else:
                 saved_attachments[key] = slug
                 field = key.lstrip("file:")

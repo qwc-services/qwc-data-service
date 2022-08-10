@@ -39,14 +39,16 @@ class AttachmentsService():
         self.allowed_extensions_per_dataset = config.get(
             'allowed_extensions_per_dataset', {}
         )
+        self.attachment_store_pattern = config.get('attachment_store_pattern', "{random}/{filename}")
         for dataset in self.allowed_extensions_per_dataset:
             self.allowed_extensions_per_dataset[dataset] = self.allowed_extensions_per_dataset[dataset].split(",")
 
         self.clamav = config.get('clamd_host')
 
-    def validate_attachment(self, file, fieldconfig, dataset):
+    def validate_attachment(self, translator, file, fieldconfig, dataset):
         """Validate file size of an attachment file.
 
+        :param obj translator: Translator
         :param str dataset: Dataset ID
         :param FileStorage file: Attached file
         :param dict fieldconfig: Field configuration
@@ -70,12 +72,12 @@ class AttachmentsService():
             if size > self.max_file_size_per_dataset[dataset]:
                 self.logger.info(
                     "File too large: %s: %d" % (file.filename, size))
-                return (False, "File too large")
+                return (False, translator.tr("error.file_too_large"))
         # Global service configuration:
         elif size > self.max_file_size:
             self.logger.info(
                 "File too large: %s: %d" % (file.filename, size))
-            return (False, "File too large")
+            return (False, translator.tr("error.file_too_large"))
 
 
         # Get file extension
@@ -93,19 +95,19 @@ class AttachmentsService():
             if ext not in fileextensions:
                 self.logger.info(
                     "Forbidden file extension: %s: %s" % (file.filename, ext))
-                return (False, "Forbidden file extension")
+                return (False, translator.tr("error.forbidden_file_extension"))
         # Dataset configuration:
         elif dataset in self.allowed_extensions_per_dataset:
             if ext not in self.allowed_extensions_per_dataset[dataset]:
                 self.logger.info(
                     "Forbidden file extension: %s: %s" % (file.filename, ext))
-                return (False, "Forbidden file extension")
+                return (False, translator.tr("error.forbidden_file_extension"))
         # Global service configuration:
         elif self.allowed_extensions:
             if ext not in self.allowed_extensions:
                 self.logger.info(
                     "Forbidden file extension: %s: %s" % (file.filename, ext))
-                return (False, "Forbidden file extension")
+                return (False, translator.tr("error.forbidden_file_extension"))
 
         # ClamAV virus check
         if self.clamav:
@@ -113,29 +115,36 @@ class AttachmentsService():
             if result:
                 self.logger.warn(
                     "ClamAV check failed for %s: %s" % (file.filename, result))
-                return (False, "Forbidden file content")
+                return (False, translator.tr("error.forbidden_file_content"))
 
         return (True, None)
 
-    def save_attachment(self, dataset, file):
+    def save_attachment(self, dataset, file, fields):
         """Save attachment file for a dataset and return its slug.
 
         :param str dataset: Dataset ID
         :param FileStorage file: Attached file
+        :param dict fields: Feature fields
         """
         try:
+            random = self.generate_slug(20)
+            slug = self.attachment_store_pattern.format(
+                random=random,
+                filename=secure_filename(file.filename),
+                ext=os.path.splitext(file.filename)[1],
+                **fields
+            )
+            target_path = os.path.join(self.attachments_base_dir, slug)
+
             # create target dir
-            slug = self.generate_slug(20)
-            target_dir = os.path.join(
-                self.attachments_base_dir, self.tenant, dataset, slug)
+            target_dir = os.path.dirname(target_path)
             os.makedirs(target_dir, 0o750, True)
 
             # save attachment file
-            filename = secure_filename(file.filename)
-            file.save(os.path.join(target_dir, filename))
+            file.save(target_path)
             self.logger.info("Saved attachment: %s" % slug)
 
-            return slug + "/" + filename
+            return slug
         except Exception as e:
             self.logger.error("Could not save attachment: %s" % e)
             return None

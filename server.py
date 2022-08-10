@@ -12,6 +12,7 @@ from qwc_services_core.api import create_model, CaseInsensitiveArgument
 from qwc_services_core.auth import auth_manager, optional_auth, get_auth_user
 from qwc_services_core.runtime_config import RuntimeConfig
 from qwc_services_core.tenant_handler import TenantHandler
+from qwc_services_core.translator import Translator
 from data_service import DataService
 
 
@@ -349,6 +350,7 @@ class DataCollection(Resource):
         Return dataset features inside bounding box and matching filter as a
         GeoJSON FeatureCollection.
         """
+        translator = Translator(app, request)
         args = index_parser.parse_args()
         bbox = args['bbox']
         crs = args['crs']
@@ -356,7 +358,7 @@ class DataCollection(Resource):
 
         data_service = data_service_handler()
         result = data_service.index(
-            get_auth_user(), dataset, bbox, crs, filterexpr
+            get_auth_user(), translator, dataset, bbox, crs, filterexpr
         )
         if 'error' not in result:
             return result['feature_collection']
@@ -378,6 +380,7 @@ class DataCollection(Resource):
         """
         config_handler = RuntimeConfig("data", app.logger)
         config = config_handler.tenant_config(tenant_handler.tenant())
+        translator = Translator(app, request)
 
         if request.is_json:
             # parse request data (NOTE: catches invalid JSON)
@@ -386,7 +389,7 @@ class DataCollection(Resource):
                 data_service = data_service_handler()
 
                 result = data_service.create(
-                    get_auth_user(), dataset, feature)
+                    get_auth_user(), translator, dataset, feature)
                 if 'error' not in result:
                     return result['feature'], 201
                 else:
@@ -394,9 +397,9 @@ class DataCollection(Resource):
                     error_details = result.get('error_details') or {}
                     api.abort(error_code, result['error'], **error_details)
             else:
-                api.abort(400, "JSON is not an object")
+                api.abort(400, translator.tr("error.json_is_not_an_object"))
         else:
-            api.abort(400, "Request data is not JSON")
+            api.abort(400, translator.tr("error.request_data_is_not_json"))
 
 
 @api.route('/<path:dataset>/extent')
@@ -419,13 +422,14 @@ class DataCollection(Resource):
         Return dataset features inside bounding box and matching filter as a
         GeoJSON FeatureCollection.
         """
+        translator = Translator(app, request)
         args = index_parser.parse_args()
         crs = args['crs']
         filterexpr = args['filter']
 
         data_service = data_service_handler()
         result = data_service.extent(
-            get_auth_user(), dataset, crs, filterexpr
+            get_auth_user(), translator, dataset, crs, filterexpr
         )
         if 'error' not in result:
             return result['extent']
@@ -454,11 +458,12 @@ class DataMember(Resource):
 
         <b>crs</b>: Client CRS, e.g. <b>EPSG:3857<b>
         """
+        translator = Translator(app, request)
         args = show_parser.parse_args()
         crs = args['crs']
 
         data_service = data_service_handler()
-        result = data_service.show(get_auth_user(), dataset, id, crs)
+        result = data_service.show(get_auth_user(), translator, dataset, id, crs)
         if 'error' not in result:
             return result['feature']
         else:
@@ -477,6 +482,7 @@ class DataMember(Resource):
         Update dataset feature with ID from a GeoJSON Feature and return it as
         a GeoJSON Feature.
         """
+        translator = Translator(app, request)
         if request.is_json:
             # parse request data (NOTE: catches invalid JSON)
             feature = api.payload
@@ -484,7 +490,7 @@ class DataMember(Resource):
                 data_service = data_service_handler()
 
                 result = data_service.update(
-                    get_auth_user(), dataset, id, feature
+                    get_auth_user(), translator, dataset, id, feature
                 )
                 if 'error' not in result:
                     return result['feature']
@@ -493,9 +499,9 @@ class DataMember(Resource):
                     error_details = result.get('error_details') or {}
                     api.abort(error_code, result['error'], **error_details)
             else:
-                api.abort(400, "JSON is not an object")
+                api.abort(400, translator.tr("error.json_is_not_an_object"))
         else:
-            api.abort(400, "Request data is not JSON")
+            api.abort(400, translator.tr("error.request_data_is_not_json"))
 
     @api.doc('destroy')
     @api.response(405, 'Dataset not deletable')
@@ -506,11 +512,12 @@ class DataMember(Resource):
 
         Delete dataset feature with ID.
         """
+        translator = Translator(app, request)
         data_service = data_service_handler()
-        result = data_service.destroy(get_auth_user(), dataset, id)
+        result = data_service.destroy(get_auth_user(), translator, dataset, id)
         if 'error' not in result:
             return {
-                'message': "Dataset feature deleted"
+                'message': translator.tr("error.dataset_feature_deleted")
             }
         else:
             error_code = result.get('error_code') or 404
@@ -534,17 +541,18 @@ class CreateFeatureMultipart(Resource):
         Create new dataset feature from a GeoJSON Feature and return it as a
         GeoJSON Feature.
         """
+        translator = Translator(app, request)
         args = feature_multipart_parser.parse_args()
         try:
             feature = json.loads(args['feature'])
         except:
             feature = None
         if not isinstance(feature, dict):
-            api.abort(400, "feature is not an object")
+            api.abort(400, translator.tr("error.feature_is_not_an_object"))
 
         data_service = data_service_handler()
         result = data_service.create(
-            get_auth_user(), dataset, feature, request.files
+            get_auth_user(), translator, dataset, feature, request.files
         )
         if 'error' not in result:
             return result['feature'], 201
@@ -572,17 +580,18 @@ class EditFeatureMultipart(Resource):
         Update dataset feature with ID from a GeoJSON Feature and return it as
         a GeoJSON Feature.
         """
+        translator = Translator(app, request)
         args = feature_multipart_parser.parse_args()
         try:
             feature = json.loads(args['feature'])
         except:
             feature = None
         if not isinstance(feature, dict):
-            api.abort(400, "feature is not an object")
+            api.abort(400, translator.tr("error.feature_is_not_an_object"))
 
         data_service = data_service_handler()
         result = data_service.update(
-            get_auth_user(), dataset, id, feature, request.files
+            get_auth_user(), translator, dataset, id, feature, request.files
         )
         if 'error' not in result:
             return result['feature']
@@ -600,11 +609,12 @@ class AttachmentDownloader(Resource):
     @api.param('file', 'The file to download')
     @api.expect(get_attachment_parser)
     def get(self, dataset):
+        translator = Translator(app, request)
         args = get_attachment_parser.parse_args()
         data_service = data_service_handler()
         path = data_service.resolve_attachment(dataset, args['file'])
         if not path:
-            api.abort(404, 'Unable to read file')
+            api.abort(404, translator.tr("error.unable_to_read_file"))
 
         return send_file(path, as_attachment=True, attachment_filename=os.path.basename(path))
 
@@ -620,6 +630,7 @@ class Relations(Resource):
     @api.marshal_with(relationvalues_response, code=201)
     @optional_auth
     def get(self, dataset, id):
+        translator = Translator(app, request)
         data_service = data_service_handler()
         args = get_relations_parser.parse_args()
         relations = args['tables'] or ""
@@ -631,7 +642,7 @@ class Relations(Resource):
             except:
                 continue
             result = data_service.index(
-                get_auth_user(), table, None, crs, '[["%s", "=", %d]]' % (fk_field_name, id)
+                get_auth_user(), translator, table, None, crs, '[["%s", "=", %d]]' % (fk_field_name, id)
             )
             ret[table] = {"fk": fk_field_name, "features": result['feature_collection']['features'] if 'feature_collection' in result else []}
             if sortcol:
@@ -651,19 +662,20 @@ class Relations(Resource):
         """
         args = post_relations_parser.parse_args()
         crs = args['crs'] or None
+        translator = Translator(app, request)
 
         try:
             payload = json.loads(args['values'])
         except:
             payload = None
         if not isinstance(payload, dict):
-            api.abort(400, "JSON is not an object")
+            api.abort(400, translator.tr("error.json_is_not_an_object"))
 
         data_service = data_service_handler()
 
         # Check if dataset with specified id exists
-        if not data_service.is_editable(get_auth_user(), dataset, id):
-            api.abort(404, "Dataset or feature not found or permission error")
+        if not data_service.is_editable(get_auth_user(), translator, dataset, id):
+            api.abort(404, translator.tr("error.dataset_or_feature_not_found"))
 
         ret = {}
         haserrors = False
@@ -681,7 +693,7 @@ class Relations(Resource):
                     rel_feature['properties'][fk_field] = id
 
                 if rel_feature['properties'].get(fk_field, None) != id:
-                    rel_feature["__error__"] = "FK validation failed"
+                    rel_feature["__error__"] = translator.tr("error.fk_validation_failed")
                     ret[rel_table]["features"].append(rel_feature)
                     haserrors = True
                     continue
@@ -699,13 +711,13 @@ class Relations(Resource):
                         rel_feature['properties'][field] = request.files[key].filename
 
                 if not rel_feature_status:
-                    result = data_service.show(get_auth_user(), rel_table, rel_feature["id"], crs)
+                    result = data_service.show(get_auth_user(), translator, rel_table, rel_feature["id"], crs)
                 elif rel_feature_status == "new":
-                    result = data_service.create(get_auth_user(), rel_table, rel_feature, files)
+                    result = data_service.create(get_auth_user(), translator, rel_table, rel_feature, files)
                 elif rel_feature_status == "changed":
-                    result = data_service.update(get_auth_user(), rel_table, rel_feature["id"], rel_feature, files)
+                    result = data_service.update(get_auth_user(), translator, rel_table, rel_feature["id"], rel_feature, files)
                 elif rel_feature_status.startswith("deleted"):
-                    result = data_service.destroy(get_auth_user(), rel_table, rel_feature["id"])
+                    result = data_service.destroy(get_auth_user(), translator, rel_table, rel_feature["id"])
                 else:
                     continue
                 if "error" in result:
@@ -729,6 +741,7 @@ class KeyValues(Resource):
     @optional_auth
     def get(self):
         args = get_relations_parser.parse_args()
+        translator = Translator(app, request)
 
         data_service = data_service_handler()
 
@@ -741,7 +754,7 @@ class KeyValues(Resource):
                 continue
             ret[table] = []
             result = data_service.index(
-                get_auth_user(), table, None, None, None
+                get_auth_user(), data_service, table, None, None, None
             )
             if 'feature_collection' in result:
                 for feature in result['feature_collection']['features']:

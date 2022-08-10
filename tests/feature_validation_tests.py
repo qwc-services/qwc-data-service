@@ -1,15 +1,31 @@
+import os
 import unittest
 
 from flask.logging import logging
 from qwc_services_core.database import DatabaseEngine
+from qwc_services_core.translator import Translator
 from dataset_features_provider import DatasetFeaturesProvider
 
+class FakeRequest:
+    @property
+    def headers(self):
+        return {}
+
+class FakeApp:
+    @property
+    def logger(self):
+        return logging.getLogger()
+
+    @property
+    def root_path(self):
+        return os.path.join(os.path.dirname(__file__), "..")
 
 class FeatureValidationTestCase(unittest.TestCase):
     """Test case for feature validations"""
 
     def setUp(self):
         self.db_engine = DatabaseEngine()
+        self.translator = Translator(FakeApp(), FakeRequest())
 
     def tearDown(self):
         pass
@@ -104,7 +120,7 @@ class FeatureValidationTestCase(unittest.TestCase):
                     'numeric_scale': 2
                 }
             dataset_features_provider = DatasetFeaturesProvider(
-                config, self.db_engine, logging.getLogger()
+                config, self.db_engine, logging.getLogger(), self.translator
             )
 
             for value in valid_values:
@@ -169,7 +185,7 @@ class FeatureValidationTestCase(unittest.TestCase):
                 'constraints': constraints
             })
             dataset_features_provider = DatasetFeaturesProvider(
-                config, self.db_engine, logging.getLogger()
+                config, self.db_engine, logging.getLogger(), self.translator
             )
 
             for value in valid_values:
@@ -222,7 +238,7 @@ class FeatureValidationTestCase(unittest.TestCase):
         })
 
         dataset_features_provider = DatasetFeaturesProvider(
-            config, self.db_engine, logging.getLogger()
+            config, self.db_engine, logging.getLogger(), self.translator
         )
         errors = dataset_features_provider.validate(feature)
 
@@ -256,7 +272,7 @@ class FeatureValidationTestCase(unittest.TestCase):
         feature = self.build_feature()
 
         dataset_features_provider = DatasetFeaturesProvider(
-            config, self.db_engine, logging.getLogger()
+            config, self.db_engine, logging.getLogger(), self.translator
         )
 
         # required field not in properties
