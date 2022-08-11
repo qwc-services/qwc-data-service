@@ -1,6 +1,7 @@
 import os
 import unittest
 
+from werkzeug.datastructures import LanguageAccept
 from flask.logging import logging
 from qwc_services_core.database import DatabaseEngine
 from qwc_services_core.translator import Translator
@@ -8,8 +9,8 @@ from dataset_features_provider import DatasetFeaturesProvider
 
 class FakeRequest:
     @property
-    def headers(self):
-        return {}
+    def accept_languages(self):
+        return LanguageAccept([('en', 1)])
 
 class FakeApp:
     @property
