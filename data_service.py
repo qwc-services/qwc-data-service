@@ -221,7 +221,7 @@ class DataService():
 
         # validate input feature and attachments
         validation_errors = dataset_features_provider.validate(
-            translator, feature, new_feature=True
+            feature, new_feature=True
         )
         validation_errors.update(self.validate_attachments(translator, files, dataset_features_provider, dataset))
 
