@@ -738,28 +738,28 @@ class KeyValues(Resource):
     @api.doc('get_relations')
     @api.param('tables', 'Comma separated list of keyvalue tables of the form "tablename:key_field_name:value_field_name"')
     @api.param(
-        'filter', 'JSON serialized array of filter expressions: '
-        '`[["<name>", "<op>", <value>],"and|or",["<name>","<op>",<value>]]`')
+        'filters', 'JSON serialized array of filter expressions, the same length as the number of specified tables: '
+        '`[[["<name>", "<op>", <value>],"and|or",["<name>","<op>",<value>]], ...]`')
     @api.expect(get_relations_parser)
     @api.marshal_with(keyvals_response, code=201)
     @optional_auth
     def get(self):
         args = get_relations_parser.parse_args()
-        filterexpr = args['filter']
+        filterexpr = json.loads(args.get('filter') or "[]")
         translator = Translator(app, request)
 
         data_service = data_service_handler()
 
         keyvals = args['tables'] or ""
         ret = {}
-        for keyval in keyvals.split(","):
+        for (idx, keyval) in enumerate(keyvals.split(",")):
             try:
                 table, key_field_name, value_field_name = keyval.split(":")
             except:
                 continue
             ret[table] = []
             result = data_service.index(
-                get_auth_user(), translator, table, None, None, filterexpr
+                get_auth_user(), translator, table, None, None, json.dumps(filterexpr[idx]) if filterexpr and len(filterexpr) > idx and filterexpr[idx] else None
             )
             if 'feature_collection' in result:
                 for feature in result['feature_collection']['features']:
