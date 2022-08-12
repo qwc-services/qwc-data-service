@@ -124,7 +124,7 @@ class DatasetFeaturesProvider():
                 "maxy": bbox[3]
             })
 
-        if filterexpr is not None:
+        if filterexpr is not None and filterexpr[0]:
             where_clauses.append(filterexpr[0])
             params.update(filterexpr[1])
 
@@ -533,16 +533,25 @@ class DatasetFeaturesProvider():
                 if type(column_name) is not str:
                     return (None, "Invalid column name in %s" % entry)
 
+                ignore_if_not_exists = False
+                if column_name.startswith("?"):
+                    ignore_if_not_exists = True
+                    column_name = column_name[1:]
+
                 if (
                     column_name != self.primary_key
                     and column_name not in self.attributes
                 ):
-                    # column not available or not permitted
-                    return (
-                        None,
-                        "Column name not found or permission error in %s" %
-                        entry
-                    )
+                    if ignore_if_not_exists:
+                        # Skip filter if column does not exists
+                        continue
+                    else:
+                        # column not available or not permitted
+                        return (
+                            None,
+                            "Column name not found or permission error in %s" %
+                            entry
+                        )
 
                 # operator
                 op = entry[1].upper().strip()
@@ -575,7 +584,7 @@ class DatasetFeaturesProvider():
             i += 1
 
         if not sql:
-            return (None, "Empty expression")
+            return ("", [])
         else:
             return ("(%s)" % " ".join(sql), params)
 

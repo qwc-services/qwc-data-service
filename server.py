@@ -57,7 +57,7 @@ This expression is a serialized JSON array of the format:
 
     [["<name>", "<op>", <value>],"and|or",["<name>","<op>",<value>],...]
 
-* `name` is the attribute column name
+* `name` is the attribute column name. If `name` begins with `?`, the filter is only applied if the column name exists.
 * `op` can be one of
 
       "=", "!=", "<>", "<", ">", "<=", ">=", "LIKE", "ILIKE", "IS", "IS NOT"
