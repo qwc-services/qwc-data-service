@@ -316,6 +316,7 @@ get_attachment_parser.add_argument('file', required=True)
 get_relations_parser = reqparse.RequestParser(argument_class=CaseInsensitiveArgument)
 get_relations_parser.add_argument('tables', required=True)
 get_relations_parser.add_argument('crs')
+get_relations_parser.add_argument('filter')
 
 post_relations_parser = reqparse.RequestParser(argument_class=CaseInsensitiveArgument)
 post_relations_parser.add_argument('crs')
@@ -736,11 +737,15 @@ class Relations(Resource):
 class KeyValues(Resource):
     @api.doc('get_relations')
     @api.param('tables', 'Comma separated list of keyvalue tables of the form "tablename:key_field_name:value_field_name"')
+    @api.param(
+        'filter', 'JSON serialized array of filter expressions: '
+        '`[["<name>", "<op>", <value>],"and|or",["<name>","<op>",<value>]]`')
     @api.expect(get_relations_parser)
     @api.marshal_with(keyvals_response, code=201)
     @optional_auth
     def get(self):
         args = get_relations_parser.parse_args()
+        filterexpr = args['filter']
         translator = Translator(app, request)
 
         data_service = data_service_handler()
@@ -754,7 +759,7 @@ class KeyValues(Resource):
                 continue
             ret[table] = []
             result = data_service.index(
-                get_auth_user(), data_service, table, None, None, None
+                get_auth_user(), data_service, table, None, None, filterexpr
             )
             if 'feature_collection' in result:
                 for feature in result['feature_collection']['features']:
