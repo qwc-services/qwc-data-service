@@ -1,6 +1,6 @@
 {
   "locale": "it",
-  "errore": {
+  "error": {
     "json_is_not_object": "JSON non è un oggetto",
     "request_data_is_not_json": "I dati della richiesta non sono JSON",
     "dataset_not_readable": "Dataset non leggibile",
