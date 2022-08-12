@@ -759,7 +759,7 @@ class KeyValues(Resource):
                 continue
             ret[table] = []
             result = data_service.index(
-                get_auth_user(), data_service, table, None, None, filterexpr
+                get_auth_user(), translator, table, None, None, filterexpr
             )
             if 'feature_collection' in result:
                 for feature in result['feature_collection']['features']:
