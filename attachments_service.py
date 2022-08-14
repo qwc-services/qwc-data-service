@@ -134,7 +134,7 @@ class AttachmentsService():
                 ext=os.path.splitext(file.filename)[1],
                 **fields
             )
-            target_path = os.path.join(self.attachments_base_dir, slug)
+            target_path = os.path.join(self.attachments_base_dir, self.tenant, dataset, slug)
 
             # create target dir
             target_dir = os.path.dirname(target_path)
