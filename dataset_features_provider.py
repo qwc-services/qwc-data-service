@@ -912,7 +912,7 @@ class DatasetFeaturesProvider():
 
             # min
             minimum = constraints.get('min')
-            if minimum is not None and value < minimum:
+            if minimum is not None and float(value) < minimum:
                 errors.append(
                     self.translator.tr("validation.value_must_be_geq_to") %
                     (attr, minimum)
@@ -920,7 +920,7 @@ class DatasetFeaturesProvider():
 
             # max
             maximum = constraints.get('max')
-            if maximum is not None and value > maximum:
+            if maximum is not None and float(value) > maximum:
                 errors.append(
                     self.translator.tr("validation.value_must_be_leq_to") %
                     (attr, maximum)
