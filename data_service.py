@@ -246,6 +246,8 @@ class DataService():
             reason = translator.tr("error.feature_could_not_be_created")
             if isinstance(e, IntegrityError):
                 reason += ": " + e.orig.diag.message_detail
+            elif isinstance(e, InternalError):
+                reason += ": " + e.orig.diag.message_primary
             for slug in saved_attachments.values():
                 self.attachments_service.remove_attachment(dataset, slug)
             return {
@@ -320,6 +322,8 @@ class DataService():
             reason = translator.tr("error.feature_could_not_be_updated")
             if isinstance(e, IntegrityError):
                 reason += ": " + e.orig.diag.message_detail
+            elif isinstance(e, InternalError):
+                reason += ": " + e.orig.diag.message_primary
             for slug in saved_attachments.values():
                 attachments.remove_attachment(dataset, slug)
             return {
