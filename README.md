@@ -279,7 +279,16 @@ Key-value relations:
 
 - For Drag and Drop designer forms, use widgets of type Value Relation. In the generated designer form, the naming convention indicated below is used.
 - In a manually created Qt-Designer Ui form, you can use key-value relations for combo box entries by naming the `QComboBox` widget according to the following pattern: `kvrel__<fieldname>__<kvtablename>__<kvtable_valuefield>__<kvtable_labelfield>`. `<kvtablename>` refers to a table containing a field called `<kvtable_valuefield>` for the value of the entry and a field `<kvtable_labelfield>` for the label of the entry. For key-value relations inside a 1:N relation, use `kvrel__<reltablename>__<fieldname>__<kvtablename>__<kvtable_valuefield>__<kvtable_labelfield>`. `<kvtablename>`
-- *Note:* In any case, the relation table needs to be added as a (geometryless) table to the QGIS Project. You also need to set appropriate permissions for the relation table dataset in the QWC admin backend.
+- *Note:* In any case, the relation table needs to be added as a (geometryless) table to the QGIS Project. You also need to set appropriate permissions for the relation table dataset in the QWC admin backend. Alternatively, you can set `"autogen_keyvaltable_datasets": true` in the config generator configuration, to automatically generate resources and read-only permissions as required.
+
+Special form widgets:
+
+- In manually created Qt-Designer Ui forms, there are a number of special widgets you can define:
+
+ * *Images*: To display attribute values which contain an image URL as an inline image, use a `QLabel` named `img__<fieldname>`.
+ * *Linked features*: To display a button to choose a linked feature and edit it's attributes in a nested edit form, create a `QPushButton` named `featurelink__<linkdataset>__<fieldname>` (simple join) or `featurelink__<linkdataset>__<reltable>__<fieldname>` in a 1:N relation. In a 1:N relation, `linkdataset` can be equal to `reltable` to edit the relation record itself in the nested form. `fieldname` will contain the `id` of the linked feature.
+ * *External fields*: Some times it is useful to display information from an external source in the edit form. This can be accomplished by creating a `QWidget` with name `ext__<fieldname>` and using a form preprocessor hook (see `registerFormPreprocessor` in [`QtDesignerForm.jsx`](https://github.com/qgis/qwc2/blob/master/components/QtDesignerForm.jsx) to populate the field by assigning a React fragment to `formData.externalFields.<fieldname>`.
+ * *Buttons*: To add a button with a custom action, add a `QPushButton` with name `btn__<buttonname>`, and use a form preprocessor hook to set the custom function to `formData.buttons.buttonname.onClick`.
 
 Data service configuration:
 
