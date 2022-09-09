@@ -104,6 +104,7 @@
                     "data_type": {
                       "type": "string",
                       "enum": [
+                        "USER-DEFINED",
                         "bigint",
                         "boolean",
                         "character",
