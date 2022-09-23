@@ -849,7 +849,7 @@ class DatasetFeaturesProvider():
             value = None
 
             # query the correct type name for user-defined columns
-            if data_type == 'USER-DEFINED' : 
+            if data_type == 'USER-DEFINED': 
                 sql =  sql_text(("""
                 SELECT udt_schema::text ||'.'|| udt_name::text as defined_type
                 FROM information_schema.columns
