@@ -23,10 +23,10 @@ jobs:
           cp pg_service-write.conf ~/.pg_service.conf
           docker-compose -f docker-compose-example.yml up -d qwc-postgis
 
-      - name: Setting up python 3.6
+      - name: Setting up python 3.9
         uses: actions/setup-python@v2
         with:
-            python-version: '3.6'
+            python-version: '3.9'
 
       - name: Run unittests
         run: |
