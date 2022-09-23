@@ -1063,11 +1063,16 @@ class DatasetFeaturesProvider():
         # get permitted attribute values
         bound_values = OrderedDict()
         attribute_columns = []
+        defaulted_attribute_columns = []
         return_columns = list(self.attributes)
         placeholdercount = 0
+        defaultedProperties = feature.get('defaultedProperties', [])
 
         for attr in self.attributes:
             if attr in feature['properties']:
+                if attr in defaultedProperties:
+                    defaulted_attribute_columns.append(attr)
+                    continue
                 data_type = self.fields.get(attr, {}).get('data_type')
                 attribute_columns.append(attr)
                 placeholder_name = "__val%d" % placeholdercount
@@ -1133,6 +1138,10 @@ class DatasetFeaturesProvider():
         return_columns = (', ').join(
             self.escape_column_names([self.primary_key] + return_columns)
         )
+
+        if defaulted_attribute_columns:
+            columns += ', ' + ', '.join(defaulted_attribute_columns)
+            values_sql += ', ' + ', '.join(map(lambda x: "default", defaulted_attribute_columns))
 
         return {
             'columns': columns,

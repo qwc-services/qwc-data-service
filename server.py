@@ -171,6 +171,7 @@ geojson_feature_request = create_model(api, 'Input Feature', [
     ['properties', fields.Raw(required=True, description='Feature properties',
                               example={'name': 'Example', 'type': 2, 'num': 4}
                               )],
+    ['defaultedProperties', fields.List(fields.String, required=False)],
     ['crs', fields.Nested(geojson_crs, required=False, allow_null=True,
                           description='Coordinate reference system')]
 ])
