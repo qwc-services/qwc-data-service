@@ -848,6 +848,19 @@ class DatasetFeaturesProvider():
             input_value = feature['properties'][attr]
             value = None
 
+            # query the correct type name for user-defined columns
+            if data_type == 'USER-DEFINED': 
+                sql =  sql_text(("""
+                SELECT udt_schema::text ||'.'|| udt_name::text as defined_type
+                FROM information_schema.columns
+                WHERE table_schema = '{schema}' AND column_name = '{column}' and table_name = '{table}'
+                GROUP BY defined_type
+                LIMIT 1;
+                """).format(schema = self.schema, table = self.table_name, column = attr))
+                result = conn.execute(sql)
+                for row in result:
+                    data_type = row['defined_type']
+
             if data_type == 'numeric' and \
                 constraints.get('numeric_precision', None) and \
                 constraints.get('numeric_scale', None):
