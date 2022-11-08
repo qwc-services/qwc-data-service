@@ -8,12 +8,15 @@ from sqlalchemy.exc import (DataError, IntegrityError,
 from qwc_services_core.database import DatabaseEngine
 from qwc_services_core.permissions_reader import PermissionsReader
 from qwc_services_core.runtime_config import RuntimeConfig
+from qwc_services_core.auth import get_username
 from dataset_features_provider import DatasetFeaturesProvider
 from attachments_service import AttachmentsService
 
 
 ERROR_DETAILS_LOG_ONLY = os.environ.get(
     'ERROR_DETAILS_LOG_ONLY', 'False') == 'True'
+ENABLE_FEATURE_PROVIDER_CACHE = os.environ.get(
+    'ENABLE_FEATURE_PROVIDER_CACHE', 'False') == 'True'
 
 
 class DataService():
@@ -35,6 +38,10 @@ class DataService():
         self.permissions_handler = PermissionsReader(tenant, logger)
         self.attachments_service = AttachmentsService(tenant, logger)
         self.db_engine = DatabaseEngine()
+        # Creating a provider with correct permissions can be expensive
+        # So we cache it for (tenant,dataset,username) tuples
+        # TODO: Limit size with a LRU cache
+        self.dataset_features_provider_cache = {}
 
     def index(self, identity, translator, dataset, bbox, crs, filterexpr):
         """Find dataset features inside bounding box.
@@ -391,21 +398,27 @@ class DataService():
     def dataset_features_provider(self, identity, translator, dataset):
         """Return DatasetFeaturesProvider if available and permitted.
 
-        :param str identity: User identity
+        :param object identity: User identity
         :param object translator: Translator
         :param str dataset: Dataset ID
         """
-        dataset_features_provider = None
+        cache_key = f"{self.tenant}-{dataset}-{get_username(identity)}"
+        dataset_features_provider = \
+            self.dataset_features_provider_cache.get(cache_key)
 
-        # check permissions
-        permissions = self.dataset_edit_permissions(
-            dataset, identity, translator
-        )
-        if permissions:
-            # create DatasetFeaturesProvider
-            dataset_features_provider = DatasetFeaturesProvider(
-                permissions, self.db_engine, self.logger, translator
+        if not dataset_features_provider:
+            self.logger.debug("checking edit permissions for dataset")
+            permissions = self.dataset_edit_permissions(
+                dataset, identity, translator
             )
+            if permissions:
+                self.logger.debug("create DatasetFeaturesProvider")
+                dataset_features_provider = DatasetFeaturesProvider(
+                    permissions, self.db_engine, self.logger, translator
+                )
+            if ENABLE_FEATURE_PROVIDER_CACHE:
+                self.dataset_features_provider_cache[cache_key] = \
+                    dataset_features_provider
 
         return dataset_features_provider
 
