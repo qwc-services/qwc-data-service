@@ -373,7 +373,7 @@ class DataService():
 
     def is_editable(self, identity, translator, dataset, id):
         """Returns whether a dataset is editable.
-        :param str identity: User identity
+        :param object identity: User identity
         :param object translator: Translator
         :param str dataset: Dataset ID
         :param int id: Dataset feature ID
@@ -397,12 +397,12 @@ class DataService():
         """
         dataset_features_provider = None
 
-        # check permissions
+        self.logger.debug("checking edit permissions for dataset")
         permissions = self.dataset_edit_permissions(
             dataset, identity, translator
         )
         if permissions:
-            # create DatasetFeaturesProvider
+            self.logger.debug("create DatasetFeaturesProvider")
             dataset_features_provider = DatasetFeaturesProvider(
                 permissions, self.db_engine, self.logger, translator
             )
@@ -426,6 +426,7 @@ class DataService():
 
     def dataset_edit_permissions(self, dataset, identity, translator):
         """Return dataset edit permissions if available and permitted.
+        Includes permitted resources with field metadata and keyvalrels
 
         :param str dataset: Dataset ID
         :param obj identity: User identity

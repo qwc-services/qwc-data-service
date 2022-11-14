@@ -149,6 +149,8 @@ class DatasetFeaturesProvider():
             where_clause=where_clause
         ))
 
+        self.logger.debug(f"feature index query: {sql}")
+
         # connect to database and start transaction (for read-only access)
         conn = self.db_read.connect()
         trans = conn.begin()
@@ -298,6 +300,8 @@ class DatasetFeaturesProvider():
             columns=columns, geom=self.geometry_column, table=self.table,
             pkey=self.primary_key
         ))
+
+        self.logger.debug(f"feature show query: {sql}")
 
         # connect to database and start transaction (for read-only access)
         conn = self.db_read.connect()
