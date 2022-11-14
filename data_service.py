@@ -48,7 +48,7 @@ class DataService():
         [["<attr>", "<op>", "<value>"], "and|or", ["<attr>", "<op>", "<value>"]]
         """
         dataset_features_provider = self.dataset_features_provider(
-            identity, translator, dataset
+            identity, translator, dataset, False
         )
         if dataset_features_provider is not None:
             # check read permission
@@ -113,7 +113,7 @@ class DataService():
         [["<attr>", "<op>", "<value>"], "and|or", ["<attr>", "<op>", "<value>"]]
         """
         dataset_features_provider = self.dataset_features_provider(
-            identity, translator, dataset
+            identity, translator, dataset, False
         )
         if dataset_features_provider is not None:
             # check read permission
@@ -169,7 +169,7 @@ class DataService():
         :param str crs: Client CRS as 'EPSG:<srid>' or None
         """
         dataset_features_provider = self.dataset_features_provider(
-            identity, translator, dataset
+            identity, translator, dataset, False
         )
         srid = None
         if crs is not None:
@@ -207,7 +207,7 @@ class DataService():
         """
 
         dataset_features_provider = self.dataset_features_provider(
-            identity, translator, dataset
+            identity, translator, dataset, True
         )
         if dataset_features_provider is None:
             return {'error': translator.tr("error.dataset_not_found")}
@@ -271,7 +271,7 @@ class DataService():
         """
 
         dataset_features_provider = self.dataset_features_provider(
-            identity, translator, dataset
+            identity, translator, dataset, True
         )
         if dataset_features_provider is None:
             return {'error': translator.tr("error.dataset_not_found")}
@@ -347,7 +347,7 @@ class DataService():
         :param int id: Dataset feature ID
         """
         dataset_features_provider = self.dataset_features_provider(
-            identity, translator, dataset
+            identity, translator, dataset, False
         )
         if dataset_features_provider is None:
             return {'error': translator.tr("error.dataset_not_found")}
@@ -379,7 +379,7 @@ class DataService():
         :param int id: Dataset feature ID
         """
         dataset_features_provider = self.dataset_features_provider(
-            identity, translator, dataset
+            identity, translator, dataset, False
         )
         if dataset_features_provider is not None:
             # check update permission
@@ -388,12 +388,13 @@ class DataService():
 
         return dataset_features_provider.exists(id)
 
-    def dataset_features_provider(self, identity, translator, dataset):
+    def dataset_features_provider(self, identity, translator, dataset, write):
         """Return DatasetFeaturesProvider if available and permitted.
 
         :param str identity: User identity
         :param object translator: Translator
         :param str dataset: Dataset ID
+        :param bool write: Whether to include permissions relevant for writing to the dataset (create/update)
         """
         dataset_features_provider = None
 
@@ -424,13 +425,14 @@ class DataService():
             'datasets': datasets
         }
 
-    def dataset_edit_permissions(self, dataset, identity, translator):
+    def dataset_edit_permissions(self, dataset, identity, translator, write):
         """Return dataset edit permissions if available and permitted.
         Includes permitted resources with field metadata and keyvalrels
 
         :param str dataset: Dataset ID
         :param obj identity: User identity
         :param object translator: Translator
+        :param bool write: Whether to include permissions relevant for writing to the dataset (create/update)
         """
         # find resource for requested dataset
         resource = self.resources['datasets'].get(dataset)
@@ -501,13 +503,13 @@ class DataService():
 
                 # Resolve keyvalrels
                 keyvalrel = field.get('constraints', {}).get('keyvalrel', None)
-                if keyvalrel:
+                if keyvalrel and write:
                     fields[field['name']] = dict(fields[field['name']])
                     fields[field['name']]['constraints'] = dict(fields[field['name']]['constraints'])
                     try:
                         table, key_field_name, value_field_name = keyvalrel.split(":")
                         dataset_features_provider = self.dataset_features_provider(
-                            identity, translator, table
+                            identity, translator, table, False
                         )
                         values = dataset_features_provider.keyvals(key_field_name, value_field_name)
                         fields[field['name']]['constraints']['values'] = values
