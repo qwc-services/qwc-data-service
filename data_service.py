@@ -400,7 +400,7 @@ class DataService():
 
         self.logger.debug("checking edit permissions for dataset")
         permissions = self.dataset_edit_permissions(
-            dataset, identity, translator
+            dataset, identity, translator, write
         )
         if permissions:
             self.logger.debug("create DatasetFeaturesProvider")
