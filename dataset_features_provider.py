@@ -237,6 +237,10 @@ class DatasetFeaturesProvider():
         features = []
         result = conn.execute(sql, **params)
 
+        # roll back transaction and close database connection
+        trans.rollback()
+        conn.close()
+
         row = result.fetchone()
 
         if row and 'bbox' in row:
