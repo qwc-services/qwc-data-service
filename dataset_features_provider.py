@@ -237,11 +237,11 @@ class DatasetFeaturesProvider():
         features = []
         result = conn.execute(sql, **params)
 
+        row = result.fetchone()
+
         # roll back transaction and close database connection
         trans.rollback()
         conn.close()
-
-        row = result.fetchone()
 
         if row and 'bbox' in row:
             return self.parse_box2d(row['bbox'])
