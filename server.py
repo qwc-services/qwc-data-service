@@ -552,6 +552,13 @@ class CreateFeatureMultipart(Resource):
         if not isinstance(feature, dict):
             api.abort(400, translator.tr("error.feature_is_not_an_object"))
 
+        # Set a placeholder value to make attribute validation for required upload fields pass
+        files = {}
+        for key in request.files:
+            parts = key.split(":")
+            field = parts[1]
+            feature['properties'][field] = request.files[key].filename
+
         data_service = data_service_handler()
         result = data_service.create(
             get_auth_user(), translator, dataset, feature, request.files
