@@ -1161,7 +1161,7 @@ class DatasetFeaturesProvider():
         )
 
         if defaulted_attribute_columns:
-            columns += ', ' + ', '.join(defaulted_attribute_columns)
+            columns += ', ' + ', '.join(self.escape_column_names(defaulted_attribute_columns))
             values_sql += ', ' + ', '.join(map(lambda x: "default", defaulted_attribute_columns))
 
         return {
