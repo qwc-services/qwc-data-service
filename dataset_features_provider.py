@@ -505,6 +505,20 @@ class DatasetFeaturesProvider():
         if type(filterarray) is not list:
             return (None, "Not an array")
 
+        sql = []
+        params = {}
+        errors = []
+
+        self.__parse_filter_inner(filterarray, sql, params, errors)
+
+        if errors:
+            return (None, ";".join(errors))
+        if not sql:
+            return ("", [])
+        else:
+            return ("(%s)" % " ".join(sql), params)
+
+    def __parse_filter_inner(self, filterarray, sql, params, errors, pad = ""):
         CONCAT_OPERATORS = ["AND", "OR"]
         OPERATORS = [
             "=", "!=", "<>", "<", ">", "<=", ">=",
@@ -513,81 +527,87 @@ class DatasetFeaturesProvider():
         ]
         VALUE_TYPES = [int, float, str, type(None)]
 
-        sql = []
-        params = {}
         i = 0
         for entry in filterarray:
             if type(entry) is str:
                 entry = entry.upper()
                 if entry not in CONCAT_OPERATORS:
-                    return (
-                        None, "Invalid concatenation operator '%s'" % entry)
+                    errors.append("Invalid concatenation operator '%s'" % entry)
+                    return
                 if i % 2 != 1 or i == len(filterarray) - 1:
                     # filter concatenation operators must be at odd-numbered
                     # positions in the array and cannot appear last
-                    return (
-                        None,
-                        "Incorrect concatenation operator position for '%s'" %
-                        entry
-                    )
+                    errors.append("Incorrect concatenation operator position for '%s'" % entry)
+                    return
                 sql.append(entry)
             elif type(entry) is list:
-                if len(entry) != 3:
+                if len(entry) == 0:
+                    errors.append("Empty list in expression")
+                    return
+                if type(entry[0]) is list:
+                    # nested expression
+                    sql.append("(")
+                    self.__parse_filter_inner(entry, sql, params, errors, pad + "  ")
+                    sql.append(")")
+                elif len(entry) != 3:
                     # filter entry must have exactly three parts
-                    return (None, "Incorrect number of entries in %s" % entry)
+                    errors.append("Incorrect number of entries in %s" % entry)
+                    return
+                else:
+                    # column
+                    column_name = entry[0]
+                    if type(column_name) is not str:
+                        errors.append("Invalid column name in %s" % entry)
+                        return
 
-                # column
-                column_name = entry[0]
-                if type(column_name) is not str:
-                    return (None, "Invalid column name in %s" % entry)
+                    ignore_if_not_exists = False
+                    if column_name.startswith("?"):
+                        ignore_if_not_exists = True
+                        column_name = column_name[1:]
 
-                ignore_if_not_exists = False
-                if column_name.startswith("?"):
-                    ignore_if_not_exists = True
-                    column_name = column_name[1:]
+                    if (
+                        column_name != self.primary_key
+                        and column_name not in self.attributes
+                    ):
+                        if ignore_if_not_exists:
+                            # Skip filter if column does not exists
+                            continue
+                        else:
+                            # column not available or not permitted
+                            errors.append("Column name not found or permission error in %s" % entry)
+                            return
 
-                if (
-                    column_name != self.primary_key
-                    and column_name not in self.attributes
-                ):
-                    if ignore_if_not_exists:
-                        # Skip filter if column does not exists
-                        continue
-                    else:
-                        # column not available or not permitted
-                        return (
-                            None,
-                            "Column name not found or permission error in %s" %
-                            entry
-                        )
+                    # operator
+                    op = entry[1].upper().strip()
+                    if type(entry[1]) is not str or op not in OPERATORS:
+                        errors.append("Invalid operator in %s" % entry)
+                        return
 
-                # operator
-                op = entry[1].upper().strip()
-                if type(entry[1]) is not str or op not in OPERATORS:
-                    return (None, "Invalid operator in %s" % entry)
+                    # value
+                    value = entry[2]
+                    if type(value) not in VALUE_TYPES:
+                        errors.append("Invalid value type in %s" % entry)
+                        return
 
-                # value
-                value = entry[2]
-                if type(value) not in VALUE_TYPES:
-                    return (None, "Invalid value type in %s" % entry)
+                    if value is None:
+                        # modify operator for NULL value
+                        if op == "=":
+                            op = "IS"
+                        elif op == "!=":
+                            op = "IS NOT"
+                    elif op in ["IS", "IS NOT"]:
+                        errors.append("Invalid operator in %s" % entry)
+                        return
 
-                if value is None:
-                    # modify operator for NULL value
-                    if op == "=":
-                        op = "IS"
-                    elif op == "!=":
-                        op = "IS NOT"
-                elif op in ["IS", "IS NOT"]:
-                    return (None, "Invalid operator in %s" % entry)
-
-                # add SQL fragment for filter
-                # e.g. '"type" >= :v0'
-                sql.append('"%s" %s :v%d' % (column_name, op, i))
-                # add value
-                params["v%d" % i] = value
+                    # add SQL fragment for filter
+                    # e.g. '"type" >= :v0'
+                    idx = len(params)
+                    sql.append('"%s" %s :v%d' % (column_name, op, idx))
+                    # add value
+                    params["v%d" % idx] = value
             else:
                 # invalid entry
-                return (None, "%s" % entry)
+                errors.append("Invalid entry: %s" % entry)
 
             i += 1
 
