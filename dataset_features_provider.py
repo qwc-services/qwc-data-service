@@ -969,7 +969,7 @@ class DatasetFeaturesProvider():
 
             # values
             values = constraints.get('values', {})
-            if values and str(value) not in [str(v['value']) for v in values]:
+            if value and values and str(value) not in [str(v['value']) for v in values]:
                 errors.append(self.translator.tr("validation.invalid_value_for") % (attr))
 
         # close database connection
