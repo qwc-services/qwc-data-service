@@ -1085,9 +1085,14 @@ class DatasetFeaturesProvider():
             if '_bbox_' in row:
                 bbox = self.parse_box2d(row['_bbox_'])
 
+        pk = row[self.primary_key]
+        # Ensure UUID primary key is JSON serializable
+        if isinstance(pk, UUID):
+            pk = str(pk)
+
         return {
             'type': 'Feature',
-            'id': row[self.primary_key],
+            'id': pk,
             'properties': props,
             'geometry': geometry,
             'crs': crs,
