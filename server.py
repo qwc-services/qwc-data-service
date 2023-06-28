@@ -625,7 +625,7 @@ class AttachmentDownloader(Resource):
         if not path:
             api.abort(404, translator.tr("error.unable_to_read_file"))
 
-        return send_file(path, as_attachment=True, attachment_filename=os.path.basename(path))
+        return send_file(path, as_attachment=True, download_name=os.path.basename(path))
 
 
 @api.route('/<path:dataset>/<int:id>/relations')
