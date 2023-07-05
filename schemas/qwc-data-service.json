@@ -40,6 +40,14 @@
           "description": "Field suffix where to log the username who last changed an upload field, i.e. <fieldname>__<suffix> for the field <fieldname>. If empty, username is not logged.",
           "type": "string"
         },
+        "edit_timestamp_field": {
+          "description": "If specified, the timestamp of the last mutation to a record will be logged to the <edit_timestamp_field> field of the record.",
+          "type": "string"
+        },
+        "edit_user_field": {
+          "description": "If specified, the username of the last user who performed a mutation to a record with be logged to the <edit_user_field> field of the record.",
+          "type": "string"
+        },
         "geometry_default_allow_null": {
           "description": "Whether to allow null geometries by default",
           "type": "boolean"
