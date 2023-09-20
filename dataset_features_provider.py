@@ -39,6 +39,7 @@ class DatasetFeaturesProvider():
             # fallback to GeoDB for read actions
             self.db_write = self.db_read
 
+        self.db_engine = db_engine
         self.logger = logger
         self.translator = translator
 
@@ -51,6 +52,7 @@ class DatasetFeaturesProvider():
         self.attributes = config['attributes']
         # field constraints
         self.fields = config.get('fields', {})
+        self.jointables = config['jointables']
         # NOTE: geometry_column is None for datasets without geometry
         self.geometry_column = config['geometry_column']
         self.geometry_type = config['geometry_type']
@@ -91,11 +93,13 @@ class DatasetFeaturesProvider():
         """
         srid = client_srid or self.srid
 
+        own_attributes, join_attributes = self.__extract_join_attributes()
+
         # build query SQL
 
         # select id and permitted attributes
         columns = (', ').join(
-            self.escape_column_names([self.primary_key] + self.attributes)
+            self.escape_column_names([self.primary_key] + own_attributes)
         )
 
         where_clauses = []
@@ -162,7 +166,11 @@ class DatasetFeaturesProvider():
         overall_bbox = None
         for row in result:
             # NOTE: feature CRS removed by marshalling
-            features.append(self.feature_from_query(row, srid))
+            attribute_values = dict(row._mapping)
+            join_attribute_values = self.__query_join_attributes(join_attributes, attribute_values)
+            attribute_values.update(join_attribute_values)
+
+            features.append(self.feature_from_query(attribute_values, srid))
             if '_overall_bbox_' in row:
                 overall_bbox = row['_overall_bbox_']
 
@@ -287,11 +295,13 @@ class DatasetFeaturesProvider():
         """
         srid = client_srid or self.srid
 
+        own_attributes, join_attributes = self.__extract_join_attributes()
+
         # build query SQL
 
         # select id and permitted attributes
         columns = (', ').join(
-            self.escape_column_names([self.primary_key] + self.attributes)
+            self.escape_column_names([self.primary_key] + own_attributes)
         )
 
         geom_sql = self.geom_column_sql(srid)
@@ -316,7 +326,11 @@ class DatasetFeaturesProvider():
         result = conn.execute(sql, id=id)
         for row in result:
             # NOTE: result is empty if not found
-            feature = self.feature_from_query(row, srid)
+            attribute_values = dict(row._mapping)
+            join_attribute_values = self.__query_join_attributes(join_attributes, attribute_values)
+            attribute_values.update(join_attribute_values)
+
+            feature = self.feature_from_query(attribute_values, srid)
 
         # roll back transaction and close database connection
         trans.rollback()
@@ -335,6 +349,7 @@ class DatasetFeaturesProvider():
         # build query SQL
         sql_params = self.sql_params_for_feature(feature, conn)
         srid = sql_params['client_srid']
+        own_attributes, join_attributes = self.__extract_join_attributes()
 
         geom_sql = self.geom_column_sql(srid)
         sql = sql_text(("""
@@ -353,7 +368,11 @@ class DatasetFeaturesProvider():
         feature = None
         result = conn.execute(sql, **(sql_params['bound_values']))
         for row in result:
-            feature = self.feature_from_query(row, srid)
+            attribute_values = dict(row._mapping)
+            join_attribute_values = self.__query_join_attributes(join_attributes, attribute_values)
+            attribute_values.update(join_attribute_values)
+
+            feature = self.feature_from_query(attribute_values, srid)
 
         # close database connection
         conn.close()
@@ -372,6 +391,7 @@ class DatasetFeaturesProvider():
         # build query SQL
         sql_params = self.sql_params_for_feature(feature, conn)
         srid = sql_params['client_srid']
+        own_attributes, join_attributes = self.__extract_join_attributes()
 
         geom_sql = self.geom_column_sql(srid)
         sql = sql_text(("""
@@ -395,7 +415,12 @@ class DatasetFeaturesProvider():
         result = conn.execute(sql, **update_values)
         for row in result:
             # NOTE: result is empty if not found
-            feature = self.feature_from_query(row, srid)
+
+            attribute_values = dict(row._mapping)
+            join_attribute_values = self.__query_join_attributes(join_attributes, attribute_values)
+            attribute_values.update(join_attribute_values)
+
+            feature = self.feature_from_query(attribute_values, srid)
 
         # close database connection
         conn.close()
@@ -1110,7 +1135,8 @@ class DatasetFeaturesProvider():
         bound_values = OrderedDict()
         attribute_columns = []
         defaulted_attribute_columns = []
-        return_columns = list(self.attributes)
+        own_attributes, join_attributes = self.__extract_join_attributes()
+        return_columns = list(own_attributes)
         placeholdercount = 0
         defaultedProperties = feature.get('defaultedProperties', [])
 
@@ -1196,3 +1222,69 @@ class DatasetFeaturesProvider():
             'bound_values': bound_values,
             'client_srid': srid
         }
+
+
+    def __extract_join_attributes(self):
+        """Splits the query attributes into own attributes and joined attributes."""
+        own_attributes = []
+        join_attributes = []
+
+        for attribute in self.attributes:
+            field = self.fields[attribute]
+            if field.get('joinfield'):
+                join_attributes.append(attribute)
+            else:
+                own_attributes.append(attribute)
+
+        return own_attributes, join_attributes
+
+    def __query_join_attributes(self, join_attributes, own_attribute_values):
+        """Queries join attributes.
+
+        :param list join_attributes: The joined attribute names
+        :param object own_attribute_values: The own attribute values of the queried record
+        """
+
+        join_queries = {}
+        join_values = {}
+
+        for attribute in join_attributes:
+            field = self.fields[attribute]
+            joinfield = field['joinfield']
+
+            if joinfield['table'] not in join_queries:
+                join_queries[joinfield['table']] = {}
+            join_queries[joinfield['table']][field['name']] = joinfield['field']
+            join_values[field['name']] = None
+
+        for jointable, fields in join_queries.items():
+            jointableconfig = self.jointables[jointable]
+            columns = (', ').join(self.escape_column_names(fields.values()))
+            table = '"%s"."%s"' % (jointableconfig['schema'], jointableconfig['table_name'])
+
+            sql = sql_text(("""
+                SELECT {columns}
+                FROM {table}
+                WHERE {field} = :joinvalue;
+            """).format(
+                columns=columns, table=table, field=jointableconfig['targetField']
+            ))
+
+            self.logger.debug(f"joined attributes query: {sql}")
+
+            conn = self.db_engine.db_engine(jointableconfig["database"]).connect()
+            trans = conn.begin()
+
+            # execute query
+            joinvalue = own_attribute_values[jointableconfig['joinField']]
+            result = conn.execute(sql, joinvalue=joinvalue)
+
+            for row in result:
+                for fieldname, targetname in fields.items():
+                    join_values[fieldname] = row[targetname]
+                break
+
+            trans.rollback()
+            conn.close()
+
+        return join_values

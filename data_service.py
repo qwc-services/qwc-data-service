@@ -537,7 +537,8 @@ class DataService():
             "creatable": creatable,
             "readable": readable,
             "updatable": updatable,
-            "deletable": deletable
+            "deletable": deletable,
+            "jointables": resource.get('jointables', {})
         }
 
     def validate_attachments(self, translator, files, dataset_features_provider, dataset):
