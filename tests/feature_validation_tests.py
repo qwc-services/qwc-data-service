@@ -52,7 +52,8 @@ class FeatureValidationTestCase(unittest.TestCase):
             'fields': {
                 'field': {}
             },
-            'writable': False
+            'writable': False,
+            'jointables': {}
         }
         config.update(merge_config)
         return config
