@@ -1265,9 +1265,9 @@ class DatasetFeaturesProvider():
             sql = sql_text(("""
                 SELECT {columns}
                 FROM {table}
-                WHERE {field} = :joinvalue;
+                WHERE "{field}" = :joinvalue;
             """).format(
-                columns=columns, table=table, field=jointableconfig['targetField']
+                columns=columns, table=table, field=jointableconfig['joinField']
             ))
 
             self.logger.debug(f"joined attributes query: {sql}")
@@ -1276,7 +1276,7 @@ class DatasetFeaturesProvider():
             trans = conn.begin()
 
             # execute query
-            joinvalue = own_attribute_values[jointableconfig['joinField']]
+            joinvalue = own_attribute_values[jointableconfig['targetField']]
             result = conn.execute(sql, joinvalue=joinvalue)
 
             for row in result:
