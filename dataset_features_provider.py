@@ -396,7 +396,7 @@ class DatasetFeaturesProvider():
         geom_sql = self.geom_column_sql(srid)
         sql = sql_text(("""
             UPDATE {table} SET ({columns}) =
-                ({values_sql})
+                ROW({values_sql})
             WHERE {pkey} = :{pkey}
             RETURNING {return_columns}%s;
         """ % geom_sql).format(
