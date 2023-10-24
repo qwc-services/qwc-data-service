@@ -1,4 +1,4 @@
-FROM sourcepole/qwc-uwsgi-base:alpine-v2023.06.08
+FROM sourcepole/qwc-uwsgi-base:alpine-v2023.10.24
 
 ADD . /srv/qwc_service
 
