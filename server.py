@@ -438,7 +438,7 @@ class DataCollection(Resource):
             api.abort(error_code, result['error'])
 
 
-@api.route('/<path:dataset>/<int:id>')
+@api.route('/<path:dataset>/<id>')
 @api.response(404, 'Dataset or feature not found or permission error')
 @api.param('dataset', 'Dataset ID', default='qwc_demo.edit_points')
 @api.param('id', 'Feature ID')
@@ -569,7 +569,7 @@ class CreateFeatureMultipart(Resource):
             api.abort(error_code, result['error'], **error_details)
 
 
-@api.route('/<path:dataset>/multipart/<int:id>')
+@api.route('/<path:dataset>/multipart/<id>')
 @api.response(404, 'Dataset or feature not found or permission error')
 @api.param('dataset', 'Dataset ID', default='qwc_demo.edit_points')
 @api.param('id', 'Feature ID')
@@ -626,7 +626,7 @@ class AttachmentDownloader(Resource):
         return send_file(path, as_attachment=True, download_name=os.path.basename(path))
 
 
-@api.route('/<path:dataset>/<int:id>/relations')
+@api.route('/<path:dataset>/<id>/relations')
 @api.response(404, 'Dataset or feature not found or permission error')
 @api.param('dataset', 'Dataset ID', default='qwc_demo.edit_points')
 @api.param('id', 'Feature ID')
@@ -649,7 +649,7 @@ class Relations(Resource):
             except:
                 continue
             result = data_service.index(
-                get_auth_user(), translator, table, None, crs, '[["%s", "=", %d]]' % (fk_field_name, id)
+                get_auth_user(), translator, table, None, crs, '[["%s", "=", %s]]' % (fk_field_name, id)
             )
             ret[table] = {"fk": fk_field_name, "features": result['feature_collection']['features'] if 'feature_collection' in result else []}
             if sortcol:
@@ -699,7 +699,7 @@ class Relations(Resource):
                 if rel_feature_status == "new":
                     rel_feature['properties'][fk_field] = id
 
-                if rel_feature['properties'].get(fk_field, None) != id:
+                if str(rel_feature['properties'].get(fk_field, None)) != id:
                     rel_feature["__error__"] = translator.tr("error.fk_validation_failed")
                     ret[rel_table]["features"].append(rel_feature)
                     haserrors = True
