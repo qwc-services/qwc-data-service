@@ -380,8 +380,6 @@ class DataCollection(Resource):
         Create new dataset feature from a GeoJSON Feature and return it as a
         GeoJSON Feature.
         """
-        config_handler = RuntimeConfig("data", app.logger)
-        config = config_handler.tenant_config(tenant_handler.tenant())
         translator = Translator(app, request)
 
         if request.is_json:

@@ -7,7 +7,6 @@ from sqlalchemy.exc import (DataError, IntegrityError,
 
 from qwc_services_core.database import DatabaseEngine
 from qwc_services_core.permissions_reader import PermissionsReader
-from qwc_services_core.runtime_config import RuntimeConfig
 from dataset_features_provider import DatasetFeaturesProvider
 from attachments_service import AttachmentsService
 
@@ -412,13 +411,9 @@ class DataService():
 
     def load_resources(self):
         """Load service resources from config."""
-        # read config
-        config_handler = RuntimeConfig("data", self.logger)
-        config = config_handler.tenant_config(self.tenant)
-
         # get service resources
         datasets = {}
-        for resource in config.resources().get('datasets', []):
+        for resource in self.config.resources().get('datasets', []):
             datasets[resource['name']] = resource
 
         return {
