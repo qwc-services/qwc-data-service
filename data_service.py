@@ -580,7 +580,7 @@ class DataService():
                 return {'attachment_errors': [translator.tr("error.failed_to_save_attachment") + ": " + key]}
             else:
                 saved_attachments[key] = slug
-                field = key.lstrip("file:")
+                field = key[5:] # remove file: prefix
                 feature["properties"][field] = "attachment://" + slug
                 if upload_user_field_suffix:
                     upload_user_field = field + "__" + upload_user_field_suffix
