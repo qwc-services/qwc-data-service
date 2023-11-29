@@ -5,11 +5,11 @@ from collections import OrderedDict
 from sqlalchemy.exc import (DataError, IntegrityError,
                             InternalError, ProgrammingError)
 
+from qwc_services_core.auth import get_username
 from qwc_services_core.database import DatabaseEngine
 from qwc_services_core.permissions_reader import PermissionsReader
 from dataset_features_provider import DatasetFeaturesProvider
 from attachments_service import AttachmentsService
-
 
 ERROR_DETAILS_LOG_ONLY = os.environ.get(
     'ERROR_DETAILS_LOG_ONLY', 'False') == 'True'
@@ -38,7 +38,7 @@ class DataService():
     def index(self, identity, translator, dataset, bbox, crs, filterexpr):
         """Find dataset features inside bounding box.
 
-        :param str identity: User identity
+        :param str|obj identity: User identity
         :param object translator: Translator
         :param str dataset: Dataset ID
         :param str bbox: Bounding box as '<minx>,<miny>,<maxx>,<maxy>' or None
@@ -104,7 +104,7 @@ class DataService():
     def extent(self, identity, translator, dataset, crs, filterexpr):
         """Get extent of dataset features.
 
-        :param str identity: User identity
+        :param str|obj identity: User identity
         :param object translator: Translator
         :param str dataset: Dataset ID
         :param str crs: Client CRS as 'EPSG:<srid>' or None
@@ -161,7 +161,7 @@ class DataService():
     def show(self, identity, translator, dataset, id, crs):
         """Get a dataset feature.
 
-        :param str identity: User identity
+        :param str|obj identity: User identity
         :param object translator: Translator
         :param str dataset: Dataset ID
         :param int id: Dataset feature ID
@@ -198,7 +198,7 @@ class DataService():
     def create(self, identity, translator, dataset, feature, files={}):
         """Create a new dataset feature.
 
-        :param str identity: User identity
+        :param str|obj identity: User identity
         :param object translator: Translator
         :param str dataset: Dataset ID
         :param object feature: GeoJSON Feature
@@ -261,7 +261,7 @@ class DataService():
     def update(self, identity, translator, dataset, id, feature, files={}):
         """Update a dataset feature.
 
-        :param str identity: User identity
+        :param str|obj identity: User identity
         :param object translator: Translator
         :param str dataset: Dataset ID
         :param int id: Dataset feature ID
@@ -308,7 +308,7 @@ class DataService():
                 self.attachments_service.remove_attachment(dataset, value[13:])
                 if upload_user_field_suffix:
                     upload_user_field = key + "__" + upload_user_field_suffix
-                    feature["properties"][upload_user_field] = identity
+                    feature["properties"][upload_user_field] = get_username(identity)
 
         self.add_logging_fields(feature, identity)
 
@@ -340,7 +340,7 @@ class DataService():
     def destroy(self, identity, translator, dataset, id):
         """Delete a dataset feature.
 
-        :param str identity: User identity
+        :param str|obj identity: User identity
         :param object translator: Translator
         :param str dataset: Dataset ID
         :param int id: Dataset feature ID
@@ -390,7 +390,7 @@ class DataService():
     def dataset_features_provider(self, identity, translator, dataset, write):
         """Return DatasetFeaturesProvider if available and permitted.
 
-        :param str identity: User identity
+        :param str|obj identity: User identity
         :param object translator: Translator
         :param str dataset: Dataset ID
         :param bool write: Whether to include permissions relevant for writing to the dataset (create/update)
@@ -425,7 +425,7 @@ class DataService():
         Includes permitted resources with field metadata and keyvalrels
 
         :param str dataset: Dataset ID
-        :param obj identity: User identity
+        :param str|obj identity: User identity
         :param object translator: Translator
         :param bool write: Whether to include permissions relevant for writing to the dataset (create/update)
         """
@@ -563,6 +563,7 @@ class DataService():
         :param list files: Uploaded files
         :param str dataset: Dataset ID
         :param dict feature: Feature object
+        :param str|obj identity: User identity
         :param dict saved_attachments: Saved attachments
         """
         upload_user_field_suffix = self.config.get("upload_user_field_suffix", None)
@@ -580,29 +581,43 @@ class DataService():
                 feature["properties"][field] = "attachment://" + slug
                 if upload_user_field_suffix:
                     upload_user_field = field + "__" + upload_user_field_suffix
-                    feature["properties"][upload_user_field] = identity
+                    feature["properties"][upload_user_field] = get_username(identity)
 
         return {}
 
-    def resolve_attachment(self, dataset, slug):
+    def resolve_attachment(self, identity, translator, dataset, slug):
         """Retrieves the attachment file path from the specified slug
-
+        :param str|obj identity: User identity
+        :param object translator: Translator
         :param str dataset: Dataset ID
         :param str slug: Attachment slug
         """
+        dataset_features_provider = self.dataset_features_provider(
+            identity, translator, dataset, True
+        )
+        if dataset_features_provider is None:
+            return {'error': translator.tr("error.dataset_not_found")}
+
+        # check update permission
+        if not dataset_features_provider.readable():
+            return {
+                'error': translator.tr("error.dataset_not_readable"),
+                'error_code': 405
+            }
+
         return self.attachments_service.resolve_attachment(dataset, slug)
 
     def add_logging_fields(self, feature, identity):
         """Adds logging fields to the feature
 
         :param dict feature: Feature object
-        :param str identity: User identity
+        :param str|obj identity: User identity
         """
         edit_user_field = self.config.get("edit_user_field", None)
         edit_timestamp_field = self.config.get("edit_timestamp_field", None)
 
         if edit_user_field:
-            feature["properties"][edit_user_field] = identity
+            feature["properties"][edit_user_field] = get_username(identity)
         if edit_timestamp_field:
             feature["properties"][edit_timestamp_field] = str(datetime.now())
 

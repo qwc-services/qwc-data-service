@@ -9,7 +9,7 @@ from werkzeug.exceptions import BadRequest
 from werkzeug.datastructures import FileStorage
 
 from qwc_services_core.api import create_model, CaseInsensitiveArgument
-from qwc_services_core.auth import auth_manager, optional_auth, get_auth_user
+from qwc_services_core.auth import auth_manager, optional_auth, get_identity
 from qwc_services_core.runtime_config import RuntimeConfig
 from qwc_services_core.tenant_handler import TenantHandler
 from qwc_services_core.translator import Translator
@@ -360,7 +360,7 @@ class DataCollection(Resource):
 
         data_service = data_service_handler()
         result = data_service.index(
-            get_auth_user(), translator, dataset, bbox, crs, filterexpr
+            get_identity(), translator, dataset, bbox, crs, filterexpr
         )
         if 'error' not in result:
             return result['feature_collection']
@@ -389,7 +389,7 @@ class DataCollection(Resource):
                 data_service = data_service_handler()
 
                 result = data_service.create(
-                    get_auth_user(), translator, dataset, feature)
+                    get_identity(), translator, dataset, feature)
                 if 'error' not in result:
                     return result['feature'], 201
                 else:
@@ -429,7 +429,7 @@ class DataCollection(Resource):
 
         data_service = data_service_handler()
         result = data_service.extent(
-            get_auth_user(), translator, dataset, crs, filterexpr
+            get_identity(), translator, dataset, crs, filterexpr
         )
         if 'error' not in result:
             return result['extent']
@@ -463,7 +463,7 @@ class DataMember(Resource):
         crs = args['crs']
 
         data_service = data_service_handler()
-        result = data_service.show(get_auth_user(), translator, dataset, id, crs)
+        result = data_service.show(get_identity(), translator, dataset, id, crs)
         if 'error' not in result:
             return result['feature']
         else:
@@ -490,7 +490,7 @@ class DataMember(Resource):
                 data_service = data_service_handler()
 
                 result = data_service.update(
-                    get_auth_user(), translator, dataset, id, feature
+                    get_identity(), translator, dataset, id, feature
                 )
                 if 'error' not in result:
                     return result['feature']
@@ -514,7 +514,7 @@ class DataMember(Resource):
         """
         translator = Translator(app, request)
         data_service = data_service_handler()
-        result = data_service.destroy(get_auth_user(), translator, dataset, id)
+        result = data_service.destroy(get_identity(), translator, dataset, id)
         if 'error' not in result:
             return {
                 'message': translator.tr("error.dataset_feature_deleted")
@@ -559,7 +559,7 @@ class CreateFeatureMultipart(Resource):
 
         data_service = data_service_handler()
         result = data_service.create(
-            get_auth_user(), translator, dataset, feature, request.files
+            get_identity(), translator, dataset, feature, request.files
         )
         if 'error' not in result:
             return result['feature'], 201
@@ -598,7 +598,7 @@ class EditFeatureMultipart(Resource):
 
         data_service = data_service_handler()
         result = data_service.update(
-            get_auth_user(), translator, dataset, id, feature, request.files
+            get_identity(), translator, dataset, id, feature, request.files
         )
         if 'error' not in result:
             return result['feature']
@@ -619,7 +619,7 @@ class AttachmentDownloader(Resource):
         translator = Translator(app, request)
         args = get_attachment_parser.parse_args()
         data_service = data_service_handler()
-        path = data_service.resolve_attachment(dataset, args['file'])
+        path = data_service.resolve_attachment(get_identity(), translator, dataset, args['file'])
         if not path:
             api.abort(404, translator.tr("error.unable_to_read_file"))
 
@@ -649,7 +649,7 @@ class Relations(Resource):
             except:
                 continue
             result = data_service.index(
-                get_auth_user(), translator, table, None, crs, '[["%s", "=", %s]]' % (fk_field_name, id)
+                get_identity(), translator, table, None, crs, '[["%s", "=", %s]]' % (fk_field_name, id)
             )
             ret[table] = {"fk": fk_field_name, "features": result['feature_collection']['features'] if 'feature_collection' in result else []}
             if sortcol:
@@ -667,9 +667,9 @@ class Relations(Resource):
 
         Return success status for each relation value.
         """
+        translator = Translator(app, request)
         args = post_relations_parser.parse_args()
         crs = args['crs'] or None
-        translator = Translator(app, request)
 
         try:
             payload = json.loads(args['values'])
@@ -681,7 +681,7 @@ class Relations(Resource):
         data_service = data_service_handler()
 
         # Check if dataset with specified id exists
-        if not data_service.is_editable(get_auth_user(), translator, dataset, id):
+        if not data_service.is_editable(get_identity(), translator, dataset, id):
             api.abort(404, translator.tr("error.dataset_or_feature_not_found"))
 
         ret = {}
@@ -718,13 +718,13 @@ class Relations(Resource):
                         rel_feature['properties'][field] = request.files[key].filename
 
                 if not rel_feature_status:
-                    result = data_service.show(get_auth_user(), translator, rel_table, rel_feature["id"], crs)
+                    result = data_service.show(get_identity(), translator, rel_table, rel_feature["id"], crs)
                 elif rel_feature_status == "new":
-                    result = data_service.create(get_auth_user(), translator, rel_table, rel_feature, files)
+                    result = data_service.create(get_identity(), translator, rel_table, rel_feature, files)
                 elif rel_feature_status == "changed":
-                    result = data_service.update(get_auth_user(), translator, rel_table, rel_feature["id"], rel_feature, files)
+                    result = data_service.update(get_identity(), translator, rel_table, rel_feature["id"], rel_feature, files)
                 elif rel_feature_status.startswith("deleted"):
-                    result = data_service.destroy(get_auth_user(), translator, rel_table, rel_feature["id"])
+                    result = data_service.destroy(get_identity(), translator, rel_table, rel_feature["id"])
                 else:
                     continue
                 if "error" in result:
@@ -750,9 +750,9 @@ class KeyValues(Resource):
     @api.marshal_with(keyvals_response, code=201)
     @optional_auth
     def get(self):
+        translator = Translator(app, request)
         args = get_relations_parser.parse_args()
         filterexpr = json.loads(args.get('filter') or "[]")
-        translator = Translator(app, request)
 
         data_service = data_service_handler()
 
@@ -765,7 +765,7 @@ class KeyValues(Resource):
                 continue
             ret[table] = []
             result = data_service.index(
-                get_auth_user(), translator, table, None, None, json.dumps(filterexpr[idx]) if filterexpr and len(filterexpr) > idx and filterexpr[idx] else None
+                get_identity(), translator, table, None, None, json.dumps(filterexpr[idx]) if filterexpr and len(filterexpr) > idx and filterexpr[idx] else None
             )
             if 'feature_collection' in result:
                 for feature in result['feature_collection']['features']:
