@@ -615,6 +615,7 @@ class AttachmentDownloader(Resource):
     @api.doc('get_attachment')
     @api.param('file', 'The file to download')
     @api.expect(get_attachment_parser)
+    @optional_auth
     def get(self, dataset):
         translator = Translator(app, request)
         args = get_attachment_parser.parse_args()
