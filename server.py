@@ -622,7 +622,7 @@ class AttachmentDownloader(Resource):
         data_service = data_service_handler()
         result = data_service.resolve_attachment(get_identity(), translator, dataset, args['file'])
         if 'error' not in result:
-            return send_file(path, as_attachment=True, download_name=os.path.basename(result['path']))
+            return send_file(result, as_attachment=True, download_name=os.path.basename(result['file']))
         else:
             error_code = result.get('error_code') or 404
             error_details = result.get('error_details') or {}
