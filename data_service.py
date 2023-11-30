@@ -605,7 +605,9 @@ class DataService():
                 'error_code': 405
             }
 
-        return self.attachments_service.resolve_attachment(dataset, slug)
+        return {
+            'file': self.attachments_service.resolve_attachment(dataset, slug)
+        }
 
     def add_logging_fields(self, feature, identity):
         """Adds logging fields to the feature

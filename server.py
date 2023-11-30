@@ -620,11 +620,13 @@ class AttachmentDownloader(Resource):
         translator = Translator(app, request)
         args = get_attachment_parser.parse_args()
         data_service = data_service_handler()
-        path = data_service.resolve_attachment(get_identity(), translator, dataset, args['file'])
-        if not path:
-            api.abort(404, translator.tr("error.unable_to_read_file"))
-
-        return send_file(path, as_attachment=True, download_name=os.path.basename(path))
+        result = data_service.resolve_attachment(get_identity(), translator, dataset, args['file'])
+        if 'error' not in result:
+            return send_file(path, as_attachment=True, download_name=os.path.basename(result['path']))
+        else:
+            error_code = result.get('error_code') or 404
+            error_details = result.get('error_details') or {}
+            api.abort(error_code, result['error'], **error_details)
 
 
 @api.route('/<path:dataset>/<id>/relations')
