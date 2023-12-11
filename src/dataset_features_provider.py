@@ -161,12 +161,12 @@ class DatasetFeaturesProvider():
 
         # execute query
         features = []
-        result = conn.execute(sql, **params)
+        result = conn.execute(sql, params).mappings()
 
         overall_bbox = None
         for row in result:
             # NOTE: feature CRS removed by marshalling
-            attribute_values = dict(row._mapping)
+            attribute_values = dict(row)
             join_attribute_values = self.__query_join_attributes(join_attributes, attribute_values)
             attribute_values.update(join_attribute_values)
 
@@ -243,9 +243,9 @@ class DatasetFeaturesProvider():
 
         # execute query
         features = []
-        result = conn.execute(sql, **params)
+        result = conn.execute(sql, params)
 
-        row = result.fetchone()
+        row = result.fetchone().mappings()
 
         # roll back transaction and close database connection
         trans.rollback()
@@ -276,7 +276,7 @@ class DatasetFeaturesProvider():
         # connect to database and start transaction (for read-only access)
         conn = self.db_read.connect()
         trans = conn.begin()
-        result = conn.execute(sql)
+        result = conn.execute(sql).mappings()
         records = []
         for row in result:
             records.append({'value': row[key], 'label': row[value]})
@@ -323,10 +323,10 @@ class DatasetFeaturesProvider():
 
         # execute query
         feature = None
-        result = conn.execute(sql, id=id)
+        result = conn.execute(sql, {"id": id}).mappings()
         for row in result:
             # NOTE: result is empty if not found
-            attribute_values = dict(row._mapping)
+            attribute_values = dict(row)
             join_attribute_values = self.__query_join_attributes(join_attributes, attribute_values)
             attribute_values.update(join_attribute_values)
 
@@ -366,15 +366,16 @@ class DatasetFeaturesProvider():
         # execute query
         # NOTE: use bound values
         feature = None
-        result = conn.execute(sql, **(sql_params['bound_values']))
+        result = conn.execute(sql, sql_params['bound_values']).mappings()
         for row in result:
-            attribute_values = dict(row._mapping)
+            attribute_values = dict(row)
             join_attribute_values = self.__query_join_attributes(join_attributes, attribute_values)
             attribute_values.update(join_attribute_values)
 
             feature = self.feature_from_query(attribute_values, srid)
 
         # close database connection
+        conn.commit()
         conn.close()
 
         return feature
@@ -412,17 +413,17 @@ class DatasetFeaturesProvider():
         # execute query
         # NOTE: use bound values
         feature = None
-        result = conn.execute(sql, **update_values)
+        result = conn.execute(sql, update_values).mappings()
         for row in result:
             # NOTE: result is empty if not found
-
-            attribute_values = dict(row._mapping)
+            attribute_values = dict(row)
             join_attribute_values = self.__query_join_attributes(join_attributes, attribute_values)
             attribute_values.update(join_attribute_values)
 
             feature = self.feature_from_query(attribute_values, srid)
 
         # close database connection
+        conn.commit()
         conn.close()
 
         return feature
@@ -444,12 +445,13 @@ class DatasetFeaturesProvider():
 
         # execute query
         success = False
-        result = conn.execute(sql, id=id)
+        result = conn.execute(sql, {"id": id})
         if result.one():
             # NOTE: result is empty if not found
             success = True
 
         # close database connection
+        conn.commit()
         conn.close()
 
         return success
@@ -464,14 +466,16 @@ class DatasetFeaturesProvider():
             table=self.table, pkey=self.primary_key
         ))
 
-        # connect to database
+        # connect to database and start transaction (for read-only access)
         conn = self.db_read.connect()
+        trans = conn.begin()
 
         # execute query
-        result = conn.execute(sql, id=id)
+        result = conn.execute(sql, {"id": id})
         exists = result.fetchone()[0]
 
         # close database connection
+        trans.rollback()
         conn.close()
 
         return exists
@@ -811,7 +815,7 @@ class DatasetFeaturesProvider():
         # validate GeoJSON geometry
         try:
             sql = sql_text("SELECT ST_GeomFromGeoJSON(:geom);")
-            conn.execute(sql, geom=json_geom)
+            conn.execute(sql, {"geom": json_geom})
         except InternalError as e:
             # PostGIS error, e.g. "Too few ordinates in GeoJSON"
             errors.append({
@@ -828,7 +832,7 @@ class DatasetFeaturesProvider():
                     GeometryType(geom) AS geom_type
                 FROM feature, ST_IsValidDetail(geom)
             """)
-            result = conn.execute(sql, geom=json_geom)
+            result = conn.execute(sql, {"geom": json_geom}).mappings()
             for row in result:
                 if not row['valid']:
                     error = {
@@ -910,7 +914,7 @@ class DatasetFeaturesProvider():
                 GROUP BY defined_type
                 LIMIT 1;
                 """).format(schema = self.schema, table = self.table_name, column = attr))
-                result = conn.execute(sql)
+                result = conn.execute(sql).mappings()
                 for row in result:
                     data_type = row['defined_type']
 
@@ -944,7 +948,7 @@ class DatasetFeaturesProvider():
             try:
                 # try to parse value on DB
                 sql = sql_text("SELECT (:value):: %s AS value;" % data_type)
-                result = conn.execute(sql, value=input_value)
+                result = conn.execute(sql, {"value": input_value}).mappings()
                 for row in result:
                     value = row['value']
             except (DataError, ProgrammingError) as e:
@@ -998,6 +1002,7 @@ class DatasetFeaturesProvider():
                 errors.append(self.translator.tr("validation.invalid_value_for") % (attr))
 
         # close database connection
+        trans.rollback()
         conn.close()
 
         # remove read-only properties and check required values
@@ -1277,7 +1282,7 @@ class DatasetFeaturesProvider():
 
             # execute query
             joinvalue = own_attribute_values[jointableconfig['targetField']]
-            result = conn.execute(sql, joinvalue=joinvalue)
+            result = conn.execute(sql, {"joinvalue": joinvalue}).mappings()
 
             for row in result:
                 for fieldname, targetname in fields.items():
