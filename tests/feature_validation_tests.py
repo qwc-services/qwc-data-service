@@ -19,7 +19,7 @@ class FakeApp:
 
     @property
     def root_path(self):
-        return os.path.join(os.path.dirname(__file__), "..")
+        return os.path.join(os.path.dirname(__file__), "../src")
 
 class FeatureValidationTestCase(unittest.TestCase):
     """Test case for feature validations"""
