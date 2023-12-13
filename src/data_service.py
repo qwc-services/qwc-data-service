@@ -12,7 +12,7 @@ from dataset_features_provider import DatasetFeaturesProvider
 from attachments_service import AttachmentsService
 
 ERROR_DETAILS_LOG_ONLY = os.environ.get(
-    'ERROR_DETAILS_LOG_ONLY', 'False') == 'True'
+    'ERROR_DETAILS_LOG_ONLY', 'False').lower() == 'true'
 
 
 class DataService():
