@@ -236,7 +236,9 @@ relation_feature_response = create_model(api, 'Feature', [
 
 relation_table_values = create_model(api, 'Relation table value', [
     ['fk', fields.String(required=True, description='Foreign key field name')],
-    ['features', fields.List(fields.Nested(relation_feature_response), required=True, description='Relation features')]
+    ['features', fields.List(fields.Nested(relation_feature_response), required=True, description='Relation features')],
+    ['error', fields.Raw(required=False,
+                                     description='Error details')]
 ])
 
 relation_table_entry = create_model(api, 'Relation table entry', [
@@ -654,7 +656,11 @@ class Relations(Resource):
             result = data_service.index(
                 get_identity(), translator, table, None, crs, '[["%s", "=", "%s"]]' % (fk_field_name, id)
             )
-            ret[table] = {"fk": fk_field_name, "features": result['feature_collection']['features'] if 'feature_collection' in result else []}
+            ret[table] = {
+                "fk": fk_field_name,
+                "features": result['feature_collection']['features'] if 'feature_collection' in result else [],
+                "error": result.get('error')
+            }
             if sortcol:
                 ret[table]['features'].sort(key=lambda f: f["properties"][sortcol])
             else:
