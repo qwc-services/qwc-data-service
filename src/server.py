@@ -652,7 +652,7 @@ class Relations(Resource):
             except:
                 continue
             result = data_service.index(
-                get_identity(), translator, table, None, crs, '[["%s", "=", %s]]' % (fk_field_name, id)
+                get_identity(), translator, table, None, crs, '[["%s", "=", "%s"]]' % (fk_field_name, id)
             )
             ret[table] = {"fk": fk_field_name, "features": result['feature_collection']['features'] if 'feature_collection' in result else []}
             if sortcol:
