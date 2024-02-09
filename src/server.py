@@ -29,54 +29,7 @@ app = Flask(__name__)
 app.request_class = Request
 # Flask-RESTPlus Api
 api = Api(app, version='1.0', title='Data service API',
-          description="""API for QWC Data service.
-
-## General Information for all operations
-
-### Datatypes-Encoding
-
-JSON only defines recommendations or has no information concerning
-the encoding of some quite common used database data types.
-Following a description on how these are encoded in the data
-service API.
-
-- Date: ISO date strings `YYYY-MM-DD`
-- Datetime: ISO date/time strings `YYYY-MM-DDThh:mm:ss`
-- UUID: Hex-encoded string format. Example: `'6fa459ea-ee8a-3ca4-894e-db77e160355e'`
-
-### Feature-ID
-
-For operations like updating or deleting features, records are identified by
-a feature `id`. This `id` refers to the primary key of the database
-table and is usually kept constant over time.
-
-## Filter expressions
-
-Query operations support passing filter expressions to narrow down the results.
-This expression is a serialized JSON array of the format:
-
-    [["<name>", "<op>", <value>],"and|or",["<name>","<op>",<value>],...]
-
-* `name` is the attribute column name. If `name` begins with `?`, the filter is only applied if the column name exists.
-* `op` can be one of
-
-      "=", "!=", "<>", "<", ">", "<=", ">=", "LIKE", "ILIKE", "IS", "IS NOT"
-
-  The operators are applied on the original database types.
-
-  If value is `null`, the operator should be `IS` or `IS NOT`.
-
-* `value` can be of type `string`, `int`, `float` or `null`.
-
-  For string operations, the SQL wildcard character `%` can be used.
-
-### Filter examples
-
-* Find all features in the dataset with a number field smaller 10 and a matching name field:
-  `[["name","LIKE","example%"],"and",["number","<",10]]`
-* Find all features in the dataset with a last change before 1st of January 2020 or having `NULL` as lastchange value:
-  `[["lastchange","<","2020-01-01T12:00:00"],"or",["lastchange","IS",null]]`
-          """,
+          description="""API for QWC Data service.""",
           default_label='Data edit operations', doc='/api/'
           )
 # Omit X-Fields header in docs
