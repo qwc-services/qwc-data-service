@@ -1002,7 +1002,6 @@ class DatasetFeaturesProvider():
                 errors.append(self.translator.tr("validation.invalid_value_for") % (attr))
 
         # close database connection
-        trans.rollback()
         conn.close()
 
         # remove read-only properties and check required values
