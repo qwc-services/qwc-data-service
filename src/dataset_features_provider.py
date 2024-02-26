@@ -82,7 +82,7 @@ class DatasetFeaturesProvider():
         """Return whether dataset can be deleted."""
         return self.__deletable
 
-    def index(self, bbox, client_srid, filterexpr):
+    def index(self, bbox, client_srid, filterexpr, filter_geom):
         """Find features inside bounding box.
 
         :param list[float] bbox: Bounding box as [<minx>,<miny>,<maxx>,<maxy>]
@@ -90,6 +90,7 @@ class DatasetFeaturesProvider():
         :param int client_srid: Client SRID or None for dataset SRID
         :param (sql, params) filterexpr: A filter expression as a tuple
                                          (sql_expr, bind_params)
+        :param str filter_geom: JSON serialized GeoJSON geometry
         """
         srid = client_srid or self.srid
 
@@ -131,6 +132,10 @@ class DatasetFeaturesProvider():
         if filterexpr is not None and filterexpr[0]:
             where_clauses.append(filterexpr[0])
             params.update(filterexpr[1])
+
+        if filter_geom is not None:
+            where_clauses.append("ST_Intersects(%s, ST_GeomFromGeoJSON(:filter_geom))" % self.geometry_column)
+            params.update({"filter_geom": filter_geom})
 
         where_clause = ""
         if where_clauses:
@@ -196,12 +201,13 @@ class DatasetFeaturesProvider():
             'bbox': overall_bbox
         }
 
-    def extent(self, client_srid, filterexpr):
+    def extent(self, client_srid, filterexpr, filter_geom):
         """Get extent of dataset features.
 
         :param int client_srid: Client SRID or None for dataset SRID
         :param (sql, params) filterexpr: A filter expression as a tuple
                                          (sql_expr, bind_params)
+        :param str filter_geom: JSON serialized GeoJSON geometry
         """
         srid = client_srid or self.srid
 
@@ -214,6 +220,10 @@ class DatasetFeaturesProvider():
         if filterexpr is not None:
             where_clauses.append(filterexpr[0])
             params.update(filterexpr[1])
+
+        if filter_geom is not None:
+            where_clauses.append("ST_Intersects(%s, ST_GeomFromGeoJSON(:filter_geom))" % self.geometry_column)
+            params.update({"filter_geom": filter_geom})
 
         where_clause = ""
         if where_clauses:

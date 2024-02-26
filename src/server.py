@@ -256,6 +256,7 @@ index_parser = reqparse.RequestParser(argument_class=CaseInsensitiveArgument)
 index_parser.add_argument('bbox')
 index_parser.add_argument('crs')
 index_parser.add_argument('filter')
+index_parser.add_argument('filter_geom')
 
 feature_multipart_parser = reqparse.RequestParser(argument_class=CaseInsensitiveArgument)
 feature_multipart_parser.add_argument('feature', help='Feature', required=True, location='form')
@@ -298,6 +299,8 @@ class DataCollection(Resource):
     @api.param(
         'filter', 'JSON serialized array of filter expressions: '
         '`[["<name>", "<op>", <value>],"and|or",["<name>","<op>",<value>]]`')
+    @api.param(
+        'filter_geom', 'GeoJSON serialized geometry, used as intersection geometry filter')
     @api.expect(index_parser)
     @api.marshal_with(geojson_feature_collection_response, skip_none=True)
     @optional_auth
@@ -312,10 +315,11 @@ class DataCollection(Resource):
         bbox = args['bbox']
         crs = args['crs']
         filterexpr = args['filter']
+        filter_geom = args['filter_geom']
 
         data_service = data_service_handler()
         result = data_service.index(
-            get_identity(), translator, dataset, bbox, crs, filterexpr
+            get_identity(), translator, dataset, bbox, crs, filterexpr, filter_geom
         )
         if 'error' not in result:
             return result['feature_collection']
@@ -368,23 +372,26 @@ class DataCollection(Resource):
     @api.param(
         'filter', 'JSON serialized array of filter expressions: '
         '`[["<name>", "<op>", <value>],"and|or",["<name>","<op>",<value>]]`')
+    @api.param(
+        'filter_geom', 'GeoJSON serialized geometry, used as intersection geometry filter')
     @api.expect(index_parser)
     @api.marshal_with(extent_response)
     @optional_auth
     def get(self, dataset):
         """Get dataset features
 
-        Return dataset features inside bounding box and matching filter as a
-        GeoJSON FeatureCollection.
+        Return the extend of the features matching any specified filter as a
+        [xmin,ymin,xmax,ymax] array.
         """
         translator = Translator(app, request)
         args = index_parser.parse_args()
         crs = args['crs']
         filterexpr = args['filter']
+        filter_geom = args['filter_geom']
 
         data_service = data_service_handler()
         result = data_service.extent(
-            get_identity(), translator, dataset, crs, filterexpr
+            get_identity(), translator, dataset, crs, filterexpr, filter_geom
         )
         if 'error' not in result:
             return result['extent']
