@@ -713,7 +713,7 @@ class KeyValues(Resource):
     @api.doc('get_relations')
     @api.param('tables', 'Comma separated list of keyvalue tables of the form "tablename:key_field_name:value_field_name"')
     @api.param(
-        'filters', 'JSON serialized array of filter expressions, the same length as the number of specified tables: '
+        'filter', 'JSON serialized array of filter expressions, the same length as the number of specified tables: '
         '`[[["<name>", "<op>", <value>],"and|or",["<name>","<op>",<value>]], ...]`')
     @api.expect(get_relations_parser)
     @api.marshal_with(keyvals_response, code=201)
