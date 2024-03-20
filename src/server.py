@@ -614,7 +614,7 @@ class Relations(Resource):
             except:
                 continue
             result = data_service.index(
-                get_identity(), translator, table, None, crs, '[["%s", "=", "%s"]]' % (fk_field_name, id)
+                get_identity(), translator, table, None, crs, '[["%s", "=", "%s"]]' % (fk_field_name, id), None
             )
             ret[table] = {
                 "fk": fk_field_name,
