@@ -160,28 +160,22 @@ class DatasetFeaturesProvider():
 
         self.logger.debug(f"feature index query: {sql}")
 
-        # connect to database and start transaction (for read-only access)
-        conn = self.db_read.connect()
-        trans = conn.begin()
-
-        # execute query
         features = []
-        result = conn.execute(sql, params).mappings()
+        # connect to database (for read-only access)
+        with self.db_read.connect() as conn:
+            # execute query
+            result = conn.execute(sql, params).mappings()
 
-        overall_bbox = None
-        for row in result:
-            # NOTE: feature CRS removed by marshalling
-            attribute_values = dict(row)
-            join_attribute_values = self.__query_join_attributes(join_attributes, attribute_values)
-            attribute_values.update(join_attribute_values)
+            overall_bbox = None
+            for row in result:
+                # NOTE: feature CRS removed by marshalling
+                attribute_values = dict(row)
+                join_attribute_values = self.__query_join_attributes(join_attributes, attribute_values)
+                attribute_values.update(join_attribute_values)
 
-            features.append(self.feature_from_query(attribute_values, srid))
-            if '_overall_bbox_' in row:
-                overall_bbox = row['_overall_bbox_']
-
-        # roll back transaction and close database connection
-        trans.rollback()
-        conn.close()
+                features.append(self.feature_from_query(attribute_values, srid))
+                if '_overall_bbox_' in row:
+                    overall_bbox = row['_overall_bbox_']
 
         crs = None
         if self.geometry_column:
@@ -247,24 +241,16 @@ class DatasetFeaturesProvider():
             where_clause=where_clause
         ))
 
-        # connect to database and start transaction (for read-only access)
-        conn = self.db_read.connect()
-        trans = conn.begin()
-
-        # execute query
-        features = []
-        result = conn.execute(sql, params)
-
-        row = result.fetchone().mappings()
-
-        # roll back transaction and close database connection
-        trans.rollback()
-        conn.close()
-
-        if row and 'bbox' in row:
-            return self.parse_box2d(row['bbox'])
-        else:
-            return None
+        # connect to database (for read-only access)
+        with self.db_read.connect() as conn:
+            # execute query
+            result = conn.execute(sql, params)
+            row = result.fetchone().mappings()
+            
+            if row and 'bbox' in row:
+                return self.parse_box2d(row['bbox'])
+            else:
+                return None
 
     def keyvals(self, key, value):
         """ Get key-value pairs.
@@ -283,17 +269,12 @@ class DatasetFeaturesProvider():
             columns=columns, table=self.table
         ))
 
-        # connect to database and start transaction (for read-only access)
-        conn = self.db_read.connect()
-        trans = conn.begin()
-        result = conn.execute(sql).mappings()
         records = []
-        for row in result:
-            records.append({'value': row[key], 'label': row[value]})
-
-        # roll back transaction and close database connection
-        trans.rollback()
-        conn.close()
+        # connect to database (for read-only access)
+        with self.db_read.connect() as conn:
+            result = conn.execute(sql).mappings()
+            for row in result:
+                records.append({'value': row[key], 'label': row[value]})
 
         return records
 
@@ -327,24 +308,18 @@ class DatasetFeaturesProvider():
 
         self.logger.debug(f"feature show query: {sql}")
 
-        # connect to database and start transaction (for read-only access)
-        conn = self.db_read.connect()
-        trans = conn.begin()
-
-        # execute query
         feature = None
-        result = conn.execute(sql, {"id": id}).mappings()
-        for row in result:
-            # NOTE: result is empty if not found
-            attribute_values = dict(row)
-            join_attribute_values = self.__query_join_attributes(join_attributes, attribute_values)
-            attribute_values.update(join_attribute_values)
+        # connect to database (for read-only access)
+        with self.db_read.connect() as conn:
+            # execute query
+            result = conn.execute(sql, {"id": id}).mappings()
+            for row in result:
+                # NOTE: result is empty if not found
+                attribute_values = dict(row)
+                join_attribute_values = self.__query_join_attributes(join_attributes, attribute_values)
+                attribute_values.update(join_attribute_values)
 
-            feature = self.feature_from_query(attribute_values, srid)
-
-        # roll back transaction and close database connection
-        trans.rollback()
-        conn.close()
+                feature = self.feature_from_query(attribute_values, srid)
 
         return feature
 
@@ -354,39 +329,34 @@ class DatasetFeaturesProvider():
         :param object feature: GeoJSON Feature
         """
         # connect to database
-        conn = self.db_write.connect()
+        with self.db_write.begin() as conn:
+            # build query SQL
+            sql_params = self.sql_params_for_feature(feature)
+            srid = sql_params['client_srid']
+            own_attributes, join_attributes = self.__extract_join_attributes()
 
-        # build query SQL
-        sql_params = self.sql_params_for_feature(feature, conn)
-        srid = sql_params['client_srid']
-        own_attributes, join_attributes = self.__extract_join_attributes()
+            geom_sql = self.geom_column_sql(srid)
+            sql = sql_text(("""
+                INSERT INTO {table} ({columns})
+                    VALUES ({values_sql})
+                RETURNING {return_columns}%s;
+            """ % geom_sql).format(
+                table=self.table, columns=sql_params['columns'],
+                values_sql=sql_params['values_sql'],
+                return_columns=sql_params['return_columns'],
+                geom=self.geometry_column
+            ))
 
-        geom_sql = self.geom_column_sql(srid)
-        sql = sql_text(("""
-            INSERT INTO {table} ({columns})
-                VALUES ({values_sql})
-            RETURNING {return_columns}%s;
-        """ % geom_sql).format(
-            table=self.table, columns=sql_params['columns'],
-            values_sql=sql_params['values_sql'],
-            return_columns=sql_params['return_columns'],
-            geom=self.geometry_column
-        ))
+            # execute query
+            # NOTE: use bound values
+            feature = None
+            result = conn.execute(sql, sql_params['bound_values']).mappings()
+            for row in result:
+                attribute_values = dict(row)
+                join_attribute_values = self.__query_join_attributes(join_attributes, attribute_values)
+                attribute_values.update(join_attribute_values)
 
-        # execute query
-        # NOTE: use bound values
-        feature = None
-        result = conn.execute(sql, sql_params['bound_values']).mappings()
-        for row in result:
-            attribute_values = dict(row)
-            join_attribute_values = self.__query_join_attributes(join_attributes, attribute_values)
-            attribute_values.update(join_attribute_values)
-
-            feature = self.feature_from_query(attribute_values, srid)
-
-        # close database connection
-        conn.commit()
-        conn.close()
+                feature = self.feature_from_query(attribute_values, srid)
 
         return feature
 
@@ -397,44 +367,39 @@ class DatasetFeaturesProvider():
         :param object feature: GeoJSON Feature
         """
         # connect to database
-        conn = self.db_write.connect()
+        with self.db_write.begin() as conn:
+            # build query SQL
+            sql_params = self.sql_params_for_feature(feature)
+            srid = sql_params['client_srid']
+            own_attributes, join_attributes = self.__extract_join_attributes()
 
-        # build query SQL
-        sql_params = self.sql_params_for_feature(feature, conn)
-        srid = sql_params['client_srid']
-        own_attributes, join_attributes = self.__extract_join_attributes()
+            geom_sql = self.geom_column_sql(srid)
+            sql = sql_text(("""
+                UPDATE {table} SET ({columns}) =
+                    ROW({values_sql})
+                WHERE {pkey} = :{pkey}
+                RETURNING {return_columns}%s;
+            """ % geom_sql).format(
+                table=self.table, columns=sql_params['columns'],
+                values_sql=sql_params['values_sql'], pkey=self.primary_key,
+                return_columns=sql_params['return_columns'],
+                geom=self.geometry_column
+            ))
 
-        geom_sql = self.geom_column_sql(srid)
-        sql = sql_text(("""
-            UPDATE {table} SET ({columns}) =
-                ROW({values_sql})
-            WHERE {pkey} = :{pkey}
-            RETURNING {return_columns}%s;
-        """ % geom_sql).format(
-            table=self.table, columns=sql_params['columns'],
-            values_sql=sql_params['values_sql'], pkey=self.primary_key,
-            return_columns=sql_params['return_columns'],
-            geom=self.geometry_column
-        ))
+            update_values = sql_params['bound_values']
+            update_values[self.primary_key] = id
 
-        update_values = sql_params['bound_values']
-        update_values[self.primary_key] = id
+            # execute query
+            # NOTE: use bound values
+            feature = None
+            result = conn.execute(sql, update_values).mappings()
+            for row in result:
+                # NOTE: result is empty if not found
+                attribute_values = dict(row)
+                join_attribute_values = self.__query_join_attributes(join_attributes, attribute_values)
+                attribute_values.update(join_attribute_values)
 
-        # execute query
-        # NOTE: use bound values
-        feature = None
-        result = conn.execute(sql, update_values).mappings()
-        for row in result:
-            # NOTE: result is empty if not found
-            attribute_values = dict(row)
-            join_attribute_values = self.__query_join_attributes(join_attributes, attribute_values)
-            attribute_values.update(join_attribute_values)
-
-            feature = self.feature_from_query(attribute_values, srid)
-
-        # close database connection
-        conn.commit()
-        conn.close()
+                feature = self.feature_from_query(attribute_values, srid)
 
         return feature
 
@@ -451,18 +416,13 @@ class DatasetFeaturesProvider():
         """.format(table=self.table, pkey=self.primary_key))
 
         # connect to database
-        conn = self.db_write.connect()
-
-        # execute query
-        success = False
-        result = conn.execute(sql, {"id": id})
-        if result.one():
-            # NOTE: result is empty if not found
-            success = True
-
-        # close database connection
-        conn.commit()
-        conn.close()
+        with self.db_write.begin() as conn:
+            # execute query
+            success = False
+            result = conn.execute(sql, {"id": id})
+            if result.one():
+                # NOTE: result is empty if not found
+                success = True
 
         return success
 
@@ -476,17 +436,11 @@ class DatasetFeaturesProvider():
             table=self.table, pkey=self.primary_key
         ))
 
-        # connect to database and start transaction (for read-only access)
-        conn = self.db_read.connect()
-        trans = conn.begin()
-
-        # execute query
-        result = conn.execute(sql, {"id": id})
-        exists = result.fetchone()[0]
-
-        # close database connection
-        trans.rollback()
-        conn.close()
+        # connect to database (for read-only access)
+        with self.db_read.connect() as conn:
+            # execute query
+            result = conn.execute(sql, {"id": id})
+            exists = result.fetchone()[0]
 
         return exists
 
@@ -818,74 +772,68 @@ class DatasetFeaturesProvider():
 
         json_geom = json.dumps(feature.get('geometry'))
 
-        # connect to database and start transaction (for read-only access)
-        conn = self.db_read.connect()
-        trans = conn.begin()
-
-        # validate GeoJSON geometry
-        try:
-            sql = sql_text("SELECT ST_GeomFromGeoJSON(:geom);")
-            conn.execute(sql, {"geom": json_geom})
-        except InternalError as e:
-            # PostGIS error, e.g. "Too few ordinates in GeoJSON"
-            errors.append({
-                'reason': re.sub(r'^FEHLER:\s*', '', str(e.orig)).strip()
-            })
-
-        if not errors:
-            # validate geometry
-            wkt_geom = ""
-            sql = sql_text("""
-                WITH feature AS (SELECT ST_GeomFromGeoJSON(:geom) AS geom)
-                SELECT valid, reason, ST_AsText(location) AS location,
-                    ST_IsEmpty(geom) as is_empty, ST_AsText(geom) AS wkt_geom,
-                    GeometryType(geom) AS geom_type
-                FROM feature, ST_IsValidDetail(geom)
-            """)
-            result = conn.execute(sql, {"geom": json_geom}).mappings()
-            for row in result:
-                if not row['valid']:
-                    error = {
-                        'reason': row['reason']
-                    }
-                    if row['location'] is not None:
-                        error['location'] = row['location']
-                    errors.append(error)
-                elif row['is_empty']:
-                    errors.append({'reason': self.translator.tr("validation.empty_or_incomplete_geom")})
-
-                wkt_geom = row['wkt_geom']
-                geom_type = row['geom_type']
-
-                # GeoJSON geometry type does not specify whether there is a Z coordinate, need
-                # to look at the length of a coordinate
-                if self.has_z(feature.get('geometry')['coordinates']):
-                    geom_type += "Z"
-
-        if not errors:
-            # check WKT for repeated vertices
-            groups = re.findall(r'(?<=\()([\d\.,\s]+)(?=\))', wkt_geom)
-            for group in groups:
-                vertices = group.split(',')
-                for i, v in enumerate(vertices):
-                    if i > 0 and vertices[i-1] == v:
-                        errors.append({
-                            'reason': self.translator.tr("validation.duplicate_point"),
-                            'location': 'POINT(%s)' % v
-                        })
-
-        if not errors:
-            # validate geometry type
-            if (self.geometry_type != 'Geometry' and
-               geom_type != self.geometry_type):
+        # connect to database (for read-only access)
+        with self.db_read.connect() as conn:
+            # validate GeoJSON geometry
+            try:
+                sql = sql_text("SELECT ST_GeomFromGeoJSON(:geom);")
+                conn.execute(sql, {"geom": json_geom})
+            except InternalError as e:
+                # PostGIS error, e.g. "Too few ordinates in GeoJSON"
                 errors.append({
-                    'reason': self.translator.tr("validation.invalid_geom_type") %
-                              (geom_type, self.geometry_type)
+                    'reason': re.sub(r'^FEHLER:\s*', '', str(e.orig)).strip()
                 })
 
-        # roll back transaction and close database connection
-        trans.rollback()
-        conn.close()
+            if not errors:
+                # validate geometry
+                wkt_geom = ""
+                sql = sql_text("""
+                    WITH feature AS (SELECT ST_GeomFromGeoJSON(:geom) AS geom)
+                    SELECT valid, reason, ST_AsText(location) AS location,
+                        ST_IsEmpty(geom) as is_empty, ST_AsText(geom) AS wkt_geom,
+                        GeometryType(geom) AS geom_type
+                    FROM feature, ST_IsValidDetail(geom)
+                """)
+                result = conn.execute(sql, {"geom": json_geom}).mappings()
+                for row in result:
+                    if not row['valid']:
+                        error = {
+                            'reason': row['reason']
+                        }
+                        if row['location'] is not None:
+                            error['location'] = row['location']
+                        errors.append(error)
+                    elif row['is_empty']:
+                        errors.append({'reason': self.translator.tr("validation.empty_or_incomplete_geom")})
+
+                    wkt_geom = row['wkt_geom']
+                    geom_type = row['geom_type']
+
+                    # GeoJSON geometry type does not specify whether there is a Z coordinate, need
+                    # to look at the length of a coordinate
+                    if self.has_z(feature.get('geometry')['coordinates']):
+                        geom_type += "Z"
+
+            if not errors:
+                # check WKT for repeated vertices
+                groups = re.findall(r'(?<=\()([\d\.,\s]+)(?=\))', wkt_geom)
+                for group in groups:
+                    vertices = group.split(',')
+                    for i, v in enumerate(vertices):
+                        if i > 0 and vertices[i-1] == v:
+                            errors.append({
+                                'reason': self.translator.tr("validation.duplicate_point"),
+                                'location': 'POINT(%s)' % v
+                            })
+
+            if not errors:
+                # validate geometry type
+                if (self.geometry_type != 'Geometry' and
+                geom_type != self.geometry_type):
+                    errors.append({
+                        'reason': self.translator.tr("validation.invalid_geom_type") %
+                                (geom_type, self.geometry_type)
+                    })
 
         return errors
 
@@ -907,112 +855,103 @@ class DatasetFeaturesProvider():
             return errors
 
         # connect to database
-        conn = self.db_read.connect()
+        with self.db_read.connect() as conn:
 
-        for attr in feature['properties']:
-            constraints = self.fields.get(attr, {}).get('constraints', {})
-            data_type = self.fields.get(attr, {}).get('data_type')
-            input_value = feature['properties'][attr]
-            value = None
+            for attr in feature['properties']:
+                constraints = self.fields.get(attr, {}).get('constraints', {})
+                data_type = self.fields.get(attr, {}).get('data_type')
+                input_value = feature['properties'][attr]
+                value = None
 
-            # query the correct type name for user-defined columns
-            if data_type == 'USER-DEFINED': 
-                sql =  sql_text(("""
-                SELECT udt_schema::text ||'.'|| udt_name::text as defined_type
-                FROM information_schema.columns
-                WHERE table_schema = '{schema}' AND column_name = '{column}' and table_name = '{table}'
-                GROUP BY defined_type
-                LIMIT 1;
-                """).format(schema = self.schema, table = self.table_name, column = attr))
-                result = conn.execute(sql).mappings()
-                for row in result:
-                    data_type = row['defined_type']
+                # query the correct type name for user-defined columns
+                if data_type == 'USER-DEFINED': 
+                    sql =  sql_text(("""
+                    SELECT udt_schema::text ||'.'|| udt_name::text as defined_type
+                    FROM information_schema.columns
+                    WHERE table_schema = '{schema}' AND column_name = '{column}' and table_name = '{table}'
+                    GROUP BY defined_type
+                    LIMIT 1;
+                    """).format(schema = self.schema, table = self.table_name, column = attr))
+                    result = conn.execute(sql).mappings()
+                    for row in result:
+                        data_type = row['defined_type']
 
-            if data_type == 'numeric' and \
-                constraints.get('numeric_precision', None) and \
-                constraints.get('numeric_scale', None):
-                data_type = 'numeric(%d,%d)' % (
-                    constraints['numeric_precision'],
-                    constraints['numeric_scale']
-                )
-            elif data_type == 'bigint':
-                # parse bigint constraints from string
-                if 'min' in constraints:
-                    constraints['min'] = int(constraints['min'])
-                if 'max' in constraints:
-                    constraints['max'] = int(constraints['max'])
-            elif data_type in ['json', 'jsonb']:
-                # convert values for fields of type json to string
-                input_value = json.dumps(input_value)
+                if data_type == 'numeric' and \
+                    constraints.get('numeric_precision', None) and \
+                    constraints.get('numeric_scale', None):
+                    data_type = 'numeric(%d,%d)' % (
+                        constraints['numeric_precision'],
+                        constraints['numeric_scale']
+                    )
+                elif data_type == 'bigint':
+                    # parse bigint constraints from string
+                    if 'min' in constraints:
+                        constraints['min'] = int(constraints['min'])
+                    if 'max' in constraints:
+                        constraints['max'] = int(constraints['max'])
+                elif data_type in ['json', 'jsonb']:
+                    # convert values for fields of type json to string
+                    input_value = json.dumps(input_value)
 
-            # readOnly
-            if constraints.get('readOnly', False):
-                # skip read-only fields and remove below
-                continue
+                # readOnly
+                if constraints.get('readOnly', False):
+                    # skip read-only fields and remove below
+                    continue
 
-            # validate data type
+                # validate data type
 
-            # start transaction (for read-only access)
-            trans = conn.begin()
+                try:
+                    # try to parse value on DB
+                    sql = sql_text("SELECT (:value):: %s AS value;" % data_type)
+                    result = conn.execute(sql, {"value": input_value}).mappings()
+                    for row in result:
+                        value = row['value']
+                except (DataError, ProgrammingError) as e:
+                    # NOTE: current transaction is aborted
+                    errors.append(self.translator.tr("validation.invalid_value") %
+                                (attr, data_type))
 
-            try:
-                # try to parse value on DB
-                sql = sql_text("SELECT (:value):: %s AS value;" % data_type)
-                result = conn.execute(sql, {"value": input_value}).mappings()
-                for row in result:
-                    value = row['value']
-            except (DataError, ProgrammingError) as e:
-                # NOTE: current transaction is aborted
-                errors.append(self.translator.tr("validation.invalid_value") %
-                              (attr, data_type))
-            finally:
-                # roll back transaction
-                trans.rollback()
+                if value is None:
+                    # invalid value type
+                    continue
 
-            if value is None:
-                # invalid value type
-                continue
+                if data_type == 'boolean' and type(input_value) is int:
+                    # prevent 'column "..." is of type boolean but expression is of
+                    #          type integer'
+                    errors.append(self.translator.tr("validation.invalid_value") %
+                                (attr, data_type))
+                    continue
 
-            if data_type == 'boolean' and type(input_value) is int:
-                # prevent 'column "..." is of type boolean but expression is of
-                #          type integer'
-                errors.append(self.translator.tr("validation.invalid_value") %
-                              (attr, data_type))
-                continue
+                # validate constraints
 
-            # validate constraints
+                # maxlength
+                maxlength = constraints.get('maxlength')
+                if maxlength is not None and len(str(value)) > int(maxlength):
+                    errors.append(
+                        self.translator.tr("validation.value_must_be_shorter_than") %
+                        (attr, maxlength)
+                    )
 
-            # maxlength
-            maxlength = constraints.get('maxlength')
-            if maxlength is not None and len(str(value)) > int(maxlength):
-                errors.append(
-                    self.translator.tr("validation.value_must_be_shorter_than") %
-                    (attr, maxlength)
-                )
+                # min
+                minimum = constraints.get('min')
+                if minimum is not None and float(value) < minimum:
+                    errors.append(
+                        self.translator.tr("validation.value_must_be_geq_to") %
+                        (attr, minimum)
+                    )
 
-            # min
-            minimum = constraints.get('min')
-            if minimum is not None and float(value) < minimum:
-                errors.append(
-                    self.translator.tr("validation.value_must_be_geq_to") %
-                    (attr, minimum)
-                )
+                # max
+                maximum = constraints.get('max')
+                if maximum is not None and float(value) > maximum:
+                    errors.append(
+                        self.translator.tr("validation.value_must_be_leq_to") %
+                        (attr, maximum)
+                    )
 
-            # max
-            maximum = constraints.get('max')
-            if maximum is not None and float(value) > maximum:
-                errors.append(
-                    self.translator.tr("validation.value_must_be_leq_to") %
-                    (attr, maximum)
-                )
-
-            # values
-            values = constraints.get('values', {})
-            if value and values and str(value) not in [str(v['value']) for v in values]:
-                errors.append(self.translator.tr("validation.invalid_value_for") % (attr))
-
-        # close database connection
-        conn.close()
+                # values
+                values = constraints.get('values', {})
+                if value and values and str(value) not in [str(v['value']) for v in values]:
+                    errors.append(self.translator.tr("validation.invalid_value_for") % (attr))
 
         # remove read-only properties and check required values
         for attr in self.fields:
@@ -1138,7 +1077,7 @@ class DatasetFeaturesProvider():
             'bbox': bbox
         }
 
-    def sql_params_for_feature(self, feature, conn):
+    def sql_params_for_feature(self, feature):
         """Build SQL fragments and values for feature INSERT or UPDATE and
         get client SRID from GeoJSON CRS.
 
@@ -1286,19 +1225,14 @@ class DatasetFeaturesProvider():
 
             self.logger.debug(f"joined attributes query: {sql}")
 
-            conn = self.db_engine.db_engine(jointableconfig["database"]).connect()
-            trans = conn.begin()
+            with self.db_engine.db_engine(jointableconfig["database"]).connect() as conn:
+                # execute query
+                joinvalue = own_attribute_values[jointableconfig['targetField']]
+                result = conn.execute(sql, {"joinvalue": joinvalue}).mappings()
 
-            # execute query
-            joinvalue = own_attribute_values[jointableconfig['targetField']]
-            result = conn.execute(sql, {"joinvalue": joinvalue}).mappings()
-
-            for row in result:
-                for fieldname, targetname in fields.items():
-                    join_values[fieldname] = row[targetname]
-                break
-
-            trans.rollback()
-            conn.close()
+                for row in result:
+                    for fieldname, targetname in fields.items():
+                        join_values[fieldname] = row[targetname]
+                    break
 
         return join_values
