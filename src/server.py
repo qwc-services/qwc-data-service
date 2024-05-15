@@ -2,9 +2,10 @@ from collections import OrderedDict
 import json
 import os
 import re
+import requests
 
 from flask import Flask, Request as RequestBase, request, jsonify, send_file
-from flask_restx import Api, Resource, fields, reqparse
+from flask_restx import Api, Resource, fields, reqparse, marshal
 from werkzeug.exceptions import BadRequest
 from werkzeug.datastructures import FileStorage
 
@@ -55,6 +56,51 @@ def data_service_handler():
     return handler
 
 
+def verify_captcha(identity, captcha_response):
+    """ Validate a captcha response."""
+    # if authenticated, skip captcha validation
+    if identity:
+        return True
+    tenant = tenant_handler.tenant()
+    config_handler = RuntimeConfig("data", app.logger)
+    config = config_handler.tenant_config(tenant)
+    site_key = config.get("recaptcha_site_secret_key", "")
+    if not site_key:
+        app.logger.info(
+            "recaptcha_site_secret_key is not set, skipping verification"
+        )
+        return True
+
+    # send request to reCAPTCHA API
+    app.logger.info("Verifying captcha response token")
+    url = 'https://www.google.com/recaptcha/api/siteverify'
+    params = {
+        'secret': site_key,
+        'response': captcha_response
+    }
+    response = requests.post(
+        url, data=params, timeout=60
+    )
+
+    if response.status_code != requests.codes.ok:
+        # handle server error
+        app.logger.error(
+            "Could not verify captcha response token:\n\n%s" %
+            response.text
+        )
+        return False
+
+    # check response
+    res = json.loads(response.text)
+    if res['success']:
+        app.logger.info("Captcha verified")
+        return True
+    else:
+        app.logger.warning("Captcha verification failed: %s" % res)
+
+    return False
+
+
 class FeatureId(fields.Raw):
     def format(self, value):
         if isinstance(value, int):
@@ -62,7 +108,21 @@ class FeatureId(fields.Raw):
         else:
             return str(value)
 
+class KeepEmptyDict(fields.Nested):
+    def output(self, key, obj, **kwargs):
+        if not obj.get(key):
+            return {}
+        return super().output(key, obj, **kwargs)
+
 # Api models
+extent_response = create_model(api, 'BBOX', [
+    ['bbox', fields.Raw(required=True, allow_null=True,
+                        description=(
+                            'Extent of feature as [minx, miny, maxx, maxy]'
+                        ),
+                        example=[950598.0, 6003950.0, 950758.0, 6004010.0])]
+])
+
 geojson_crs_properties = create_model(api, 'CRS Properties', [
     ['name', fields.String(required=True, description='OGC CRS URN',
                            example='urn:ogc:def:crs:EPSG::3857')],
@@ -82,8 +142,8 @@ geojson_geometry = create_model(api, 'Geometry', [
                                example=[950598.0, 6004010.0])]
 ])
 
-# Feature response
-geojson_feature_response = create_model(api, 'Feature', [
+# Feature
+geojson_feature = create_model(api, 'Feature', [
     ['type', fields.String(required=True, description='Feature',
                            example='Feature')],
     ['id', FeatureId(required=True, description='Feature ID',
@@ -105,51 +165,14 @@ geojson_feature_response = create_model(api, 'Feature', [
                         example=[950598.0, 6003950.0, 950758.0, 6004010.0])]
 ])
 
-extent_response = create_model(api, 'BBOX', [
-    ['bbox', fields.Raw(required=True, allow_null=True,
-                        description=(
-                            'Extent of feature as [minx, miny, maxx, maxy]'
-                        ),
-                        example=[950598.0, 6003950.0, 950758.0, 6004010.0])]
-])
+geojson_feature_request = api.inherit('Relation Feature', geojson_feature, {
+    'defaultedProperties': fields.List(fields.String, required=False)
+})
 
-# Feature request
-# NOTE: 'id' field not included, as ID is always defined by route
-geojson_feature_request = create_model(api, 'Input Feature', [
-    ['type', fields.String(required=True, description='Feature',
-                           example='Feature')],
-    ['geometry', fields.Nested(geojson_geometry, required=False,
-                               allow_null=True,
-                               description='Feature geometry')],
-    ['properties', fields.Raw(required=True, description='Feature properties',
-                              example={'name': 'Example', 'type': 2, 'num': 4}
-                              )],
-    ['defaultedProperties', fields.List(fields.String, required=False)],
-    ['crs', fields.Nested(geojson_crs, required=False, allow_null=True,
-                          description='Coordinate reference system')]
-])
-
-# FeatureCollection response
-# NOTE: 'crs' field already defined by parent FeatureCollection
-geojson_feature_member = create_model(api, 'Member Feature', [
-    ['type', fields.String(required=True, description='Feature',
-                           example='Feature')],
-    ['id', FeatureId(required=True, description='Feature ID',
-                          example=123)],
-    ['geometry', fields.Nested(geojson_geometry, required=False,
-                               allow_null=True,
-                               description='Feature geometry')],
-    ['properties', fields.Raw(required=True,
-                                     description='Feature properties',
-                                     example={'name': 'Example', 'type': 2,
-                                              'num': 4}
-                                     )]
-])
-
-geojson_feature_collection_response = create_model(api, 'FeatureCollection', [
+geojson_feature_collection = create_model(api, 'FeatureCollection', [
     ['type', fields.String(required=True, description='FeatureCollection',
                            example='FeatureCollection')],
-    ['features', fields.List(fields.Nested(geojson_feature_member),
+    ['features', fields.List(fields.Nested(geojson_feature),
                              required=True, description='Features')],
     ['crs', fields.Nested(geojson_crs, required=False, allow_null=True,
                           description='Coordinate reference system')],
@@ -160,53 +183,28 @@ geojson_feature_collection_response = create_model(api, 'FeatureCollection', [
                         example=[950598.0, 6003950.0, 950758.0, 6004010.0])]
 ])
 
-# relation value response
-relation_feature_response = create_model(api, 'Feature', [
-    ['type', fields.String(required=True, description='Feature',
-                           example='Feature')],
-    ['id', FeatureId(required=True, description='Feature ID',
-                          example=123)],
-    ['geometry', fields.Nested(geojson_geometry, required=False,
-                               allow_null=True,
-                               description='Feature geometry')],
-    ['properties', fields.Raw(required=True,
-                                     description='Feature properties',
-                                     example={'name': 'Example', 'type': 2,
-                                              'num': 4}
-                                     )],
-    ['crs', fields.Nested(geojson_crs, required=False, allow_null=True,
-                          description='Coordinate reference system')],
-    ['bbox', fields.Raw(required=False, allow_null=True,
-                        description=(
-                            'Extent of feature as [minx, miny, maxx, maxy]'
-                        ),
-                        example=[950598.0, 6003950.0, 950758.0, 6004010.0])],
-    ['__status__', fields.String(required=False, description='Feature status')],
-    ['error', fields.String(required=False, description='Commit error')],
-    ['error_details', fields.Raw(required=False,
-                                     description='Commit error details properties')]
-])
+# Relations
+relation_feature = api.inherit('Relation Feature', geojson_feature, {
+    '__status__': fields.String(required=False, description='Feature status'),
+    'error': fields.String(required=False, description='Commit error'),
+    'error_details': fields.Raw(required=False, description='Commit error details properties')
+})
 
-relation_table_values = create_model(api, 'Relation table value', [
+relation_table_features = create_model(api, 'Relation table features', [
     ['fk', fields.String(required=True, description='Foreign key field name')],
-    ['features', fields.List(fields.Nested(relation_feature_response), required=True, description='Relation features')],
-    ['error', fields.Raw(required=False,
-                                     description='Error details')]
+    ['features', fields.List(fields.Nested(relation_feature), required=True, description='Relation features')],
+    ['error', fields.Raw(required=False, description='Error details')]
 ])
 
-relation_table_entry = create_model(api, 'Relation table entry', [
-    ['*', fields.Wildcard(fields.Nested(relation_table_values,
-                        required=True,
-                        description='Relation table values'))]
+relation_values = create_model(api, 'Relation values', [
+    ['*', fields.Wildcard(fields.Nested(relation_table_features, required=False, description='Relation table features'))]
 ])
 
-relationvalues_response = create_model(api, 'Relation values', [
-    ['relationvalues', fields.Nested(relation_table_entry,
-                                     required=True,
-                                     description='Relation table entry')],
-    ['success', fields.Boolean(required=False, description='Relation values commit success status')]
-])
-
+geojson_feature_with_relvals = api.inherit('Feature with relation values', geojson_feature, {
+    'relationValues': KeepEmptyDict(relation_values,
+                                     required=False,
+                                     description='Relation table entry')
+})
 
 # keyvals response
 keyval_records = create_model(api, 'Keyval table record', [
@@ -216,7 +214,7 @@ keyval_records = create_model(api, 'Keyval table record', [
 
 keyvals_table_entry = create_model(api, 'Keyvals table entry', [
     ['*',  fields.Wildcard(fields.List(fields.Nested(keyval_records),
-                      required=True, description='Keyval records'))]
+                      required=False, description='Keyval records'))]
 ])
 
 keyvals_response = create_model(api, 'Keyval relation values', [
@@ -261,6 +259,7 @@ index_parser.add_argument('filter_geom')
 feature_multipart_parser = reqparse.RequestParser(argument_class=CaseInsensitiveArgument)
 feature_multipart_parser.add_argument('feature', help='Feature', required=True, location='form')
 feature_multipart_parser.add_argument('file_document', help='File attachments', type=FileStorage, location='files')
+feature_multipart_parser.add_argument('g-recaptcha-response', help="Recaptcha response", location='form')
 
 show_parser = reqparse.RequestParser(argument_class=CaseInsensitiveArgument)
 show_parser.add_argument('crs')
@@ -275,23 +274,12 @@ get_relations_parser.add_argument('tables', required=True)
 get_relations_parser.add_argument('crs')
 get_relations_parser.add_argument('filter')
 
-post_relations_parser = reqparse.RequestParser(argument_class=CaseInsensitiveArgument)
-post_relations_parser.add_argument('crs')
-post_relations_parser.add_argument(
-    'values', help='Relations', required=True, location='form'
-)
-post_relations_parser.add_argument(
-    'file_document', help='File attachments',
-    type=FileStorage, location='files'
-)
-
-
 # routes
 @api.route('/<path:dataset>/')
 @api.response(400, 'Bad request')
 @api.response(404, 'Dataset not found or permission error')
-@api.param('dataset', 'Dataset ID', default='qwc_demo.edit_points')
-class DataCollection(Resource):
+@api.param('dataset', 'Dataset ID')
+class FeatureCollection(Resource):
     @api.doc('index')
     @api.response(405, 'Dataset not readable')
     @api.param('bbox', 'Bounding box as `<minx>,<miny>,<maxx>,<maxy>`')
@@ -302,7 +290,7 @@ class DataCollection(Resource):
     @api.param(
         'filter_geom', 'GeoJSON serialized geometry, used as intersection geometry filter')
     @api.expect(index_parser)
-    @api.marshal_with(geojson_feature_collection_response, skip_none=True)
+    @api.marshal_with(geojson_feature_collection, skip_none=True)
     @optional_auth
     def get(self, dataset):
         """Get dataset features
@@ -327,45 +315,12 @@ class DataCollection(Resource):
             error_code = result.get('error_code') or 404
             api.abort(error_code, result['error'])
 
-    @api.doc('create')
-    @api.response(405, 'Dataset not creatable')
-    @api.response(422, 'Feature validation failed', feature_validation_response)
-    @api.expect(geojson_feature_request)
-    @api.marshal_with(geojson_feature_response, code=201)
-    @optional_auth
-    def post(self, dataset):
-        """Create a new dataset feature
-
-        Create new dataset feature from a GeoJSON Feature and return it as a
-        GeoJSON Feature.
-        """
-        translator = Translator(app, request)
-
-        if request.is_json:
-            # parse request data (NOTE: catches invalid JSON)
-            feature = api.payload
-            if isinstance(feature, dict):
-                data_service = data_service_handler()
-
-                result = data_service.create(
-                    get_identity(), translator, dataset, feature)
-                if 'error' not in result:
-                    return result['feature'], 201
-                else:
-                    error_code = result.get('error_code') or 404
-                    error_details = result.get('error_details') or {}
-                    api.abort(error_code, result['error'], **error_details)
-            else:
-                api.abort(400, translator.tr("error.json_is_not_an_object"))
-        else:
-            api.abort(400, translator.tr("error.request_data_is_not_json"))
-
 
 @api.route('/<path:dataset>/extent')
 @api.response(400, 'Bad request')
 @api.response(404, 'Dataset not found or permission error')
-@api.param('dataset', 'Dataset ID', default='qwc_demo.edit_points')
-class DataCollection(Resource):
+@api.param('dataset', 'Dataset ID')
+class FeatureCollectionExtent(Resource):
     @api.doc('index')
     @api.response(405, 'Dataset not readable')
     @api.param('crs', 'Client coordinate reference system, e.g. `EPSG:3857`')
@@ -402,14 +357,14 @@ class DataCollection(Resource):
 
 @api.route('/<path:dataset>/<id>')
 @api.response(404, 'Dataset or feature not found or permission error')
-@api.param('dataset', 'Dataset ID', default='qwc_demo.edit_points')
+@api.param('dataset', 'Dataset ID')
 @api.param('id', 'Feature ID')
-class DataMember(Resource):
+class Feature(Resource):
     @api.doc('show')
     @api.response(405, 'Dataset not readable')
     @api.param('crs', 'Client coordinate reference system')
     @api.expect(show_parser)
-    @api.marshal_with(geojson_feature_response)
+    @api.marshal_with(geojson_feature)
     @optional_auth
     def get(self, dataset, id):
         """Get a dataset feature
@@ -436,7 +391,7 @@ class DataMember(Resource):
     @api.response(405, 'Dataset not updatable')
     @api.response(422, 'Feature validation failed', feature_validation_response)
     @api.expect(geojson_feature_request)
-    @api.marshal_with(geojson_feature_response)
+    @api.marshal_with(geojson_feature)
     @optional_auth
     def put(self, dataset, id):
         """Update a dataset feature
@@ -474,7 +429,13 @@ class DataMember(Resource):
 
         Delete dataset feature with ID.
         """
+
         translator = Translator(app, request)
+
+        captcha_response = api.payload.get('g-recaptcha-response') if request.is_json else None
+        if not verify_captcha(get_identity(), captcha_response):
+            api.abort(400, translator.tr("error.captcha_validation_failed"))
+
         data_service = data_service_handler()
         result = data_service.destroy(get_identity(), translator, dataset, id)
         if 'error' not in result:
@@ -489,13 +450,13 @@ class DataMember(Resource):
 @api.route('/<path:dataset>/multipart')
 @api.response(400, 'Bad request')
 @api.response(404, 'Dataset not found or permission error')
-@api.param('dataset', 'Dataset ID', default='qwc_demo.edit_points')
+@api.param('dataset', 'Dataset ID')
 class CreateFeatureMultipart(Resource):
     @api.doc('create')
     @api.response(405, 'Dataset not creatable')
     @api.response(422, 'Feature validation failed', feature_validation_response)
     @api.expect(feature_multipart_parser)
-    @api.marshal_with(geojson_feature_response, code=201)
+    @api.marshal_with(geojson_feature_with_relvals, code=201)
     @optional_auth
     def post(self, dataset):
         """Create a new dataset feature
@@ -505,6 +466,10 @@ class CreateFeatureMultipart(Resource):
         """
         translator = Translator(app, request)
         args = feature_multipart_parser.parse_args()
+
+        if not verify_captcha(get_identity(), args['g-recaptcha-response']):
+            api.abort(400, translator.tr("error.captcha_validation_failed"))
+
         try:
             feature = json.loads(args['feature'])
         except:
@@ -512,18 +477,20 @@ class CreateFeatureMultipart(Resource):
         if not isinstance(feature, dict):
             api.abort(400, translator.tr("error.feature_is_not_an_object"))
 
+        files = dict([entry for entry in request.files.items() if entry[0].startswith("file:")])
         # Set a placeholder value to make attribute validation for required upload fields pass
-        files = {}
         for key in request.files:
             parts = key.split(":")
-            field = parts[1]
-            feature['properties'][field] = request.files[key].filename
+            if parts[0] == 'file':
+                field = parts[1]
+                feature['properties'][field] = request.files[key].filename
 
         data_service = data_service_handler()
         result = data_service.create(
-            get_identity(), translator, dataset, feature, request.files
+            get_identity(), translator, dataset, feature, files
         )
         if 'error' not in result:
+            result['feature']['relationValues'] = data_service.write_relation_values(get_identity(), result['feature']['id'], feature.get('relationValues', '{}'), request.files, translator, True)
             return result['feature'], 201
         else:
             error_code = result.get('error_code') or 404
@@ -533,7 +500,7 @@ class CreateFeatureMultipart(Resource):
 
 @api.route('/<path:dataset>/multipart/<id>')
 @api.response(404, 'Dataset or feature not found or permission error')
-@api.param('dataset', 'Dataset ID', default='qwc_demo.edit_points')
+@api.param('dataset', 'Dataset ID')
 @api.param('id', 'Feature ID')
 class EditFeatureMultipart(Resource):
     @api.doc('update')
@@ -541,7 +508,7 @@ class EditFeatureMultipart(Resource):
     @api.response(405, 'Dataset not updatable')
     @api.response(422, 'Feature validation failed', feature_validation_response)
     @api.expect(feature_multipart_parser)
-    @api.marshal_with(geojson_feature_response)
+    @api.marshal_with(geojson_feature_with_relvals)
     @optional_auth
     def put(self, dataset, id):
         """Update a dataset feature
@@ -551,6 +518,10 @@ class EditFeatureMultipart(Resource):
         """
         translator = Translator(app, request)
         args = feature_multipart_parser.parse_args()
+
+        if not verify_captcha(get_identity(), args['g-recaptcha-response']):
+            api.abort(400, translator.tr("error.captcha_validation_failed"))
+
         try:
             feature = json.loads(args['feature'])
         except:
@@ -558,11 +529,14 @@ class EditFeatureMultipart(Resource):
         if not isinstance(feature, dict):
             api.abort(400, translator.tr("error.feature_is_not_an_object"))
 
+        files = dict([entry for entry in request.files.items() if entry[0].startswith("file:")])
+
         data_service = data_service_handler()
         result = data_service.update(
-            get_identity(), translator, dataset, id, feature, request.files
+            get_identity(), translator, dataset, id, feature, files
         )
         if 'error' not in result:
+            result['feature']['relationValues'] = data_service.write_relation_values(get_identity(), result['feature']['id'], feature.get('relationValues', {}), request.files, translator)
             return result['feature']
         else:
             error_code = result.get('error_code') or 404
@@ -572,7 +546,7 @@ class EditFeatureMultipart(Resource):
 
 @api.route('/<path:dataset>/attachment')
 @api.response(404, 'Dataset or feature not found or permission error')
-@api.param('dataset', 'Dataset ID', default='qwc_demo.edit_points')
+@api.param('dataset', 'Dataset ID')
 class AttachmentDownloader(Resource):
     @api.doc('get_attachment')
     @api.param('file', 'The file to download')
@@ -593,13 +567,13 @@ class AttachmentDownloader(Resource):
 
 @api.route('/<path:dataset>/<id>/relations')
 @api.response(404, 'Dataset or feature not found or permission error')
-@api.param('dataset', 'Dataset ID', default='qwc_demo.edit_points')
+@api.param('dataset', 'Dataset ID')
 @api.param('id', 'Feature ID')
 class Relations(Resource):
     @api.doc('get_relations')
     @api.param('tables', 'Comma separated list of relation tables of the form "tablename:fk_field_name"')
     @api.expect(get_relations_parser)
-    @api.marshal_with(relationvalues_response, code=201)
+    @api.marshal_with(relation_values, code=201)
     @optional_auth
     def get(self, dataset, id):
         translator = Translator(app, request)
@@ -625,86 +599,7 @@ class Relations(Resource):
                 ret[table]['features'].sort(key=lambda f: f["properties"][sortcol])
             else:
                 ret[table]['features'].sort(key=lambda f: f["id"])
-        return {"relationvalues": ret}
-
-    @api.doc('post_relations')
-    @api.expect(post_relations_parser)
-    @api.marshal_with(relationvalues_response, code=201)
-    @optional_auth
-    def post(self, dataset, id):
-        """Update relation values for the specified dataset
-
-        Return success status for each relation value.
-        """
-        translator = Translator(app, request)
-        args = post_relations_parser.parse_args()
-        crs = args['crs'] or None
-
-        try:
-            payload = json.loads(args['values'])
-        except:
-            payload = None
-        if not isinstance(payload, dict):
-            api.abort(400, translator.tr("error.json_is_not_an_object"))
-
-        data_service = data_service_handler()
-
-        # Check if dataset with specified id exists
-        if not data_service.is_editable(get_identity(), translator, dataset, id):
-            api.abort(404, translator.tr("error.dataset_or_feature_not_found"))
-
-        ret = {}
-        haserrors = False
-        for (rel_table, rel_data) in payload.items():
-            fk_field = rel_data.get("fk", None)
-            ret[rel_table] = {
-                "fk": fk_field,
-                "features": []
-            }
-            tbl_prefix = rel_table + "__"
-            for (record_idx, rel_feature) in enumerate(rel_data.get("features", [])):
-                rel_feature_status = rel_feature.get("__status__", "") or ""
-                # Set foreign key for new records
-                if rel_feature_status == "new":
-                    rel_feature['properties'][fk_field] = id
-
-                if str(rel_feature['properties'].get(fk_field, None)) != id:
-                    rel_feature["__error__"] = translator.tr("error.fk_validation_failed")
-                    ret[rel_table]["features"].append(rel_feature)
-                    haserrors = True
-                    continue
-
-                # Get record files
-                files = {}
-                for key in request.files:
-                    parts = key.split("__")
-                    table = parts[0]
-                    field = parts[1]
-                    index = parts[2]
-                    if table == rel_table and index == str(record_idx):
-                        files["file:" + field] = request.files[key]
-                        # Set a placeholder value to make attribute validation for required upload fields pass
-                        rel_feature['properties'][field] = request.files[key].filename
-
-                if not rel_feature_status:
-                    result = data_service.show(get_identity(), translator, rel_table, rel_feature["id"], crs)
-                elif rel_feature_status == "new":
-                    result = data_service.create(get_identity(), translator, rel_table, rel_feature, files)
-                elif rel_feature_status == "changed":
-                    result = data_service.update(get_identity(), translator, rel_table, rel_feature["id"], rel_feature, files)
-                elif rel_feature_status.startswith("deleted"):
-                    result = data_service.destroy(get_identity(), translator, rel_table, rel_feature["id"])
-                else:
-                    continue
-                if "error" in result:
-                    rel_feature["error"] = result["error"]
-                    rel_feature["error_details"] = result.get('error_details') or {}
-                    ret[rel_table]["features"].append(rel_feature)
-                    haserrors = True
-                elif "feature" in result:
-                    ret[rel_table]["features"].append(result['feature'])
-
-        return {"relationvalues": ret, "success": not haserrors}
+        return ret
 
 
 @api.route('/keyvals')

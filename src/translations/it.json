@@ -26,7 +26,9 @@
     "feature_is_not_an_object": "Oggetto non valido",
     "file_too_large": "File troppo grande",
     "forbidden_file_extension": "Estensione di file vietata",
-    "forbidden_file_content": "Contenuto del file vietato"
+    "forbidden_file_content": "Contenuto del file vietato",
+    "captcha_validation_failed": "Verifica ReCAPTCHA non riuscita",
+    "file_not_found": "File not found"
   },
   "validation": {
     "geojson_must_be_feature": "GeoJSON deve essere di tipo Feature",

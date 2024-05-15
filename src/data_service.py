@@ -1,4 +1,5 @@
 import os
+import re
 from datetime import datetime
 from collections import OrderedDict
 
@@ -389,6 +390,74 @@ class DataService():
 
         return dataset_features_provider.exists(id)
 
+    def write_relation_values(self, identity, fk, relationValues, files, translator, force_fk=False):
+        """ Write relation values.
+        :param object identity: User identity
+        :param int fk: Dataset foreign key ID
+        :param object relationValues: Relation values
+        :param object files: Upload files
+        :param object translator: Translator
+        :param bool force_fk: Force writing foreign key (i.e. if parent feature is newly created)
+        """
+        ret = {}
+        haserrors = False
+        for (rel_table, rel_data) in relationValues.items():
+            fk_field = rel_data.get("fk", None)
+            ret[rel_table] = {
+                "fk": fk_field,
+                "features": []
+            }
+            tbl_prefix = rel_table + "__"
+            for (record_idx, rel_feature) in enumerate(rel_data.get("features", [])):
+                rel_feature_status = rel_feature.get("__status__", "") or ""
+                # Set foreign key for new records
+                if rel_feature_status == "new" or force_fk:
+                    rel_feature['properties'][fk_field] = fk
+                    rel_feature_status = rel_feature_status or "changed"
+
+                if str(rel_feature['properties'].get(fk_field, None)) != str(fk):
+                    rel_feature["error"] = translator.tr("error.fk_validation_failed")
+                    ret[rel_table]["features"].append(rel_feature)
+                    haserrors = True
+                    continue
+
+                # Get record files
+                files = {}
+                for key in files:
+                    parts = key.split(":")
+                    if parts[0] != "relfile":
+                        continue
+                    parts = parts[1].split("__")
+                    table = parts[0]
+                    field = parts[1]
+                    index = parts[2]
+                    if table == rel_table and index == str(record_idx):
+                        files["file:" + field] = request.files[key]
+                        # Set a placeholder value to make attribute validation for required upload fields pass
+                        rel_feature['properties'][field] = request.files[key].filename
+
+                if not rel_feature_status:
+                    m = re.match('^urn:ogc:def:crs:EPSG::(\d+)$', rel_feature.get('crs', {}).get('properties', {}).get('name', ""))
+                    crs = "EPSG:" + m.group(1) if m else "EPSG:4326"
+                    result = self.show(identity, translator, rel_table, rel_feature["id"], crs)
+                elif rel_feature_status == "new":
+                    result = self.create(identity, translator, rel_table, rel_feature, files)
+                elif rel_feature_status == "changed":
+                    result = self.update(identity, translator, rel_table, rel_feature["id"], rel_feature, files)
+                elif rel_feature_status.startswith("deleted"):
+                    result = self.destroy(identity, translator, rel_table, rel_feature["id"])
+                else:
+                    continue
+                if "error" in result:
+                    rel_feature["error"] = result["error"]
+                    rel_feature["error_details"] = result.get('error_details') or {}
+                    ret[rel_table]["features"].append(rel_feature)
+                    haserrors = True
+                elif "feature" in result:
+                    ret[rel_table]["features"].append(result['feature'])
+
+        return ret
+
     def dataset_features_provider(self, identity, translator, dataset, write):
         """Return DatasetFeaturesProvider if available and permitted.
 
@@ -607,8 +676,11 @@ class DataService():
                 'error_code': 405
             }
 
+        attachment = self.attachments_service.resolve_attachment(dataset, slug)
+        if not attachment:
+            return {'error': translator.tr("error.file_not_found")}
         return {
-            'file': self.attachments_service.resolve_attachment(dataset, slug)
+            'file': attachment
         }
 
     def add_logging_fields(self, feature, identity):

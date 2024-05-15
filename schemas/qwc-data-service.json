@@ -28,6 +28,10 @@
           "description": "Comma separated list of allowed attachment file extensions, i.e. '.png,.jpg'",
           "type": "string"
         },
+        "recaptcha_site_secret_key": {
+          "description": "Captcha site secret key. Set to enable ReCAPTCHA verification for public users",
+          "type": "string"
+        },
         "max_attachment_file_size": {
           "description": "Maximum attachment file size in bytes",
           "type": "number"
