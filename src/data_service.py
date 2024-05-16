@@ -694,8 +694,13 @@ class DataService():
 
         if edit_user_field:
             feature["properties"][edit_user_field] = get_username(identity)
+            if edit_user_field in feature.get("defaultedProperties", []):
+                feature["defaultedProperties"].remove(edit_user_field)
         if edit_timestamp_field:
             feature["properties"][edit_timestamp_field] = str(datetime.now())
+            if edit_timestamp_field in feature.get("defaultedProperties", []):
+                feature["defaultedProperties"].remove(edit_timestamp_field)
+
 
     def error_response(self, error, details):
         self.logger.error("%s: %s", error, details)
