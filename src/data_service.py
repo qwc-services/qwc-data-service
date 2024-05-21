@@ -237,7 +237,7 @@ class DataService():
         if save_errors:
             return self.error_response(translator.tr("error.feature_commit_failed"), save_errors)
 
-        self.add_logging_fields(feature, identity)
+        self.add_create_logging_fields(feature, identity)
 
         # create new feature
         try:
@@ -313,7 +313,7 @@ class DataService():
                     upload_user_field = key + "__" + upload_user_field_suffix
                     feature["properties"][upload_user_field] = get_username(identity)
 
-        self.add_logging_fields(feature, identity)
+        self.add_update_logging_fields(feature, identity)
 
         # update feature
         try:
@@ -683,7 +683,25 @@ class DataService():
             'file': attachment
         }
 
-    def add_logging_fields(self, feature, identity):
+    def add_create_logging_fields(self, feature, identity):
+        """Adds logging fields to the feature
+
+        :param dict feature: Feature object
+        :param str|obj identity: User identity
+        """
+        create_user_field = self.config.get("create_user_field", None)
+        create_timestamp_field = self.config.get("create_timestamp_field", None)
+
+        if create_user_field:
+            feature["properties"][create_user_field] = get_username(identity)
+            if create_user_field in feature.get("defaultedProperties", []):
+                feature["defaultedProperties"].remove(create_user_field)
+        if create_timestamp_field:
+            feature["properties"][create_timestamp_field] = str(datetime.now())
+            if create_timestamp_field in feature.get("defaultedProperties", []):
+                feature["defaultedProperties"].remove(create_timestamp_field)
+
+    def add_update_logging_fields(self, feature, identity):
         """Adds logging fields to the feature
 
         :param dict feature: Feature object
@@ -694,13 +712,8 @@ class DataService():
 
         if edit_user_field:
             feature["properties"][edit_user_field] = get_username(identity)
-            if edit_user_field in feature.get("defaultedProperties", []):
-                feature["defaultedProperties"].remove(edit_user_field)
         if edit_timestamp_field:
             feature["properties"][edit_timestamp_field] = str(datetime.now())
-            if edit_timestamp_field in feature.get("defaultedProperties", []):
-                feature["defaultedProperties"].remove(edit_timestamp_field)
-
 
     def error_response(self, error, details):
         self.logger.error("%s: %s", error, details)

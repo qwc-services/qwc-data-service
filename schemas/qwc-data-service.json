@@ -44,8 +44,16 @@
           "description": "Field suffix where to log the username who last changed an upload field, i.e. <fieldname>__<suffix> for the field <fieldname>. If empty, username is not logged.",
           "type": "string"
         },
+        "create_timestamp_field": {
+          "description": "If specified, the timestamp of the creation of the record will be logged to the <create_timestamp_field> field of the record.",
+          "type": "string"
+        },
         "edit_timestamp_field": {
           "description": "If specified, the timestamp of the last mutation to a record will be logged to the <edit_timestamp_field> field of the record.",
+          "type": "string"
+        },
+        "create_user_field": {
+          "description": "If specified, the username of the user who created a record with be logged to the <create_user_field> field of the record.",
           "type": "string"
         },
         "edit_user_field": {
