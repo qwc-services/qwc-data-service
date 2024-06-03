@@ -390,12 +390,12 @@ class DataService():
 
         return dataset_features_provider.exists(id)
 
-    def write_relation_values(self, identity, fk, relationValues, files, translator, force_fk=False):
+    def write_relation_values(self, identity, fk, relationValues, uploadfiles, translator, force_fk=False):
         """ Write relation values.
         :param object identity: User identity
         :param int fk: Dataset foreign key ID
         :param object relationValues: Relation values
-        :param object files: Upload files
+        :param object uploadfiles: Upload files
         :param object translator: Translator
         :param bool force_fk: Force writing foreign key (i.e. if parent feature is newly created)
         """
@@ -423,7 +423,7 @@ class DataService():
 
                 # Get record files
                 files = {}
-                for key in files:
+                for key in uploadfiles:
                     parts = key.split(":")
                     if parts[0] != "relfile":
                         continue
@@ -432,9 +432,9 @@ class DataService():
                     field = parts[1]
                     index = parts[2]
                     if table == rel_table and index == str(record_idx):
-                        files["file:" + field] = request.files[key]
+                        files["file:" + field] = uploadfiles[key]
                         # Set a placeholder value to make attribute validation for required upload fields pass
-                        rel_feature['properties'][field] = request.files[key].filename
+                        rel_feature['properties'][field] = uploadfiles[key].filename
 
                 if not rel_feature_status:
                     m = re.match('^urn:ogc:def:crs:EPSG::(\d+)$', rel_feature.get('crs', {}).get('properties', {}).get('name', ""))
