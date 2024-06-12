@@ -65,11 +65,11 @@
           "type": "boolean"
         },
         "allowed_extensions_per_dataset": {
-          "description": "Loopup of allowed attachment file extensions per theme, values as comma separated list, i.e. '.png,.jpg'",
+          "description": "Loopup of allowed attachment file extensions per dataset, values as comma separated list, i.e. '.png,.jpg'",
           "type": "object"
         },
         "max_attachment_file_size_per_dataset": {
-          "description": "Lookup of maximum attachment file size in bytes per theme",
+          "description": "Lookup of maximum attachment file size in bytes per dataset",
           "type": "object"
         },
         "attachment_store_pattern": {
