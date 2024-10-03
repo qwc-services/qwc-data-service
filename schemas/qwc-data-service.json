@@ -52,6 +52,10 @@
           "description": "If specified, the timestamp of the last mutation to a record will be logged to the <edit_timestamp_field> field of the record.",
           "type": "string"
         },
+        "write_utc_timestamps": {
+          "description": "Whether to write the create/edit timestamps in UTC, as opposed to local time. Default: `false`",
+          "type": "boolean"
+        },
         "create_user_field": {
           "description": "If specified, the username of the user who created a record with be logged to the <create_user_field> field of the record.",
           "type": "string"

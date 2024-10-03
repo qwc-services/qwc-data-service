@@ -1,6 +1,6 @@
 import os
 import re
-from datetime import datetime
+import datetime
 from collections import OrderedDict
 
 from sqlalchemy.exc import (DataError, IntegrityError,
@@ -691,13 +691,17 @@ class DataService():
         """
         create_user_field = self.config.get("create_user_field", None)
         create_timestamp_field = self.config.get("create_timestamp_field", None)
+        write_utc_timestamps = self.config.get("write_utc_timestamps", False)
 
         if create_user_field:
             feature["properties"][create_user_field] = get_username(identity)
             if create_user_field in feature.get("defaultedProperties", []):
                 feature["defaultedProperties"].remove(create_user_field)
         if create_timestamp_field:
-            feature["properties"][create_timestamp_field] = str(datetime.now())
+            if write_utc_timestamps:
+                feature["properties"][create_timestamp_field] = str(datetime.datetime.now(datetime.UTC))
+            else:
+                feature["properties"][create_timestamp_field] = str(datetime.datetime.now())
             if create_timestamp_field in feature.get("defaultedProperties", []):
                 feature["defaultedProperties"].remove(create_timestamp_field)
 
@@ -709,11 +713,15 @@ class DataService():
         """
         edit_user_field = self.config.get("edit_user_field", None)
         edit_timestamp_field = self.config.get("edit_timestamp_field", None)
+        write_utc_timestamps = self.config.get("write_utc_timestamps", False)
 
         if edit_user_field:
             feature["properties"][edit_user_field] = get_username(identity)
         if edit_timestamp_field:
-            feature["properties"][edit_timestamp_field] = str(datetime.now())
+            if write_utc_timestamps:
+                feature["properties"][edit_timestamp_field] = str(datetime.datetime.now(datetime.UTC))
+            else:
+                feature["properties"][edit_timestamp_field] = str(datetime.datetime.now())
 
     def error_response(self, error, details):
         self.logger.error("%s: %s", error, details)
