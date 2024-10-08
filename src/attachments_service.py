@@ -39,6 +39,7 @@ class AttachmentsService():
         self.allowed_extensions_per_dataset = config.get(
             'allowed_extensions_per_dataset', {}
         )
+        self.attachments_namespace_dir = config.get('attachments_namespace_dir', "{tenant}/{map}.{dataset}")
         self.attachment_store_pattern = config.get('attachment_store_pattern', "{random}/{filename}")
         for dataset in self.allowed_extensions_per_dataset:
             self.allowed_extensions_per_dataset[dataset] = self.allowed_extensions_per_dataset[dataset].split(",")
@@ -134,7 +135,11 @@ class AttachmentsService():
                 ext=os.path.splitext(file.filename)[1],
                 **fields
             )
-            target_path = os.path.join(self.attachments_base_dir, self.tenant, dataset, slug)
+            target_path = os.path.join(
+                self.attachments_base_dir,
+                self.namespace_dir(dataset),
+                slug
+            )
 
             # create target dir
             target_dir = os.path.dirname(target_path)
@@ -156,7 +161,9 @@ class AttachmentsService():
         :param slug: File slug (identifier)
         """
         target_dir = os.path.join(
-            self.attachments_base_dir, self.tenant, dataset)
+            self.attachments_base_dir,
+            self.namespace_dir(dataset)
+        )
         try:
             os.remove(os.path.join(target_dir, slug))
             self.logger.info("Removed attachment: %s" % slug)
@@ -175,7 +182,10 @@ class AttachmentsService():
         """Resolve attachment slug to full path"""
         path = os.path.realpath(
             os.path.join(
-                self.attachments_base_dir, self.tenant, dataset, slug))
+                self.attachments_base_dir,
+                self.namespace_dir(dataset),
+                slug)
+        )
         if os.path.isfile(path) and path.startswith(
                 self.attachments_base_dir):
             return path
@@ -188,3 +198,11 @@ class AttachmentsService():
         """
         chars = string.ascii_letters + string.digits
         return ''.join(random.choice(chars) for c in range(length))
+
+    def namespace_dir(self, dataset):
+        mapname, datasetname = dataset.split(".", 1)
+        return self.attachments_namespace_dir.format(
+            tenant=self.tenant,
+            map=mapname,
+            dataset=datasetname
+        )

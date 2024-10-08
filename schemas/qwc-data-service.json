@@ -24,6 +24,14 @@
           "description": "Base dir where attachments are stored",
           "type": "string"
         },
+        "attachments_namespace_dir": {
+          "description": "The namespace dir, below attachments_base_dir. You can use {tenant}, {map}, {dataset}. Default is '{tenant}/{map}.{dataset}'",
+          "type": "string"
+        },
+        "attachment_store_pattern": {
+          "description": "The path pattern to use when saving attachments to disk. You can use {random}, {filename}, {ext} and {<field>}, where field refers to the value of the field <field> of the committed feature. Default is '{random}/{filename}'",
+          "type": "string"
+        },
         "allowed_attachment_extensions": {
           "description": "Comma separated list of allowed attachment file extensions, i.e. '.png,.jpg'",
           "type": "string"
@@ -75,10 +83,6 @@
         "max_attachment_file_size_per_dataset": {
           "description": "Lookup of maximum attachment file size in bytes per dataset",
           "type": "object"
-        },
-        "attachment_store_pattern": {
-          "description": "The path pattern to use when saving attachments to disk. You can use {random}, {filename}, {ext} and {<field>}, where field refers to the respective field value of the committed feature. Default is '{random}/{filename}'",
-          "type": "string"
         }
       }
     },
