@@ -143,7 +143,7 @@ class AttachmentsService():
 
             # create target dir
             target_dir = os.path.dirname(target_path)
-            os.makedirs(target_dir, 0o750, True)
+            os.makedirs(target_dir, 0o755, True)
 
             # save attachment file
             file.save(target_path)
