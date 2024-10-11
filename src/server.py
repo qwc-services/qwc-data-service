@@ -490,12 +490,17 @@ class CreateFeatureMultipart(Resource):
             get_identity(), translator, dataset, feature, files
         )
         if 'error' not in result:
-            result['feature']['relationValues'] = data_service.write_relation_values(get_identity(), result['feature']['id'], feature.get('relationValues', '{}'), request.files, translator, True)
-            return result['feature'], 201
-        else:
-            error_code = result.get('error_code') or 404
-            error_details = result.get('error_details') or {}
-            api.abort(error_code, result['error'], **error_details)
+            relationValues = data_service.write_relation_values(get_identity(), result['feature']['id'], feature.get('relationValues', '{}'), request.files, translator, True)
+            # Requery feature because the write_relation_values may change the feature through DB triggers
+            result = data_service.show(get_identity(), translator, dataset, result['feature']['id'], feature['crs']['properties']['name'])
+            if 'error' not in result:
+                feature = result['feature']
+                feature['relationValues'] = relationValues
+                return feature, 201
+
+        error_code = result.get('error_code') or 404
+        error_details = result.get('error_details') or {}
+        api.abort(error_code, result['error'], **error_details)
 
 
 @api.route('/<path:dataset>/multipart/<id>')
@@ -536,12 +541,17 @@ class EditFeatureMultipart(Resource):
             get_identity(), translator, dataset, id, feature, files
         )
         if 'error' not in result:
-            result['feature']['relationValues'] = data_service.write_relation_values(get_identity(), result['feature']['id'], feature.get('relationValues', {}), request.files, translator)
-            return result['feature']
-        else:
-            error_code = result.get('error_code') or 404
-            error_details = result.get('error_details') or {}
-            api.abort(error_code, result['error'], **error_details)
+            relationValues = data_service.write_relation_values(get_identity(), result['feature']['id'], feature.get('relationValues', {}), request.files, translator)
+            # Requery feature because the write_relation_values may change the feature through DB triggers
+            result = data_service.show(get_identity(), translator, dataset, id, feature['crs']['properties']['name'])
+            if 'error' not in result:
+                feature = result['feature']
+                feature['relationValues'] = relationValues
+                return feature
+
+        error_code = result.get('error_code') or 404
+        error_details = result.get('error_details') or {}
+        api.abort(error_code, result['error'], **error_details)
 
 
 @api.route('/<path:dataset>/attachment')
