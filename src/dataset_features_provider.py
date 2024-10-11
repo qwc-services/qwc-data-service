@@ -470,17 +470,26 @@ class DatasetFeaturesProvider():
 
         :param str crs: Coordinate reference system as 'EPSG:<srid>'
         """
+        srid = None
         if crs.startswith('EPSG:'):
             try:
                 # extract SRID
                 srid = int(crs.split(':')[1])
-                return srid
             except ValueError:
                 # conversion failed
                 pass
-
-        # invalid CRS
-        return None
+        elif crs.startswith('urn:ogc:def:crs'):
+            srid = crs.split(':')[-1]
+            if srid == 'CRS84':
+                # use EPSG:4326 for 'urn:ogc:def:crs:OGC:1.3:CRS84'
+                srid = 4326
+            else:
+                try:
+                    srid = int(srid)
+                except ValueError:
+                    # conversion failed
+                    pass
+        return srid
 
     def parse_filter(self, filterexpr):
         """Parse and validate a filter expression and return a tuple
