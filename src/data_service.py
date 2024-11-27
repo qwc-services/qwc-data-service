@@ -1,5 +1,4 @@
 import os
-import re
 import datetime
 from collections import OrderedDict
 
@@ -70,7 +69,7 @@ class DataService():
             srid = None
             if crs is not None:
                 # parse and validate input CRS
-                srid = dataset_features_provider.parse_crs(crs)
+                srid = self.parse_crs(crs)
                 if srid is None:
                     return {
                         'error': translator.tr("error.invalid_crs"),
@@ -128,7 +127,7 @@ class DataService():
             srid = None
             if crs is not None:
                 # parse and validate input CRS
-                srid = dataset_features_provider.parse_crs(crs)
+                srid = self.parse_crs(crs)
                 if srid is None:
                     return {
                         'error': translator.tr("error.invalid_crs"),
@@ -176,7 +175,7 @@ class DataService():
         srid = None
         if crs is not None:
             # parse and validate unput CRS
-            srid = dataset_features_provider.parse_crs(crs)
+            srid = self.parse_crs(crs)
             if srid is None:
                 return {
                     'error': "Invalid CRS",
@@ -437,8 +436,7 @@ class DataService():
                         rel_feature['properties'][field] = uploadfiles[key].filename
 
                 if not rel_feature_status:
-                    m = re.match('^urn:ogc:def:crs:EPSG::(\d+)$', rel_feature.get('crs', {}).get('properties', {}).get('name', ""))
-                    crs = "EPSG:" + m.group(1) if m else "EPSG:4326"
+                    crs = self.parse_crs(rel_feature['crs']['properties']['name']) if rel_feature['crs'] else None
                     result = self.show(identity, translator, rel_table, rel_feature["id"], crs)
                 elif rel_feature_status == "new":
                     result = self.create(identity, translator, rel_table, rel_feature, files)
@@ -734,3 +732,29 @@ class DataService():
             'error_details': error_details,
             'error_code': 422
         }
+
+    def parse_crs(self, crs):
+        """Parse and validate a CRS and return its SRID.
+
+        :param str crs: Coordinate reference system as 'EPSG:<srid>'
+        """
+        srid = None
+        if crs.startswith('EPSG:'):
+            try:
+                # extract SRID
+                srid = int(crs.split(':')[1])
+            except ValueError:
+                # conversion failed
+                pass
+        elif crs.startswith('urn:ogc:def:crs'):
+            srid = crs.split(':')[-1]
+            if srid == 'CRS84':
+                # use EPSG:4326 for 'urn:ogc:def:crs:OGC:1.3:CRS84'
+                srid = 4326
+            else:
+                try:
+                    srid = int(srid)
+                except ValueError:
+                    # conversion failed
+                    pass
+        return srid
