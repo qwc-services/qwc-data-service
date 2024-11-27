@@ -465,32 +465,6 @@ class DatasetFeaturesProvider():
         # invalid bbox
         return None
 
-    def parse_crs(self, crs):
-        """Parse and validate a CRS and return its SRID.
-
-        :param str crs: Coordinate reference system as 'EPSG:<srid>'
-        """
-        srid = None
-        if crs.startswith('EPSG:'):
-            try:
-                # extract SRID
-                srid = int(crs.split(':')[1])
-            except ValueError:
-                # conversion failed
-                pass
-        elif crs.startswith('urn:ogc:def:crs'):
-            srid = crs.split(':')[-1]
-            if srid == 'CRS84':
-                # use EPSG:4326 for 'urn:ogc:def:crs:OGC:1.3:CRS84'
-                srid = 4326
-            else:
-                try:
-                    srid = int(srid)
-                except ValueError:
-                    # conversion failed
-                    pass
-        return srid
-
     def parse_filter(self, filterexpr):
         """Parse and validate a filter expression and return a tuple
         (sql_expr, bind_params).
