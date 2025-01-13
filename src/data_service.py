@@ -588,6 +588,7 @@ class DataService():
             "dataset": resource['name'],
             "database_read": resource['db_url'],
             "database_write": resource.get('db_write_url', resource['db_url']),
+            "datasource_filter": resource.get('datasource_filter', None),
             "schema": resource['schema'],
             "table_name": resource['table_name'],
             "primary_key": resource['primary_key'],

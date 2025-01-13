@@ -39,6 +39,7 @@ class DatasetFeaturesProvider():
             # fallback to GeoDB for read actions
             self.db_write = self.db_read
 
+        self.datasource_filter = config.get('datasource_filter', None)
         self.db_engine = db_engine
         self.logger = logger
         self.translator = translator
@@ -105,6 +106,9 @@ class DatasetFeaturesProvider():
 
         where_clauses = []
         params = {}
+
+        if self.datasource_filter:
+            where_clauses.append(self.datasource_filter)
 
         if self.geometry_column and bbox is not None:
             # bbox filter
@@ -211,6 +215,9 @@ class DatasetFeaturesProvider():
         where_clauses = []
         params = {}
 
+        if self.datasource_filter:
+            where_clauses.append(self.datasource_filter)
+
         if filterexpr is not None:
             where_clauses.append(filterexpr[0])
             params.update(filterexpr[1])
@@ -259,12 +266,17 @@ class DatasetFeaturesProvider():
         :param value: The value column name
         """
 
+        where_clause = ""
+        if self.datasource_filter:
+            where_clause = "WHERE " + self.datasource_filter
+
         columns = (', ').join(
             self.escape_column_names([key, value])
         )
         sql = sql_text(("""
             SELECT {columns}
-            FROM {table};
+            FROM {table}
+            {where_clause};
         """).format(
             columns=columns, table=self.table
         ))
@@ -295,15 +307,19 @@ class DatasetFeaturesProvider():
             self.escape_column_names([self.primary_key] + own_attributes)
         )
 
+        add_where_clause = ""
+        if self.datasource_filter:
+            add_where_clause = "AND " + self.datasource_filter
+
         geom_sql = self.geom_column_sql(srid)
         sql = sql_text(("""
             SELECT {columns}%s
             FROM {table}
-            WHERE {pkey} = :id
+            WHERE {pkey} = :id {add_where_clause}
             LIMIT 1;
         """ % geom_sql).format(
             columns=columns, geom=self.geometry_column, table=self.table,
-            pkey=self.primary_key
+            pkey=self.primary_key, add_where_clause=add_where_clause
         ))
 
         self.logger.debug(f"feature show query: {sql}")
@@ -408,12 +424,17 @@ class DatasetFeaturesProvider():
 
         :param int id: Dataset feature ID
         """
+
+        add_where_clause = ""
+        if self.datasource_filter:
+            add_where_clause = "AND " + self.datasource_filter
+
         # build query SQL
         sql = sql_text("""
             DELETE FROM {table}
-            WHERE "{pkey}" = :id
+            WHERE "{pkey}" = :id {add_where_clause}
             RETURNING "{pkey}";
-        """.format(table=self.table, pkey=self.primary_key))
+        """.format(table=self.table, pkey=self.primary_key, add_where_clause=add_where_clause))
 
         # connect to database
         with self.db_write.begin() as conn:
@@ -430,10 +451,16 @@ class DatasetFeaturesProvider():
         """Check if a feature exists.
         :param int id: Dataset feature ID
         """
+
+        add_where_clause = ""
+        if self.datasource_filter:
+            add_where_clause = "AND " + self.datasource_filter
+
         sql = sql_text(("""
-            SELECT EXISTS(SELECT 1 FROM {table} WHERE {pkey}=:id)
+            SELECT EXISTS(SELECT 1 FROM {table} WHERE {pkey}=:id {add_where_clause})
         """).format(
-            table=self.table, pkey=self.primary_key
+            table=self.table, pkey=self.primary_key,
+            add_where_clause=add_where_clause
         ))
 
         # connect to database (for read-only access)
@@ -1197,13 +1224,18 @@ class DatasetFeaturesProvider():
             jointableconfig = self.jointables[jointable]
             columns = (', ').join(self.escape_column_names(fields.values()))
             table = '"%s"."%s"' % (jointableconfig['schema'], jointableconfig['table_name'])
+            datasource_filter = jointableconfig.get('datasource_filter', None)
+            add_where_clause = ""
+            if datasource_filter:
+                add_where_clause = "AND " + datasource_filter
 
             sql = sql_text(("""
                 SELECT {columns}
                 FROM {table}
-                WHERE "{field}" = :joinvalue;
+                WHERE "{field}" = :joinvalue {add_where_clause};
             """).format(
-                columns=columns, table=table, field=jointableconfig['joinField']
+                columns=columns, table=table, field=jointableconfig['joinField'],
+                add_where_clause=add_where_clause
             ))
 
             self.logger.debug(f"joined attributes query: {sql}")
