@@ -528,7 +528,7 @@ class DatasetFeaturesProvider():
             "LIKE", "ILIKE",
             "IS", "IS NOT"
         ]
-        VALUE_TYPES = [int, float, str, type(None)]
+        VALUE_TYPES = [int, float, str, type(None), bool]
 
         i = 0
         for entry in filterarray:
