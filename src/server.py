@@ -649,6 +649,8 @@ class KeyValues(Resource):
                     ret[table].append(record)
                 natsort = lambda s: [int(t) if t.isdigit() else t.lower() for t in re.split('(\d+)', s)]
                 ret[table].sort(key=lambda record: natsort(record["value"]))
+            elif 'error' in result:
+                app.logger.debug(f"Failed to query relation values for {keyval}: {result['error']}")
         return {"keyvalues": ret}
 
 

@@ -466,15 +466,16 @@ class DataService():
         """
         dataset_features_provider = None
 
-        self.logger.debug("checking edit permissions for dataset")
         permissions = self.dataset_edit_permissions(
             dataset, identity, translator, write
         )
         if permissions:
-            self.logger.debug("create DatasetFeaturesProvider")
+            self.logger.debug(f"Have permissions for dataset {dataset} with write={write}")
             dataset_features_provider = DatasetFeaturesProvider(
                 permissions, self.db_engine, self.logger, translator
             )
+        else:
+            self.logger.debug(f"NO permissions for dataset {dataset} with write={write}")
 
         return dataset_features_provider
 

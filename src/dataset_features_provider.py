@@ -162,7 +162,8 @@ class DatasetFeaturesProvider():
             where_clause=where_clause
         ))
 
-        self.logger.debug(f"feature index query: {sql}")
+        self.logger.debug(f"index query: {sql}")
+        self.logger.debug(f"params: {params}")
 
         features = []
         # connect to database (for read-only access)
@@ -280,6 +281,7 @@ class DatasetFeaturesProvider():
         """).format(
             columns=columns, table=self.table
         ))
+        self.logger.debug(f"keyvals query: {sql}")
 
         records = []
         # connect to database (for read-only access)
@@ -321,14 +323,16 @@ class DatasetFeaturesProvider():
             columns=columns, geom=self.geometry_column, table=self.table,
             pkey=self.primary_key, add_where_clause=add_where_clause
         ))
+        params = {"id": id}
 
-        self.logger.debug(f"feature show query: {sql}")
+        self.logger.debug(f"show query: {sql}")
+        self.logger.debug(f"params: {params}")
 
         feature = None
         # connect to database (for read-only access)
         with self.db_read.connect() as conn:
             # execute query
-            result = conn.execute(sql, {"id": id}).mappings()
+            result = conn.execute(sql, params).mappings()
             for row in result:
                 # NOTE: result is empty if not found
                 attribute_values = dict(row)
@@ -362,11 +366,15 @@ class DatasetFeaturesProvider():
                 return_columns=sql_params['return_columns'],
                 geom=self.geometry_column
             ))
+            params = sql_params['bound_values']
+
+            self.logger.debug(f"create query: {sql}")
+            self.logger.debug(f"params: {params}")
 
             # execute query
             # NOTE: use bound values
             feature = None
-            result = conn.execute(sql, sql_params['bound_values']).mappings()
+            result = conn.execute(sql, params).mappings()
             for row in result:
                 attribute_values = dict(row)
                 join_attribute_values = self.__query_join_attributes(join_attributes, attribute_values)
@@ -405,6 +413,9 @@ class DatasetFeaturesProvider():
             update_values = sql_params['bound_values']
             update_values[self.primary_key] = id
 
+            self.logger.debug(f"update query: {sql}")
+            self.logger.debug(f"params: {update_values}")
+
             # execute query
             # NOTE: use bound values
             feature = None
@@ -435,12 +446,16 @@ class DatasetFeaturesProvider():
             WHERE "{pkey}" = :id {add_where_clause}
             RETURNING "{pkey}";
         """.format(table=self.table, pkey=self.primary_key, add_where_clause=add_where_clause))
+        params = {"id": id}
+
+        self.logger.debug(f"destroy query: {sql}")
+        self.logger.debug(f"params: {params}")
 
         # connect to database
         with self.db_write.begin() as conn:
             # execute query
             success = False
-            result = conn.execute(sql, {"id": id})
+            result = conn.execute(sql, params)
             if result.one():
                 # NOTE: result is empty if not found
                 success = True
