@@ -279,7 +279,7 @@ class DatasetFeaturesProvider():
             FROM {table}
             {where_clause};
         """).format(
-            columns=columns, table=self.table
+            columns=columns, table=self.table, where_clause=where_clause
         ))
         self.logger.debug(f"keyvals query: {sql}")
 
