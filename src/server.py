@@ -12,7 +12,8 @@ from werkzeug.datastructures import FileStorage
 from qwc_services_core.api import create_model, CaseInsensitiveArgument
 from qwc_services_core.auth import auth_manager, optional_auth, get_identity
 from qwc_services_core.runtime_config import RuntimeConfig
-from qwc_services_core.tenant_handler import TenantHandler
+from qwc_services_core.tenant_handler import (
+    TenantHandler, TenantPrefixMiddleware, TenantSessionInterface)
 from qwc_services_core.translator import Translator
 from data_service import DataService
 
@@ -42,7 +43,8 @@ auth = auth_manager(app, api)
 
 # create tenant handler
 tenant_handler = TenantHandler(app.logger)
-
+app.wsgi_app = TenantPrefixMiddleware(app.wsgi_app)
+app.session_interface = TenantSessionInterface()
 
 def data_service_handler():
     """Get or create a DataService instance for a tenant."""
