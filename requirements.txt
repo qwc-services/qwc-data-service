@@ -215,9 +215,9 @@ pyjwt==2.10.1 \
 pytz==2025.1 \
     --hash=sha256:89dd22dca55b46eac6eda23b2d72721bf1bdfef212645d81513ef5d03038de57 \
     --hash=sha256:c2db42be2a2518b28e65f9207c4d05e6ff547d1efa4086469ef855e4ab70178e
-qwc-services-core==1.4.1 \
-    --hash=sha256:809f2f7a589e13927e856aa783f3b4b47cb9407ae973af5b588a4ff04731441a \
-    --hash=sha256:a806a683b97b34cfc9c88de69c2bcc3160078cfd649a98827c13a5d9ec78242c
+qwc-services-core==1.4.3 \
+    --hash=sha256:9a634faf0441432057cd5a02bdf15ff885c790c3a7423a1d4081d0a02e291222 \
+    --hash=sha256:ba415b71a9445f85f4a4ce070f28ca760ee4dd4053ca8157f3efb76bd8f854aa
 referencing==0.36.2 \
     --hash=sha256:df2e89862cd09deabbdba16944cc3f10feb6b3e6f18e902f7cc25609a34775aa \
     --hash=sha256:e8699adbbf8b5c7de96d8ffa0eb5c158b3beafce084968e2ea8bb08c6794dcd0
