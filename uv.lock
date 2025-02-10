@@ -431,11 +431,11 @@ dev = [{ name = "python-dotenv", specifier = ">=1.0.1" }]
 
 [[package]]
 name = "qwc-services-core"
-version = "1.4.2"
+version = "1.4.3"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/86/f5/b54ff31901c7867e61745eb624ec05da2581b28d0ea9f3e9019b170bc45b/qwc_services_core-1.4.2.tar.gz", hash = "sha256:9eab6b5c1c4e3750f15aa7a5ddbfadb04195f798e5f5050cbe787f045fe86646", size = 14790 }
+sdist = { url = "https://files.pythonhosted.org/packages/87/7a/97303e33f0c0a86088ac59b4e9f0d3ffd68cdbdb656fd13eaa0d54e149f7/qwc_services_core-1.4.3.tar.gz", hash = "sha256:9a634faf0441432057cd5a02bdf15ff885c790c3a7423a1d4081d0a02e291222", size = 14903 }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/11/8e/625a72e1bd7e63b27e08735b074076822d540d798d18fc65a530d0fe6421/qwc_services_core-1.4.2-py3-none-any.whl", hash = "sha256:9167c46ed83f34aed46ceaeec9c6b5c681598ec0185c7d9cb449a3767eb80fec", size = 17479 },
+    { url = "https://files.pythonhosted.org/packages/cd/42/10218cc6d22c3f18073f5816950fff2bf96ab49e83fca7d476a789a7f2c9/qwc_services_core-1.4.3-py3-none-any.whl", hash = "sha256:ba415b71a9445f85f4a4ce070f28ca760ee4dd4053ca8157f3efb76bd8f854aa", size = 17614 },
 ]
 
 [[package]]
