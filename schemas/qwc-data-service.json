@@ -25,7 +25,7 @@
           "type": "string"
         },
         "attachments_namespace_dir": {
-          "description": "The namespace dir, below attachments_base_dir. You can use {tenant}, {map}, {dataset}. Default is '{tenant}/{map}.{dataset}'",
+          "description": "The namespace dir, below `attachments_base_dir`. You can use {tenant}, {map}, {dataset}. Default is '{tenant}/{map}.{dataset}'",
           "type": "string"
         },
         "attachment_store_pattern": {
