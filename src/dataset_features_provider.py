@@ -925,13 +925,16 @@ class DatasetFeaturesProvider():
 
                 # validate data type
 
+                conn.execute(sql_text("SAVEPOINT before_validation"))
                 try:
                     # try to parse value on DB
                     sql = sql_text("SELECT (:value):: %s AS value;" % data_type)
                     result = conn.execute(sql, {"value": input_value}).mappings()
                     for row in result:
                         value = row['value']
+                    conn.execute(sql_text("RELEASE SAVEPOINT before_validation"))
                 except (DataError, ProgrammingError) as e:
+                    conn.execute(sql_text("ROLLBACK TO SAVEPOINT before_validation"))
                     # NOTE: current transaction is aborted
                     errors.append(self.translator.tr("validation.invalid_value") %
                                 (attr, data_type))
