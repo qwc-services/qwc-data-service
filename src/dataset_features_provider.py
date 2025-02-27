@@ -143,7 +143,7 @@ class DatasetFeaturesProvider():
 
         where_clause = ""
         if where_clauses:
-            where_clause = "WHERE (" + ") AND (".join(where_clauses)+")"
+            where_clause = "WHERE (" + ") AND (".join(where_clauses) + ")"
 
         geom_sql = self.geom_column_sql(srid, with_bbox=False)
         if self.geometry_column:
@@ -229,7 +229,7 @@ class DatasetFeaturesProvider():
 
         where_clause = ""
         if where_clauses:
-            where_clause = "WHERE (" + ") AND (".join(where_clauses)+")"
+            where_clause = "WHERE (" + ") AND (".join(where_clauses) + ")"
 
         if not self.geometry_column:
             return None
@@ -438,7 +438,7 @@ class DatasetFeaturesProvider():
 
         add_where_clause = ""
         if self.datasource_filter:
-            add_where_clause = "AND (" + self.datasource_filter +")"
+            add_where_clause = "AND (" + self.datasource_filter + ")"
 
         # build query SQL
         sql = sql_text("""
@@ -1245,7 +1245,7 @@ class DatasetFeaturesProvider():
             datasource_filter = jointableconfig.get('datasource_filter', None)
             add_where_clause = ""
             if datasource_filter:
-                add_where_clause = "AND (" + datasource_filter +")"
+                add_where_clause = "AND (" + datasource_filter + ")"
 
             sql = sql_text(("""
                 SELECT {columns}
