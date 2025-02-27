@@ -469,7 +469,7 @@ class DatasetFeaturesProvider():
 
         add_where_clause = ""
         if self.datasource_filter:
-            add_where_clause = "AND " + self.datasource_filter
+            add_where_clause = "AND (" + self.datasource_filter + "")
 
         sql = sql_text(("""
             SELECT EXISTS(SELECT 1 FROM {table} WHERE {pkey}=:id {add_where_clause})
