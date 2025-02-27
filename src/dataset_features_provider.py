@@ -229,7 +229,7 @@ class DatasetFeaturesProvider():
 
         where_clause = ""
         if where_clauses:
-            where_clause = "WHERE " + " AND ".join(where_clauses)
+            where_clause = "WHERE (" + ") AND (".join(where_clauses)+")"
 
         if not self.geometry_column:
             return None
