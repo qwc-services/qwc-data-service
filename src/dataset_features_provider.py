@@ -438,7 +438,7 @@ class DatasetFeaturesProvider():
 
         add_where_clause = ""
         if self.datasource_filter:
-            add_where_clause = "AND " + self.datasource_filter
+            add_where_clause = "AND (" + self.datasource_filter +")"
 
         # build query SQL
         sql = sql_text("""
