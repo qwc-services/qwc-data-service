@@ -1245,7 +1245,7 @@ class DatasetFeaturesProvider():
             datasource_filter = jointableconfig.get('datasource_filter', None)
             add_where_clause = ""
             if datasource_filter:
-                add_where_clause = "AND " + datasource_filter
+                add_where_clause = "AND (" + datasource_filter +")"
 
             sql = sql_text(("""
                 SELECT {columns}
