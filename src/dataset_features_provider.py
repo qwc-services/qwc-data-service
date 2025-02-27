@@ -143,7 +143,7 @@ class DatasetFeaturesProvider():
 
         where_clause = ""
         if where_clauses:
-            where_clause = "WHERE " + " AND ".join(where_clauses)
+            where_clause = "WHERE (" + ") AND (".join(where_clauses)+")"
 
         geom_sql = self.geom_column_sql(srid, with_bbox=False)
         if self.geometry_column:
