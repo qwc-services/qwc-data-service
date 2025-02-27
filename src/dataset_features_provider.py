@@ -311,7 +311,7 @@ class DatasetFeaturesProvider():
 
         add_where_clause = ""
         if self.datasource_filter:
-            add_where_clause = "AND " + self.datasource_filter
+            add_where_clause = "AND (" + self.datasource_filter + ")"
 
         geom_sql = self.geom_column_sql(srid)
         sql = sql_text(("""
