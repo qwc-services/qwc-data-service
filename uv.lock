@@ -395,7 +395,7 @@ wheels = [
 
 [[package]]
 name = "qwc-data-service"
-version = "2025.2.27"
+version = "2025.3.31"
 source = { virtual = "." }
 dependencies = [
     { name = "clamd" },
