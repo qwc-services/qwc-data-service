@@ -683,7 +683,7 @@ class KeyValues(Resource):
                 for feature in result['feature_collection']['features']:
                     record = {"key": feature["id"] if key_field_name == "id" else feature['properties'][key_field_name], "value": str(feature['properties'][value_field_name]).strip()}
                     ret[table].append(record)
-                natsort = lambda s: [int(t) if t.isdigit() else t.lower() for t in re.split('(\d+)', s)]
+                natsort = lambda s: [int(t) if t.isdigit() else t.lower() for t in re.split(r'(\d+)', s)]
                 ret[table].sort(key=lambda record: natsort(record["value"]))
             elif 'error' in result:
                 app.logger.debug(f"Failed to query relation values for {keyval}: {result['error']}")
