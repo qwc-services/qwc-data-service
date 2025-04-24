@@ -981,10 +981,12 @@ class DatasetFeaturesProvider():
                 if value and values and str(value) not in [str(v['value']) for v in values]:
                     errors.append(self.translator.tr("validation.invalid_value_for") % (attr))
 
-        # remove read-only properties and check required values
+        # remove read-only properties and hidden fields without a value and check required values
         for attr in self.fields:
             constraints = self.fields.get(attr, {}).get('constraints', {})
-            if constraints.get('readOnly', False):
+            if constraints.get('readOnly', False) or (
+                constraints.get('hidden', False) and not feature['properties'].get(attr, None)
+            ):
                 if attr in feature['properties']:
                     # remove read-only property from feature
                     feature['properties'].pop(attr, None)
