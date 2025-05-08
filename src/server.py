@@ -145,7 +145,7 @@ geojson_geometry = create_model(api, 'Geometry', [
 ])
 
 # Feature
-geojson_feature = create_model(api, 'Feature', [
+geojson_feature = lambda with_crs: create_model(api, 'Feature', [
     ['type', fields.String(required=True, description='Feature',
                            example='Feature')],
     ['id', FeatureId(required=True, description='Feature ID',
@@ -158,23 +158,24 @@ geojson_feature = create_model(api, 'Feature', [
                                      example={'name': 'Example', 'type': 2,
                                               'num': 4}
                                      )],
-    ['crs', fields.Nested(geojson_crs, required=False, allow_null=True,
-                          description='Coordinate reference system')],
     ['bbox', fields.Raw(required=False, allow_null=True,
                         description=(
                             'Extent of feature as [minx, miny, maxx, maxy]'
                         ),
                         example=[950598.0, 6003950.0, 950758.0, 6004010.0])]
-])
+] + ([
+    ['crs', fields.Nested(geojson_crs, required=False, allow_null=True,
+                          description='Coordinate reference system')]
+] if with_crs else []))
 
-geojson_feature_request = api.inherit('Relation Feature', geojson_feature, {
+geojson_feature_request = api.inherit('Relation Feature', geojson_feature(True), {
     'defaultedProperties': fields.List(fields.String, required=False)
 })
 
 geojson_feature_collection = create_model(api, 'FeatureCollection', [
     ['type', fields.String(required=True, description='FeatureCollection',
                            example='FeatureCollection')],
-    ['features', fields.List(fields.Nested(geojson_feature),
+    ['features', fields.List(fields.Nested(geojson_feature(False)),
                              required=True, description='Features')],
     ['crs', fields.Nested(geojson_crs, required=False, allow_null=True,
                           description='Coordinate reference system')],
@@ -186,7 +187,7 @@ geojson_feature_collection = create_model(api, 'FeatureCollection', [
 ])
 
 # Relations
-relation_feature = api.inherit('Relation Feature', geojson_feature, {
+relation_feature = api.inherit('Relation Feature', geojson_feature(True), {
     '__status__': fields.String(required=False, description='Feature status'),
     'error': fields.String(required=False, description='Commit error'),
     'error_details': fields.Raw(required=False, description='Commit error details properties')
@@ -202,7 +203,7 @@ relation_values = create_model(api, 'Relation values', [
     ['*', fields.Wildcard(fields.Nested(relation_table_features, required=False, description='Relation table features'))]
 ])
 
-geojson_feature_with_relvals = api.inherit('Feature with relation values', geojson_feature, {
+geojson_feature_with_relvals = api.inherit('Feature with relation values', geojson_feature(True), {
     'relationValues': KeepEmptyDict(relation_values,
                                      required=False,
                                      description='Relation table entry')
@@ -321,7 +322,7 @@ class FeatureCollection(Resource):
     @api.response(405, 'Dataset not creatable')
     @api.response(422, 'Feature validation failed', feature_validation_response)
     @api.expect(geojson_feature_request)
-    @api.marshal_with(geojson_feature, code=201)
+    @api.marshal_with(geojson_feature(True), code=201)
     @optional_auth
     def post(self, dataset):
         """Create a new dataset feature
@@ -399,7 +400,7 @@ class Feature(Resource):
     @api.response(405, 'Dataset not readable')
     @api.param('crs', 'Client coordinate reference system')
     @api.expect(show_parser)
-    @api.marshal_with(geojson_feature)
+    @api.marshal_with(geojson_feature(True))
     @optional_auth
     def get(self, dataset, id):
         """Get a dataset feature
@@ -426,7 +427,7 @@ class Feature(Resource):
     @api.response(405, 'Dataset not updatable')
     @api.response(422, 'Feature validation failed', feature_validation_response)
     @api.expect(geojson_feature_request)
-    @api.marshal_with(geojson_feature)
+    @api.marshal_with(geojson_feature(True))
     @optional_auth
     def put(self, dataset, id):
         """Update a dataset feature
