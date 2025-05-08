@@ -317,6 +317,39 @@ class FeatureCollection(Resource):
             error_code = result.get('error_code') or 404
             api.abort(error_code, result['error'])
 
+    @api.doc('create')
+    @api.response(405, 'Dataset not creatable')
+    @api.response(422, 'Feature validation failed', feature_validation_response)
+    @api.expect(geojson_feature_request)
+    @api.marshal_with(geojson_feature, code=201)
+    @optional_auth
+    def post(self, dataset):
+        """Create a new dataset feature
+
+        Create new dataset feature from a GeoJSON Feature and return it as a
+        GeoJSON Feature.
+        """
+        translator = Translator(app, request)
+
+        if request.is_json:
+            # parse request data (NOTE: catches invalid JSON)
+            feature = api.payload
+            if isinstance(feature, dict):
+                data_service = data_service_handler()
+
+                result = data_service.create(
+                    get_identity(), translator, dataset, feature)
+                if 'error' not in result:
+                    return result['feature'], 201
+                else:
+                    error_code = result.get('error_code') or 404
+                    error_details = result.get('error_details') or {}
+                    api.abort(error_code, result['error'], **error_details)
+            else:
+                api.abort(400, translator.tr("error.json_is_not_an_object"))
+        else:
+            api.abort(400, translator.tr("error.request_data_is_not_json"))
+
 
 @api.route('/<path:dataset>/extent')
 @api.response(400, 'Bad request')
