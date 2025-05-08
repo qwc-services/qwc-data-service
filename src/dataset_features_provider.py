@@ -456,7 +456,7 @@ class DatasetFeaturesProvider():
             # execute query
             success = False
             result = conn.execute(sql, params)
-            if result.one():
+            if result.one_or_none():
                 # NOTE: result is empty if not found
                 success = True
 
