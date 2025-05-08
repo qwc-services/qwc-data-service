@@ -1,11 +1,65 @@
+import os
 import unittest
 from unittest.mock import patch
+from functools import wraps
 
 from flask import Response, json
 from flask.testing import FlaskClient
 from flask_jwt_extended import JWTManager, create_access_token
+from qwc_services_core.database import DatabaseEngine
+from contextlib import contextmanager
+
+# Monkey-patch DatabaseEngine.db_engine to ensure always the same engine is returned
+original_db_engine = DatabaseEngine.db_engine
+db_engines = {}
+
+def make_test_engine(self, conn_str):
+    if not conn_str in db_engines:
+        db_engines[conn_str] = original_db_engine(self, conn_str)
+    return db_engines[conn_str]
+
+DatabaseEngine.db_engine = make_test_engine
 
 import server
+
+JWTManager(server.app)
+
+
+# Rollback DB to initial state after each test
+db_engine = DatabaseEngine()
+db = db_engine.geo_db()
+
+def patch_db_begin(outer_conn):
+    @contextmanager
+    def fake_begin():
+        yield outer_conn
+    db.begin = fake_begin
+
+def patch_db_connect(outer_conn):
+    @contextmanager
+    def fake_connect():
+        yield outer_conn
+    db.connect = fake_connect
+
+def with_rollback(fn):
+    @wraps(fn)
+    def wrapper(*args, **kwargs):
+        conn = db.connect()
+        trans = conn.begin()
+
+        original_begin = db.begin
+        patch_db_begin(conn)
+        original_connect = db.connect
+        patch_db_connect(conn)
+
+        try:
+            return fn(*args, **kwargs)
+        finally:
+            db.begin = original_begin
+            db.connect = original_connect
+            trans.rollback()
+            conn.close()
+    return wrapper
 
 
 class ApiTestCase(unittest.TestCase):
@@ -14,16 +68,15 @@ class ApiTestCase(unittest.TestCase):
     def setUp(self):
         server.app.testing = True
         self.app = FlaskClient(server.app, Response)
-        JWTManager(server.app)
-        self.dataset = 'test_polygons'
-        self.dataset_read_only = 'test_points'
+        self.dataset = 'qwc_demo.edit_polygons'
+        self.dataset_read_only = 'qwc_demo.edit_points'
 
     def tearDown(self):
         pass
 
     def jwtHeader(self):
         with server.app.test_request_context():
-            access_token = create_access_token('test')
+            access_token = create_access_token('admin')
         return {'Authorization': 'Bearer {}'.format(access_token)}
 
     def get(self, url):
@@ -94,7 +147,7 @@ class ApiTestCase(unittest.TestCase):
             crs = {
                 'type': 'name',
                 'properties': {
-                    'name': 'urn:ogc:def:crs:EPSG::2056'
+                    'name': 'urn:ogc:def:crs:EPSG::3857'
                 }
             }
             self.assertEqual(crs, feature['crs'])
@@ -102,7 +155,7 @@ class ApiTestCase(unittest.TestCase):
             self.assertNotIn('crs', feature)
 
         # check for surplus properties
-        geo_json_feature_keys = ['type', 'id', 'geometry', 'properties', 'crs']
+        geo_json_feature_keys = ['type', 'id', 'geometry', 'properties', 'crs', 'bbox']
         for key in feature.keys():
             self.assertIn(key, geo_json_feature_keys,
                           "Invalid property for GeoJSON Feature")
@@ -117,12 +170,18 @@ class ApiTestCase(unittest.TestCase):
             },
             'properties': {
                 'name': 'Test',
-                'beschreibung': 'Test Polygon'
+                'description': 'Test Polygon',
+                'num': 1,
+                'value': 3.14,
+                'type': 0,
+                'amount': 1.23,
+                'validated': False,
+                'datetime': '2025-01-01T12:34:56'
             },
             'crs': {
                 'type': 'name',
                 'properties': {
-                    'name': 'urn:ogc:def:crs:EPSG::2056'
+                    'name': 'urn:ogc:def:crs:EPSG::3857'
                 }
             }
         }
@@ -137,18 +196,18 @@ class ApiTestCase(unittest.TestCase):
             },
             'properties': {
                 'name': 'Test',
-                'beschreibung': 'Test Punkt'
+                'description': 'Test Point'
             },
             'crs': {
                 'type': 'name',
                 'properties': {
-                    'name': 'urn:ogc:def:crs:EPSG::2056'
+                    'name': 'urn:ogc:def:crs:EPSG::3857'
                 }
             }
         }
 
     # index
-
+    @with_rollback
     def test_index(self):
         # without bbox
         status_code, json_data = self.get("/%s/" % self.dataset)
@@ -161,14 +220,14 @@ class ApiTestCase(unittest.TestCase):
         crs = {
             'type': 'name',
             'properties': {
-                'name': 'urn:ogc:def:crs:EPSG::2056'
+                'name': 'urn:ogc:def:crs:EPSG::3857'
             }
         }
         self.assertEqual(crs, json_data['crs'])
         no_bbox_count = len(json_data['features'])
 
         # with bbox
-        bbox = '1288647,-4658384,1501913,-4538362'
+        bbox = '950800,6003900,950850,6003950'
         status_code, json_data = self.get("/%s/?bbox=%s" % (self.dataset, bbox))
         self.assertEqual(200, status_code, "Status code is not OK")
         self.assertEqual('FeatureCollection', json_data['type'])
@@ -179,15 +238,16 @@ class ApiTestCase(unittest.TestCase):
         crs = {
             'type': 'name',
             'properties': {
-                'name': 'urn:ogc:def:crs:EPSG::2056'
+                'name': 'urn:ogc:def:crs:EPSG::3857'
             }
         }
         self.assertEqual(crs, json_data['crs'])
         self.assertGreaterEqual(no_bbox_count, len(json_data['features']),
                            "Too many features within bbox.")
 
+    @with_rollback
     def test_index_read_only(self):
-        bbox = '1358925,-4604991,1431179,-4569265'
+        bbox = '950750,6003950,950760,6003960'
         status_code, json_data = self.get("/%s/?bbox=%s" %
                                           (self.dataset_read_only, bbox))
         self.assertEqual(200, status_code, "Status code is not OK")
@@ -199,11 +259,12 @@ class ApiTestCase(unittest.TestCase):
         crs = {
             'type': 'name',
             'properties': {
-                'name': 'urn:ogc:def:crs:EPSG::2056'
+                'name': 'urn:ogc:def:crs:EPSG::3857'
             }
         }
         self.assertEqual(crs, json_data['crs'])
 
+    @with_rollback
     def test_index_invalid_dataset(self):
         status_code, json_data = self.get('/invalid_dataset/')
         self.assertEqual(404, status_code, "Status code is not Not Found")
@@ -211,6 +272,7 @@ class ApiTestCase(unittest.TestCase):
                          "Message does not match")
         self.assertNotIn('type', json_data, "GeoJSON Type present")
 
+    @with_rollback
     def test_index_empty_bbox(self):
         status_code, json_data = self.get("/%s/?bbox=" % self.dataset)
         self.assertEqual(400, status_code, "Status code is not Bad Request")
@@ -218,6 +280,7 @@ class ApiTestCase(unittest.TestCase):
                          "Message does not match")
         self.assertNotIn('type', json_data, "GeoJSON Type present")
 
+    @with_rollback
     def test_index_invalid_bbox(self):
         test_bboxes = [
             'test',  # string
@@ -237,6 +300,7 @@ class ApiTestCase(unittest.TestCase):
                              "Message does not match (bbox='%s')" % bbox)
             self.assertNotIn('type', json_data, "GeoJSON Type present")
 
+    @with_rollback
     def test_index_equal_coords_bbox(self):
         bbox = '2606900,1228600,2606900,1228600'
         status_code, json_data = self.get("/%s/?bbox=%s" % (self.dataset, bbox))
@@ -244,19 +308,21 @@ class ApiTestCase(unittest.TestCase):
         self.assertEqual('FeatureCollection', json_data['type'])
 
     # show
-
+    @with_rollback
     def test_show(self):
         status_code, json_data = self.get("/%s/1" % self.dataset)
         self.assertEqual(200, status_code, "Status code is not OK")
         self.check_feature(json_data)
         self.assertEqual(1, json_data['id'], "ID does not match")
 
+    @with_rollback
     def test_show_read_only(self):
         status_code, json_data = self.get("/%s/1" % self.dataset_read_only)
         self.assertEqual(200, status_code, "Status code is not OK")
         self.check_feature(json_data)
         self.assertEqual(1, json_data['id'], "ID does not match")
 
+    @with_rollback
     def test_show_invalid_dataset(self):
         status_code, json_data = self.get('/test/1')
         self.assertEqual(404, status_code, "Status code is not Not Found")
@@ -264,6 +330,7 @@ class ApiTestCase(unittest.TestCase):
                          "Message does not match")
         self.assertNotIn('type', json_data, "GeoJSON Type present")
 
+    @with_rollback
     def test_show_invalid_id(self):
         status_code, json_data = self.get("/%s/999999" % self.dataset)
         self.assertEqual(404, status_code, "Status code is not Not Found")
@@ -273,6 +340,7 @@ class ApiTestCase(unittest.TestCase):
 
     # create
 
+    @with_rollback
     def test_create(self):
         input_feature = self.build_poly_feature()
         status_code, json_data = self.post("/%s/" % self.dataset, input_feature)
@@ -290,16 +358,18 @@ class ApiTestCase(unittest.TestCase):
         self.assertEqual(200, status_code, "Status code is not OK")
         self.assertEqual(feature, json_data)
 
+    @with_rollback
     def test_create_read_only(self):
         input_feature = self.build_point_feature()
         status_code, json_data = self.post("/%s/" % self.dataset_read_only,
                                            input_feature)
         self.assertEqual(405, status_code,
                          "Status code is not Method Not Allowed")
-        self.assertEqual('Dataset not writable', json_data['message'],
+        self.assertEqual('Dataset not creatable', json_data['message'],
                          "Message does not match")
         self.assertNotIn('type', json_data, "GeoJSON Type present")
 
+    @with_rollback
     def test_create_invalid_dataset(self):
         input_feature = self.build_poly_feature()
         status_code, json_data = self.post('/invalid_dataset/', input_feature)
@@ -309,7 +379,7 @@ class ApiTestCase(unittest.TestCase):
         self.assertNotIn('type', json_data, "GeoJSON Type present")
 
     # update
-
+    @with_rollback
     def test_update(self):
         input_feature = self.build_poly_feature()
         status_code, json_data = self.put("/%s/1" % self.dataset, input_feature)
@@ -328,16 +398,18 @@ class ApiTestCase(unittest.TestCase):
         self.assertEqual(200, status_code, "Status code is not OK")
         self.assertEqual(feature, json_data)
 
+    @with_rollback
     def test_update_read_only(self):
         input_feature = self.build_point_feature()
         status_code, json_data = self.put("/%s/1" % self.dataset_read_only,
                                           input_feature)
         self.assertEqual(405, status_code,
                          "Status code is not Method Not Allowed")
-        self.assertEqual('Dataset not writable', json_data['message'],
+        self.assertEqual('Dataset not updatable', json_data['message'],
                          "Message does not match")
         self.assertNotIn('type', json_data, "GeoJSON Type present")
 
+    @with_rollback
     def test_update_invalid_dataset(self):
         input_feature = self.build_poly_feature()
         status_code, json_data = self.put('/invalid_dataset/1', input_feature)
@@ -346,6 +418,7 @@ class ApiTestCase(unittest.TestCase):
                          "Message does not match")
         self.assertNotIn('type', json_data, "GeoJSON Type present")
 
+    @with_rollback
     def test_update_invalid_id(self):
         input_feature = self.build_poly_feature()
         status_code, json_data = self.put(
@@ -356,29 +429,31 @@ class ApiTestCase(unittest.TestCase):
         self.assertNotIn('type', json_data, "GeoJSON Type present")
 
     # destroy
-
+    @with_rollback
     def test_destroy(self):
-        status_code, json_data = self.delete("/%s/2" % self.dataset)
+        status_code, json_data = self.delete("/%s/1" % self.dataset)
         self.assertEqual(200, status_code, "Status code is not OK")
         self.assertEqual('Dataset feature deleted', json_data['message'],
                          "Message does not match")
         self.assertNotIn('type', json_data, "GeoJSON Type present")
 
         # check that feature has been deleted
-        status_code, json_data = self.get("/%s/2" % self.dataset)
+        status_code, json_data = self.get("/%s/1" % self.dataset)
         self.assertEqual(404, status_code, "Status code is not Not Found")
         self.assertEqual('Feature not found', json_data['message'],
                          "Message does not match")
         self.assertNotIn('type', json_data, "GeoJSON Type present")
 
+    @with_rollback
     def test_destroy_read_only(self):
         status_code, json_data = self.delete("/%s/2" % self.dataset_read_only)
         self.assertEqual(405, status_code,
                          "Status code is not Method Not Allowed")
-        self.assertEqual('Dataset not writable', json_data['message'],
+        self.assertEqual('Dataset not deletable', json_data['message'],
                          "Message does not match")
         self.assertNotIn('type', json_data, "GeoJSON Type present")
 
+    @with_rollback
     def test_destroy_invalid_dataset(self):
         status_code, json_data = self.delete('/test/1')
         self.assertEqual(404, status_code, "Status code is not Not Found")
@@ -386,6 +461,7 @@ class ApiTestCase(unittest.TestCase):
                          "Message does not match")
         self.assertNotIn('type', json_data, "GeoJSON Type present")
 
+    @with_rollback
     def test_destroy_invalid_id(self):
         status_code, json_data = self.delete(
             "/%s/999999" % self.dataset)
