@@ -1,3 +1,4 @@
+import ast
 from collections import OrderedDict
 import re
 from json.decoder import JSONDecodeError
@@ -977,9 +978,16 @@ class DatasetFeaturesProvider():
                     )
 
                 # values
-                values = constraints.get('values', {})
-                if value and values and str(value) not in [str(v['value']) for v in values]:
-                    errors.append(self.translator.tr("validation.invalid_value_for") % (attr))
+                allowed_values = [str(v['value']) for v in constraints.get('values', [])]
+                if allowed_values and value:
+                    if constraints.get('allowMulti', False):
+                        value_set = ast.literal_eval(value)
+                        for val in value_set:
+                            if val not in allowed_values:
+                                errors.append(self.translator.tr("validation.invalid_value_for") % (attr))
+                    else:
+                        if str(value) not in allowed_values:
+                            errors.append(self.translator.tr("validation.invalid_value_for") % (attr))
 
         # remove read-only properties and hidden fields without a value and check required values
         for attr in self.fields:
