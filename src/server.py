@@ -301,6 +301,7 @@ class FeatureCollection(Resource):
         Return dataset features inside bounding box and matching filter as a
         GeoJSON FeatureCollection.
         """
+        app.logger.debug(f"Processing GET (index) on /{dataset}/")
         translator = Translator(app, request)
         args = index_parser.parse_args()
         bbox = args['bbox']
@@ -330,6 +331,7 @@ class FeatureCollection(Resource):
         Create new dataset feature from a GeoJSON Feature and return it as a
         GeoJSON Feature.
         """
+        app.logger.debug(f"Processing POST (create) on /{dataset}/")
         translator = Translator(app, request)
 
         if request.is_json:
@@ -374,6 +376,7 @@ class FeatureCollectionExtent(Resource):
         Return the extend of the features matching any specified filter as a
         [xmin,ymin,xmax,ymax] array.
         """
+        app.logger.debug(f"Processing GET (index) on /{dataset}/extent")
         translator = Translator(app, request)
         args = index_parser.parse_args()
         crs = args['crs']
@@ -411,6 +414,7 @@ class Feature(Resource):
 
         <b>crs</b>: Client CRS, e.g. <b>EPSG:3857<b>
         """
+        app.logger.debug(f"Processing GET (show) on /{dataset}/{id}")
         translator = Translator(app, request)
         args = show_parser.parse_args()
         crs = args['crs']
@@ -435,6 +439,7 @@ class Feature(Resource):
         Update dataset feature with ID from a GeoJSON Feature and return it as
         a GeoJSON Feature.
         """
+        app.logger.debug(f"Processing PUT (update) on /{dataset}/{id}")
         translator = Translator(app, request)
         if request.is_json:
             # parse request data (NOTE: catches invalid JSON)
@@ -465,6 +470,7 @@ class Feature(Resource):
 
         Delete dataset feature with ID.
         """
+        app.logger.debug(f"Processing DELETE (destroy) on /{dataset}/{id}")
 
         translator = Translator(app, request)
 
@@ -500,6 +506,7 @@ class CreateFeatureMultipart(Resource):
         Create new dataset feature from a GeoJSON Feature and return it as a
         GeoJSON Feature.
         """
+        app.logger.debug(f"Processing POST (create) on /{dataset}/multipart")
         translator = Translator(app, request)
         args = feature_multipart_parser.parse_args()
 
@@ -558,6 +565,7 @@ class EditFeatureMultipart(Resource):
         Update dataset feature with ID from a GeoJSON Feature and return it as
         a GeoJSON Feature.
         """
+        app.logger.debug(f"Processing PUT (update) on /{dataset}/multipart/{id}")
         translator = Translator(app, request)
         args = feature_multipart_parser.parse_args()
 
@@ -601,6 +609,7 @@ class AttachmentDownloader(Resource):
     @api.expect(get_attachment_parser)
     @optional_auth
     def get(self, dataset):
+        app.logger.debug(f"Processing GET (get_attachment) on /{dataset}/attachment")
         translator = Translator(app, request)
         args = get_attachment_parser.parse_args()
         data_service = data_service_handler()
@@ -624,6 +633,7 @@ class Relations(Resource):
     @api.marshal_with(relation_values, code=201)
     @optional_auth
     def get(self, dataset, id):
+        app.logger.debug(f"Processing GET (get_relations) on /{dataset}/{id}/relations")
         translator = Translator(app, request)
         data_service = data_service_handler()
         args = get_relations_parser.parse_args()
@@ -653,7 +663,7 @@ class Relations(Resource):
 @api.route('/keyvals')
 @api.response(404, 'Dataset or feature not found or permission error')
 class KeyValues(Resource):
-    @api.doc('get_relations')
+    @api.doc('get_keyvals')
     @api.param('tables', 'Comma separated list of keyvalue tables of the form "tablename:key_field_name:value_field_name"')
     @api.param(
         'filter', 'JSON serialized array of filter expressions, the same length as the number of specified tables: '
@@ -662,6 +672,7 @@ class KeyValues(Resource):
     @api.marshal_with(keyvals_response, code=201)
     @optional_auth
     def get(self):
+        app.logger.debug(f"Processing GET (get_keyvals) on /keyvals")
         translator = Translator(app, request)
         args = get_relations_parser.parse_args()
         filterexpr = json.loads(args.get('filter') or "[]")
