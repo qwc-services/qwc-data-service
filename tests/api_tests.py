@@ -111,7 +111,7 @@ class ApiTestCase(unittest.TestCase):
         response = self.app.delete(url, headers=self.jwtHeader())
         return response.status_code, json.loads(response.data)
 
-    def check_feature(self, feature, has_crs=True):
+    def check_feature(self, feature, has_crs_and_bbox=True):
         """Check GeoJSON feature."""
         self.assertEqual('Feature', feature['type'])
         self.assertIn('id', feature)
@@ -143,7 +143,7 @@ class ApiTestCase(unittest.TestCase):
                               "Feature properties are not a dict")
 
         # check CRS
-        if has_crs:
+        if has_crs_and_bbox:
             crs = {
                 'type': 'name',
                 'properties': {
@@ -151,8 +151,10 @@ class ApiTestCase(unittest.TestCase):
                 }
             }
             self.assertEqual(crs, feature['crs'])
+            self.assertIn('bbox', feature)
         else:
             self.assertNotIn('crs', feature)
+            self.assertNotIn('bbox', feature)
 
         # check for surplus properties
         geo_json_feature_keys = ['type', 'id', 'geometry', 'properties', 'crs', 'bbox']
