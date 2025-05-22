@@ -145,7 +145,7 @@ geojson_geometry = create_model(api, 'Geometry', [
 ])
 
 # Feature
-geojson_feature = lambda with_crs: create_model(api, 'Feature', [
+geojson_feature = lambda with_bbox_and_crs: create_model(api, 'Feature', [
     ['type', fields.String(required=True, description='Feature',
                            example='Feature')],
     ['id', FeatureId(required=True, description='Feature ID',
@@ -157,16 +157,16 @@ geojson_feature = lambda with_crs: create_model(api, 'Feature', [
                                      description='Feature properties',
                                      example={'name': 'Example', 'type': 2,
                                               'num': 4}
-                                     )],
+                                     )]
+] + ([
+    ['crs', fields.Nested(geojson_crs, required=False, allow_null=True,
+                          description='Coordinate reference system')],
     ['bbox', fields.Raw(required=False, allow_null=True,
                         description=(
                             'Extent of feature as [minx, miny, maxx, maxy]'
                         ),
                         example=[950598.0, 6003950.0, 950758.0, 6004010.0])]
-] + ([
-    ['crs', fields.Nested(geojson_crs, required=False, allow_null=True,
-                          description='Coordinate reference system')]
-] if with_crs else []))
+] if with_bbox_and_crs else []))
 
 geojson_feature_request = api.inherit('Relation Feature', geojson_feature(True), {
     'defaultedProperties': fields.List(fields.String, required=False)
