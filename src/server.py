@@ -533,7 +533,7 @@ class CreateFeatureMultipart(Resource):
             get_identity(), translator, dataset, feature, files
         )
         if 'error' not in result:
-            relationValues = data_service.write_relation_values(get_identity(), result['feature']['id'], feature.get('relationValues', '{}'), request.files, translator, True)
+            relationValues = data_service.write_relation_values(get_identity(), result['feature']['id'], feature.get('relationValues', {}), request.files, translator, True)
             # Requery feature because the write_relation_values may change the feature through DB triggers
             crs = feature['crs']['properties']['name'] if feature['crs'] else None
             result = data_service.show(get_identity(), translator, dataset, result['feature']['id'], crs)
