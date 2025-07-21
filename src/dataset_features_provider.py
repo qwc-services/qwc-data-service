@@ -8,7 +8,7 @@ from uuid import UUID
 from flask import json
 from sqlalchemy.exc import DataError, InternalError, ProgrammingError
 from sqlalchemy.sql import text as sql_text
-
+from spatial_adapter import SpatialAdapter
 
 class DatasetFeaturesProvider():
     """DatasetFeaturesProvider class
@@ -43,6 +43,10 @@ class DatasetFeaturesProvider():
         self.db_engine = db_engine
         self.logger = logger
         self.translator = translator
+
+        # Add database dialect detection and spatial adapter
+        self.dialect = self.detect_db_dialect(db_engine)
+        self.spatial_adapter = SpatialAdapter(self.dialect)
 
         # assign values from service config
         self.schema = config['schema']
@@ -112,20 +116,35 @@ class DatasetFeaturesProvider():
 
         if self.geometry_column and bbox is not None:
             # bbox filter
-            bbox_geom_sql = self.transform_geom_sql("""
-                ST_SetSRID(
-                    'BOX3D(:minx :miny, :maxx :maxy)'::box3d,
-                    {bbox_srid}
-                )
-            """, srid, self.srid)
-            where_clauses.append(("""
-                ST_Intersects("{geom}",
-                    %s
-                )
-            """ % bbox_geom_sql).format(
-                geom=self.geometry_column, bbox_srid=srid,
-                srid=self.srid
-            ))
+            if self.dialect == 'postgresql':
+                bbox_geom_sql = self.transform_geom_sql("""
+                    ST_SetSRID(
+                        'BOX3D(:minx :miny, :maxx :maxy)'::box3d,
+                        {bbox_srid}
+                    )
+                """, srid, self.srid)
+                where_clauses.append(("""
+                    ST_Intersects("{geom}",
+                        %s
+                    )
+                """ % bbox_geom_sql).format(
+                    geom=self.geometry_column, bbox_srid=srid,
+                    srid=self.srid
+                ))
+            elif self.dialect == 'mssql':
+                # SQL Server bbox filter
+                bbox_geom_sql = self.transform_geom_sql("""
+                    geometry::STGeomFromText(
+                        'POLYGON((:minx :miny, :maxx :miny, :maxx :maxy, :minx :maxy, :minx :miny))',
+                        {bbox_srid}
+                    )
+                """, srid, self.srid)
+                where_clauses.append(("""
+                    {geom}.STIntersects(%s) = 1
+                """ % bbox_geom_sql).format(
+                    geom=self.escape_column_name(self.geometry_column), 
+                    bbox_srid=srid, srid=self.srid
+                ))
             params.update({
                 "minx": bbox[0],
                 "miny": bbox[1],
@@ -138,7 +157,10 @@ class DatasetFeaturesProvider():
             params.update(filterexpr[1])
 
         if filter_geom is not None:
-            where_clauses.append("ST_Intersects(%s, ST_GeomFromGeoJSON(:filter_geom))" % self.geometry_column)
+            if self.dialect == 'postgresql':
+                where_clauses.append(f"ST_Intersects({self.escape_column_name(self.geometry_column)}, ST_GeomFromGeoJSON(:filter_geom))")
+            elif self.dialect == 'mssql':
+                where_clauses.append(f"{self.escape_column_name(self.geometry_column)}.STIntersects(geometry::STGeomFromGeoJSON(:filter_geom)) = 1")
             params.update({"filter_geom": filter_geom})
 
         where_clause = ""
@@ -148,10 +170,19 @@ class DatasetFeaturesProvider():
         geom_sql = self.geom_column_sql(srid, with_bbox=False)
         if self.geometry_column:
             # select overall extent
-            geom_sql += (
-                ', ST_Extent(%s) OVER () AS _overall_bbox_' %
-                self.transform_geom_sql('"{geom}"', self.srid, srid)
-            )
+            if self.dialect == 'postgresql':
+                geom_sql += (
+                    ', ST_Extent(%s) OVER () AS _overall_bbox_' %
+                    self.transform_geom_sql('"{geom}"', self.srid, srid)
+                )
+            elif self.dialect == 'mssql':
+                # For SQL Server, we need a different approach to get the bbox
+                # SQL Server doesn't support window functions in the same way
+                # This is a simplified approach - we just include the geometry and calculate the bbox later
+                transformed_geom = self.transform_geom_sql(
+                    self.escape_column_name(self.geometry_column), self.srid, srid
+                )
+                geom_sql += f', {transformed_geom} AS _overall_bbox_geom'
 
         sql = sql_text(("""
             SELECT {columns}%s
@@ -178,10 +209,54 @@ class DatasetFeaturesProvider():
                 join_attribute_values = self.__query_join_attributes(join_attributes, attribute_values)
                 attribute_values.update(join_attribute_values)
 
-                features.append(self.feature_from_query(attribute_values, srid))
-                if '_overall_bbox_' in row:
-                    overall_bbox = row['_overall_bbox_']
-
+                if self.dialect == 'mssql' and self.geometry_column and not overall_bbox:
+                    # For SQL Server with pyodbc, calculate the envelope in Python
+                    min_x = min_y = float('inf')
+                    max_x = max_y = float('-inf')
+                    has_valid_geometries = False
+                    
+                    for row_idx, row in enumerate(result):
+                        if '_overall_bbox_geom' not in row or row['_overall_bbox_geom'] is None:
+                            continue
+                        
+                        try:
+                            # For pyodbc, we need to extract the bounding box coordinates
+                            # Method 1: Try to access SQL Server geometry methods directly
+                            try:
+                                geom = row['_overall_bbox_geom']
+                                env = geom.STEnvelope()  # Access SQL Server geometry methods if available
+                                x_min = env.STPointN(1).STX
+                                y_min = env.STPointN(1).STY
+                                x_max = env.STPointN(3).STX
+                                y_max = env.STPointN(3).STY
+                                
+                                min_x = min(min_x, x_min)
+                                min_y = min(min_y, y_min)
+                                max_x = max(max_x, x_max)
+                                max_y = max(max_y, y_max)
+                                has_valid_geometries = True
+                                
+                            except (AttributeError, TypeError):
+                                # Method 2: If direct access fails, use a separate query to get WKT
+                                with self.db_read.connect() as conn2:
+                                    # Extract the geometry as WKT for processing
+                                    sql = sql_text("SELECT @geom.STAsText() AS wkt, @geom.STEnvelope().STPointN(1).STX AS x_min, @geom.STEnvelope().STPointN(1).STY AS y_min, @geom.STEnvelope().STPointN(3).STX AS x_max, @geom.STEnvelope().STPointN(3).STY AS y_max")
+                                    env_result = conn2.execute(sql, {"geom": row['_overall_bbox_geom']}).mappings()
+                                    bbox_row = env_result.fetchone()
+                                    
+                                    if bbox_row and None not in [bbox_row['x_min'], bbox_row['y_min'], bbox_row['x_max'], bbox_row['y_max']]:
+                                        min_x = min(min_x, bbox_row['x_min'])
+                                        min_y = min(min_y, bbox_row['y_min'])
+                                        max_x = max(max_x, bbox_row['x_max'])
+                                        max_y = max(max_y, bbox_row['y_max'])
+                                        has_valid_geometries = True
+                        
+                        except Exception as e:
+                            self.logger.warning(f"Failed to extract envelope from geometry: {str(e)}")
+                    
+                    # Set the overall bbox if we found valid geometries
+                    if has_valid_geometries:
+                        overall_bbox = [min_x, min_y, max_x, max_y]
         crs = None
         if self.geometry_column:
             crs = {
@@ -224,7 +299,10 @@ class DatasetFeaturesProvider():
             params.update(filterexpr[1])
 
         if filter_geom is not None:
-            where_clauses.append("ST_Intersects(%s, ST_GeomFromGeoJSON(:filter_geom))" % self.geometry_column)
+            if self.dialect == 'postgresql':
+                where_clauses.append(f"ST_Intersects({self.escape_column_name(self.geometry_column)}, ST_GeomFromGeoJSON(:filter_geom))")
+            elif self.dialect == 'mssql':
+                where_clauses.append(f"{self.escape_column_name(self.geometry_column)}.STIntersects(geometry::STGeomFromGeoJSON(:filter_geom)) = 1")
             params.update({"filter_geom": filter_geom})
 
         where_clause = ""
@@ -235,10 +313,17 @@ class DatasetFeaturesProvider():
             return None
 
         # select overall extent
-        bbox = (
-            'ST_Extent(%s) AS bbox' %
-            self.transform_geom_sql('"{geom}"', self.srid, srid)
-        )
+        if self.dialect == 'postgresql':
+            bbox = (
+                'ST_Extent(%s) AS bbox' %
+                self.transform_geom_sql('"{geom}"', self.srid, srid)
+            )
+        elif self.dialect == 'mssql':
+            # SQL Server doesn't have ST_Extent, use a different approach
+            transformed_geom = self.transform_geom_sql(
+                self.escape_column_name(self.geometry_column), self.srid, srid
+            )
+            bbox = f"geometry::EnvelopeAggregate({transformed_geom}) AS bbox"
 
         sql = sql_text(("""
             SELECT %s
@@ -620,9 +705,14 @@ class DatasetFeaturesProvider():
                     # add SQL fragment for filter
                     # e.g. '"type" >= :v0'
                     idx = len(params)
-                    sql.append('"%s" %s :v%d' % (column_name, op, idx))
+                    if self.dialect == 'postgresql':
+                        param_name = f"v{idx}"
+                        sql.append(f'"{column_name}" {op} :{param_name}')
+                    elif self.dialect == 'mssql':
+                        param_name = f"p{idx}"
+                        sql.append(f'[{column_name}] {op} @{param_name}')
                     # add value
-                    params["v%d" % idx] = value
+                    params[param_name] = value
             else:
                 # invalid entry
                 errors.append("Invalid entry: %s" % entry)
@@ -635,28 +725,33 @@ class DatasetFeaturesProvider():
             return ("(%s)" % " ".join(sql), params)
 
     def parse_box2d(self, box2d):
-        """Parse Box2D string and return bounding box
-        as [<minx>,<miny>,<maxx>,<maxy>].
+        """Parse Box2D string from database into bbox array.
 
-        :param str box2d: Box2D string
+        :param str box2d: Box2D string or object
         """
-        bbox = None
-
         if box2d is None:
-            # bounding box is empty
             return None
-
-        # extract coords from Box2D string
-        # e.g. "BOX(950598.12 6003950.34,950758.567 6004010.8)"
-        # truncate brackets and split into coord pairs
-        parts = box2d[4:-1].split(',')
-        if len(parts) == 2:
-            # split coords, e.g. "950598.12 6003950.34"
-            minx, miny = parts[0].split(' ')
-            maxx, maxy = parts[1].split(' ')
-            bbox = [float(minx), float(miny), float(maxx), float(maxy)]
-
-        return bbox
+        
+        if self.dialect == 'postgresql':
+            # Parse PostgreSQL Box2D format
+            # BOX(xmin ymin, xmax ymax)
+            try:
+                # remove BOX( and closing )
+                box2d = box2d[4:-1]
+                # split into pairs and extract coordinates
+                pairs = box2d.split(',')
+                xmin, ymin = pairs[0].split()
+                xmax, ymax = pairs[1].split()
+                return [float(xmin), float(ymin), float(xmax), float(ymax)]
+            except Exception:
+                return None
+        elif self.dialect == 'mssql':
+            # Parse SQL Server bounding box
+            try:
+                # For SQL Server, box2d is a geometry object with properties
+                return [box2d.XMin, box2d.YMin, box2d.XMax, box2d.YMax]
+            except Exception:
+                return None
 
     def validate(self, feature, new_feature=False):
         """Validate a feature and return any validation errors.
@@ -782,7 +877,7 @@ class DatasetFeaturesProvider():
         return errors
 
     def validate_geometry(self, feature):
-        """Validate geometry contents using PostGIS.
+        """Validate geometry contents using database-specific spatial functions.
 
         :param object feature: GeoJSON Feature
         """
@@ -799,47 +894,91 @@ class DatasetFeaturesProvider():
 
         # connect to database (for read-only access)
         with self.db_read.connect() as conn:
-            # validate GeoJSON geometry
-            try:
-                sql = sql_text("SELECT ST_GeomFromGeoJSON(:geom);")
-                conn.execute(sql, {"geom": json_geom})
-            except InternalError as e:
-                # PostGIS error, e.g. "Too few ordinates in GeoJSON"
-                errors.append({
-                    'reason': re.sub(r'^FEHLER:\s*', '', str(e.orig)).strip()
-                })
+            if self.dialect == 'postgresql':
+                # PostgreSQL/PostGIS validation
+                # validate GeoJSON geometry
+                try:
+                    sql = sql_text("SELECT ST_GeomFromGeoJSON(:geom);")
+                    conn.execute(sql, {"geom": json_geom})
+                except InternalError as e:
+                    # PostGIS error, e.g. "Too few ordinates in GeoJSON"
+                    errors.append({
+                        'reason': re.sub(r'^FEHLER:\s*', '', str(e.orig)).strip()
+                    })
 
-            if not errors:
-                # validate geometry
-                wkt_geom = ""
-                sql = sql_text("""
-                    WITH feature AS (SELECT ST_GeomFromGeoJSON(:geom) AS geom)
-                    SELECT valid, reason, ST_AsText(location) AS location,
-                        ST_IsEmpty(geom) as is_empty, ST_AsText(geom) AS wkt_geom,
-                        GeometryType(geom) AS geom_type
-                    FROM feature, ST_IsValidDetail(geom)
-                """)
-                result = conn.execute(sql, {"geom": json_geom}).mappings()
-                for row in result:
-                    if not row['valid']:
-                        error = {
-                            'reason': row['reason']
-                        }
-                        if row['location'] is not None:
-                            error['location'] = row['location']
-                        errors.append(error)
-                    elif row['is_empty']:
-                        errors.append({'reason': self.translator.tr("validation.empty_or_incomplete_geom")})
+                if not errors:
+                    # validate geometry
+                    wkt_geom = ""
+                    sql = sql_text("""
+                        WITH feature AS (SELECT ST_GeomFromGeoJSON(:geom) AS geom)
+                        SELECT valid, reason, ST_AsText(location) AS location,
+                            ST_IsEmpty(geom) as is_empty, ST_AsText(geom) AS wkt_geom,
+                            GeometryType(geom) AS geom_type
+                        FROM feature, ST_IsValidDetail(geom)
+                    """)
+                    result = conn.execute(sql, {"geom": json_geom}).mappings()
+                    for row in result:
+                        if not row['valid']:
+                            error = {
+                                'reason': row['reason']
+                            }
+                            if row['location'] is not None:
+                                error['location'] = row['location']
+                            errors.append(error)
+                        elif row['is_empty']:
+                            errors.append({'reason': self.translator.tr("validation.empty_or_incomplete_geom")})
 
-                    wkt_geom = row['wkt_geom']
-                    geom_type = row['geom_type']
+                        wkt_geom = row['wkt_geom']
+                        geom_type = row['geom_type']
 
-                    # GeoJSON geometry type does not specify whether there is a Z coordinate, need
-                    # to look at the length of a coordinate
-                    if self.has_z(feature.get('geometry')['coordinates']):
-                        geom_type += "Z"
+                        # GeoJSON geometry type does not specify whether there is a Z coordinate, need
+                        # to look at the length of a coordinate
+                        if self.has_z(feature.get('geometry')['coordinates']):
+                            geom_type += "Z"
+                            
+            elif self.dialect == 'mssql':
+                # SQL Server validation
+                try:
+                    sql = sql_text("SELECT geometry::STGeomFromGeoJSON(:geom) AS geom;")
+                    conn.execute(sql, {"geom": json_geom})
+                except Exception as e:
+                    errors.append({
+                        'reason': str(e).strip()
+                    })
+                    
+                if not errors:
+                    # validate geometry
+                    wkt_geom = ""
+                    sql = sql_text("""
+                        SELECT 
+                            geom.STIsValid() as valid, 
+                            geom.STIsValidReason() as reason,
+                            geom.STAsText() as wkt_geom,
+                            geom.STGeometryType() as geom_type,
+                            geom.STIsEmpty() as is_empty
+                        FROM (SELECT geometry::STGeomFromGeoJSON(:geom) as geom) as T
+                    """)
+                    result = conn.execute(sql, {"geom": json_geom}).mappings()
+                    for row in result:
+                        if not bool(row['valid']):
+                            error = {
+                                'reason': row['reason']
+                            }
+                            # SQL Server doesn't provide a location for validation errors
+                            errors.append(error)
+                        elif bool(row['is_empty']):
+                            errors.append({'reason': self.translator.tr("validation.empty_or_incomplete_geom")})
+                            
+                        wkt_geom = row['wkt_geom']
+                        geom_type = row['geom_type']
+                        
+                        # GeoJSON geometry type does not specify whether there is a Z coordinate, need
+                        # to look at the length of a coordinate
+                        if self.has_z(feature.get('geometry')['coordinates']):
+                            geom_type += "Z"
 
-            if not errors:
+            # Common code for both database systems
+            if not errors and wkt_geom:
                 # check WKT for repeated vertices
                 groups = re.findall(r'(?<=\()([\d\.,\s]+)(?=\))', wkt_geom)
                 for group in groups:
@@ -851,7 +990,6 @@ class DatasetFeaturesProvider():
                                 'location': 'POINT(%s)' % v
                             })
 
-            if not errors:
                 # validate geometry type
                 if (self.geometry_type != 'Geometry' and
                 geom_type != self.geometry_type):
@@ -926,18 +1064,35 @@ class DatasetFeaturesProvider():
                 # validate data type
 
                 conn.execute(sql_text("SAVEPOINT before_validation"))
-                try:
-                    # try to parse value on DB
-                    sql = sql_text("SELECT (:value):: %s AS value;" % data_type)
-                    result = conn.execute(sql, {"value": input_value}).mappings()
-                    for row in result:
-                        value = row['value']
-                    conn.execute(sql_text("RELEASE SAVEPOINT before_validation"))
-                except (DataError, ProgrammingError) as e:
-                    conn.execute(sql_text("ROLLBACK TO SAVEPOINT before_validation"))
-                    # NOTE: current transaction is aborted
-                    errors.append(self.translator.tr("validation.invalid_value") %
-                                (attr, data_type))
+                if self.dialect == 'postgresql':
+                    conn.execute(sql_text("SAVEPOINT before_validation"))
+                    try:
+                        # try to parse value on DB for PostgreSQL
+                        sql = sql_text("SELECT (:value):: %s AS value;" % data_type)
+                        result = conn.execute(sql, {"value": input_value}).mappings()
+                        for row in result:
+                            value = row['value']
+                        conn.execute(sql_text("RELEASE SAVEPOINT before_validation"))
+                    except (DataError, ProgrammingError) as e:
+                        conn.execute(sql_text("ROLLBACK TO SAVEPOINT before_validation"))
+                        # NOTE: current transaction is aborted
+                        errors.append(self.translator.tr("validation.invalid_value") %
+                                    (attr, data_type))
+                elif self.dialect == 'mssql':
+                    # SQL Server uses different transaction syntax
+                    conn.execute(sql_text("BEGIN TRANSACTION"))
+                    try:
+                        # try to parse value on DB for SQL Server
+                        sql = sql_text(f"SELECT CAST(:value AS {data_type}) AS value")
+                        result = conn.execute(sql, {"value": input_value}).mappings()
+                        for row in result:
+                            value = row['value']
+                        conn.execute(sql_text("COMMIT"))
+                    except (DataError, ProgrammingError) as e:
+                        conn.execute(sql_text("ROLLBACK"))
+                        # NOTE: current transaction is aborted
+                        errors.append(self.translator.tr("validation.invalid_value") %
+                                    (attr, data_type))
 
                 if value is None:
                     # invalid value type
@@ -1011,44 +1166,42 @@ class DatasetFeaturesProvider():
 
     def geom_column_sql(self, srid, with_bbox=True):
         """Generate SQL fragment for GeoJSON of transformed geometry
-        as additional GeoJSON column 'json_geom' and optional Box2D '_bbox_',
-        or empty string if dataset has no geometry.
 
-        :param str target_srid: Target SRID
+        :param int srid: Target SRID
         :param bool with_bbox: Whether to add bounding boxes for each feature
-                               (default: True)
         """
         geom_sql = ""
 
         if self.geometry_column:
             transform_geom_sql = self.transform_geom_sql(
                 '"{geom}"', self.srid, srid
-            )
-            # add GeoJSON column
-            geom_sql = ", ST_AsGeoJSON(ST_CurveToLine(%s)) AS json_geom" \
-                       % transform_geom_sql
-            if with_bbox:
-                # add Box2D column
-                geom_sql += ", Box2D(%s) AS _bbox_" % transform_geom_sql
+            ).format(geom=self.geometry_column)
+            
+            # Use spatial adapter for GeoJSON conversion
+            if self.dialect == 'postgresql':
+                geom_sql = ", ST_AsGeoJSON(ST_CurveToLine(%s)) AS json_geom" % transform_geom_sql
+                if with_bbox:
+                    geom_sql += ", Box2D(%s) AS _bbox_" % transform_geom_sql
+            elif self.dialect == 'mssql':
+                geom_sql = ", %s.AsGeoJSON() AS json_geom" % transform_geom_sql
+                if with_bbox:
+                    geom_sql += ", %s AS _bbox_" % transform_geom_sql
 
         return geom_sql
 
     def transform_geom_sql(self, geom_sql, geom_srid, target_srid):
-        """Generate SQL fragment for transforming input geometry geom_sql
-        from geom_srid to target_srid.
+        """Generate SQL fragment for transforming geometry between SRIDs.
 
-        :param str geom_sql: SQL fragment for input geometry
-        :param str geom_srid: SRID of input geometry
-        :param str target_srid: Target SRID
+        :param str geom_sql: SQL fragment for geometry column
+        :param int geom_srid: SRID of geometry column
+        :param int target_srid: Target SRID
         """
         if geom_sql is None or geom_srid is None or geom_srid == target_srid:
             # no transformation
-            pass
-        else:
-            # transform to target SRID
-            geom_sql = "ST_Transform(%s, %s)" % (geom_sql, target_srid)
-
-        return geom_sql
+            return geom_sql
+        
+        # Use spatial adapter for geometry transformation
+        return self.spatial_adapter.transform_geom(geom_sql, target_srid)
 
     def feature_from_query(self, row, client_srid):
         """Build GeoJSON Feature from query result row.
@@ -1180,10 +1333,16 @@ class DatasetFeaturesProvider():
         bound_columns = [":%s" % placeholder_name for placeholder_name in placeholder_names]
         if self.geometry_column and 'geometry' in feature:
             # build geometry from GeoJSON, transformed to dataset CRS
-            geometry_value = self.transform_geom_sql(
-                "ST_SetSRID(ST_GeomFromGeoJSON(:{geom}), {srid})", srid,
-                self.srid
-            ).format(geom=self.geometry_column, srid=srid)
+            if self.dialect == 'postgresql':
+                geometry_value = self.transform_geom_sql(
+                    "ST_SetSRID(ST_GeomFromGeoJSON(:{geom}), {srid})", srid,
+                    self.srid
+                ).format(geom=self.geometry_column, srid=srid)
+            elif self.dialect == 'mssql':
+                geometry_value = self.transform_geom_sql(
+                    "geometry::STGeomFromText(geometry::STGeomFromGeoJSON(:{geom}).STAsText(), {srid})", srid,
+                    self.srid
+                ).format(geom=self.geometry_column, srid=srid)
             bound_columns += [geometry_value]
         values_sql = (', ').join(bound_columns)
 
@@ -1204,6 +1363,32 @@ class DatasetFeaturesProvider():
             'client_srid': srid
         }
 
+    def detect_db_dialect(self, db_engine):
+        """Detect database dialect
+        
+        :param obj db_engine: Database engine
+        """
+        if hasattr(db_engine, 'dialect') and hasattr(db_engine.dialect, 'name'):
+            return db_engine.dialect.name
+        return 'postgresql'  # Default to PostgreSQL
+    
+    def escape_column_name(self, column):
+        """Escape column name according to database dialect
+        
+        :param str column: Column name
+        """
+        if self.dialect == 'postgresql':
+            return '"%s"' % column
+        elif self.dialect == 'mssql':
+            return '[%s]' % column
+        return column
+    
+    def escape_column_names(self, columns):
+        """Escape column names according to database dialect
+        
+        :param list columns: Column names
+        """
+        return [self.escape_column_name(col) for col in columns]
 
     def __extract_join_attributes(self):
         """Splits the query attributes into own attributes and joined attributes."""

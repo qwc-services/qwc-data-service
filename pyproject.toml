@@ -13,7 +13,8 @@ dependencies = [
     "requests~=2.32.0",
     "SQLAlchemy~=2.0.29",
     "clamd~=1.0.2",
-    "qwc-services-core~=1.4.0"
+    "qwc-services-core~=1.4.0",
+    "pyodbc>=4.0.30",
 ]
 
 [dependency-groups]
