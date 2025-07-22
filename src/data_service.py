@@ -3,13 +3,15 @@ import datetime
 from collections import OrderedDict
 
 from sqlalchemy.exc import (DataError, IntegrityError,
-                            InternalError, ProgrammingError)
+                           InternalError, ProgrammingError)
+from sqlalchemy import text as sql_text
 
 from qwc_services_core.auth import get_username
 from qwc_services_core.database import DatabaseEngine
 from qwc_services_core.permissions_reader import PermissionsReader
-from dataset_features_provider import DatasetFeaturesProvider
+from dataset_features_provider_factory import create_dataset_features_provider
 from attachments_service import AttachmentsService
+from spatial_adapter import SpatialAdapter
 
 ERROR_DETAILS_LOG_ONLY = os.environ.get(
     'ERROR_DETAILS_LOG_ONLY', 'False').lower() == 'true'
@@ -34,6 +36,10 @@ class DataService():
         self.permissions_handler = PermissionsReader(tenant, logger)
         self.attachments_service = AttachmentsService(tenant, logger)
         self.db_engine = DatabaseEngine()
+        
+        # Add detection for database dialect
+        self.default_db_dialect = config.get('default_db_dialect', 'postgresql')
+        self.dialect_engines = {}
 
     def index(self, identity, translator, dataset, bbox, crs, filterexpr, filter_geom):
         """Find dataset features inside bounding box.
@@ -455,7 +461,7 @@ class DataService():
                     ret[rel_table]["features"].append(result['feature'])
 
         return ret
-
+    
     def dataset_features_provider(self, identity, translator, dataset, write):
         """Return DatasetFeaturesProvider if available and permitted.
 
@@ -471,7 +477,7 @@ class DataService():
         )
         if permissions:
             self.logger.debug(f"Have permissions for identity {identity} dataset {dataset} with write={write}")
-            dataset_features_provider = DatasetFeaturesProvider(
+            dataset_features_provider = create_dataset_features_provider(
                 permissions, self.db_engine, self.logger, translator
             )
         else:
@@ -761,3 +767,43 @@ class DataService():
                     # conversion failed
                     pass
         return srid
+
+    def dataset_features_provider(self, identity, translator, dataset, write):
+        """Return DatasetFeaturesProvider if available and permitted.
+
+        :param str|obj identity: User identity
+        :param object translator: Translator
+        :param str dataset: Dataset ID
+        :param bool write: Whether to include permissions relevant for writing to the dataset (create/update)
+        """
+        dataset_features_provider = None
+
+        permissions = self.dataset_edit_permissions(
+            dataset, identity, translator, write
+        )
+        if permissions:
+            self.logger.debug(f"Have permissions for dataset {dataset} with write={write}")
+            
+            # Detect and cache database dialect
+            if permissions["database_read"] not in self.dialect_engines:
+                engine = self.db_engine.db_engine(permissions["database_read"])
+                try:
+                    with engine.connect() as conn:
+                        # Detect actual dialect from connection
+                        self.dialect_engines[permissions["database_read"]] = conn.dialect.name
+                except Exception as e:
+                    self.logger.warning(f"Could not detect database dialect: {str(e)}")
+                    # Fall back to default dialect if connection fails
+                    self.dialect_engines[permissions["database_read"]] = self.default_db_dialect
+            
+            # Pass the detected dialect to the provider via permissions
+            permissions["dialect"] = self.dialect_engines.get(permissions["database_read"], self.default_db_dialect)
+            
+            # Create the dataset features provider with permissions
+            dataset_features_provider = DatasetFeaturesProvider(
+                permissions, self.db_engine, self.logger, translator
+            )
+        else:
+            self.logger.debug(f"NO permissions for dataset {dataset} with write={write}")
+
+        return dataset_features_provider
