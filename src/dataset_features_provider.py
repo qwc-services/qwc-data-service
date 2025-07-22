@@ -1,3 +1,4 @@
+import ast
 from collections import OrderedDict
 import re
 from json.decoder import JSONDecodeError
@@ -541,7 +542,7 @@ class DatasetFeaturesProvider():
             # execute query
             success = False
             result = conn.execute(sql, params)
-            if result.one():
+            if result.one_or_none():
                 # NOTE: result is empty if not found
                 success = True
 
@@ -1132,14 +1133,23 @@ class DatasetFeaturesProvider():
                     )
 
                 # values
-                values = constraints.get('values', {})
-                if value and values and str(value) not in [str(v['value']) for v in values]:
-                    errors.append(self.translator.tr("validation.invalid_value_for") % (attr))
+                allowed_values = [str(v['value']) for v in constraints.get('values', [])]
+                if allowed_values and value:
+                    if constraints.get('allowMulti', False):
+                        value_set = ast.literal_eval(value)
+                        for val in value_set:
+                            if val not in allowed_values:
+                                errors.append(self.translator.tr("validation.invalid_value_for") % (attr))
+                    else:
+                        if str(value) not in allowed_values:
+                            errors.append(self.translator.tr("validation.invalid_value_for") % (attr))
 
-        # remove read-only properties and check required values
+        # remove read-only properties and hidden fields without a value and check required values
         for attr in self.fields:
             constraints = self.fields.get(attr, {}).get('constraints', {})
-            if constraints.get('readOnly', False):
+            if constraints.get('readOnly', False) or (
+                constraints.get('hidden', False) and not feature['properties'].get(attr, None)
+            ):
                 if attr in feature['properties']:
                     # remove read-only property from feature
                     feature['properties'].pop(attr, None)

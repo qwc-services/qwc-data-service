@@ -145,7 +145,7 @@ geojson_geometry = create_model(api, 'Geometry', [
 ])
 
 # Feature
-geojson_feature = create_model(api, 'Feature', [
+geojson_feature = lambda with_bbox_and_crs: create_model(api, 'Feature', [
     ['type', fields.String(required=True, description='Feature',
                            example='Feature')],
     ['id', FeatureId(required=True, description='Feature ID',
@@ -157,7 +157,8 @@ geojson_feature = create_model(api, 'Feature', [
                                      description='Feature properties',
                                      example={'name': 'Example', 'type': 2,
                                               'num': 4}
-                                     )],
+                                     )]
+] + ([
     ['crs', fields.Nested(geojson_crs, required=False, allow_null=True,
                           description='Coordinate reference system')],
     ['bbox', fields.Raw(required=False, allow_null=True,
@@ -165,16 +166,16 @@ geojson_feature = create_model(api, 'Feature', [
                             'Extent of feature as [minx, miny, maxx, maxy]'
                         ),
                         example=[950598.0, 6003950.0, 950758.0, 6004010.0])]
-])
+] if with_bbox_and_crs else []))
 
-geojson_feature_request = api.inherit('Relation Feature', geojson_feature, {
+geojson_feature_request = api.inherit('Relation Feature', geojson_feature(True), {
     'defaultedProperties': fields.List(fields.String, required=False)
 })
 
 geojson_feature_collection = create_model(api, 'FeatureCollection', [
     ['type', fields.String(required=True, description='FeatureCollection',
                            example='FeatureCollection')],
-    ['features', fields.List(fields.Nested(geojson_feature),
+    ['features', fields.List(fields.Nested(geojson_feature(False)),
                              required=True, description='Features')],
     ['crs', fields.Nested(geojson_crs, required=False, allow_null=True,
                           description='Coordinate reference system')],
@@ -186,7 +187,7 @@ geojson_feature_collection = create_model(api, 'FeatureCollection', [
 ])
 
 # Relations
-relation_feature = api.inherit('Relation Feature', geojson_feature, {
+relation_feature = api.inherit('Relation Feature', geojson_feature(True), {
     '__status__': fields.String(required=False, description='Feature status'),
     'error': fields.String(required=False, description='Commit error'),
     'error_details': fields.Raw(required=False, description='Commit error details properties')
@@ -202,7 +203,7 @@ relation_values = create_model(api, 'Relation values', [
     ['*', fields.Wildcard(fields.Nested(relation_table_features, required=False, description='Relation table features'))]
 ])
 
-geojson_feature_with_relvals = api.inherit('Feature with relation values', geojson_feature, {
+geojson_feature_with_relvals = api.inherit('Feature with relation values', geojson_feature(True), {
     'relationValues': KeepEmptyDict(relation_values,
                                      required=False,
                                      description='Relation table entry')
@@ -300,6 +301,7 @@ class FeatureCollection(Resource):
         Return dataset features inside bounding box and matching filter as a
         GeoJSON FeatureCollection.
         """
+        app.logger.debug(f"Processing GET (index) on /{dataset}/")
         translator = Translator(app, request)
         args = index_parser.parse_args()
         bbox = args['bbox']
@@ -316,6 +318,40 @@ class FeatureCollection(Resource):
         else:
             error_code = result.get('error_code') or 404
             api.abort(error_code, result['error'])
+
+    @api.doc('create')
+    @api.response(405, 'Dataset not creatable')
+    @api.response(422, 'Feature validation failed', feature_validation_response)
+    @api.expect(geojson_feature_request)
+    @api.marshal_with(geojson_feature(True), code=201)
+    @optional_auth
+    def post(self, dataset):
+        """Create a new dataset feature
+
+        Create new dataset feature from a GeoJSON Feature and return it as a
+        GeoJSON Feature.
+        """
+        app.logger.debug(f"Processing POST (create) on /{dataset}/")
+        translator = Translator(app, request)
+
+        if request.is_json:
+            # parse request data (NOTE: catches invalid JSON)
+            feature = api.payload
+            if isinstance(feature, dict):
+                data_service = data_service_handler()
+
+                result = data_service.create(
+                    get_identity(), translator, dataset, feature)
+                if 'error' not in result:
+                    return result['feature'], 201
+                else:
+                    error_code = result.get('error_code') or 404
+                    error_details = result.get('error_details') or {}
+                    api.abort(error_code, result['error'], **error_details)
+            else:
+                api.abort(400, translator.tr("error.json_is_not_an_object"))
+        else:
+            api.abort(400, translator.tr("error.request_data_is_not_json"))
 
 
 @api.route('/<path:dataset>/extent')
@@ -340,6 +376,7 @@ class FeatureCollectionExtent(Resource):
         Return the extend of the features matching any specified filter as a
         [xmin,ymin,xmax,ymax] array.
         """
+        app.logger.debug(f"Processing GET (index) on /{dataset}/extent")
         translator = Translator(app, request)
         args = index_parser.parse_args()
         crs = args['crs']
@@ -366,7 +403,7 @@ class Feature(Resource):
     @api.response(405, 'Dataset not readable')
     @api.param('crs', 'Client coordinate reference system')
     @api.expect(show_parser)
-    @api.marshal_with(geojson_feature)
+    @api.marshal_with(geojson_feature(True))
     @optional_auth
     def get(self, dataset, id):
         """Get a dataset feature
@@ -377,6 +414,7 @@ class Feature(Resource):
 
         <b>crs</b>: Client CRS, e.g. <b>EPSG:3857<b>
         """
+        app.logger.debug(f"Processing GET (show) on /{dataset}/{id}")
         translator = Translator(app, request)
         args = show_parser.parse_args()
         crs = args['crs']
@@ -393,7 +431,7 @@ class Feature(Resource):
     @api.response(405, 'Dataset not updatable')
     @api.response(422, 'Feature validation failed', feature_validation_response)
     @api.expect(geojson_feature_request)
-    @api.marshal_with(geojson_feature)
+    @api.marshal_with(geojson_feature(True))
     @optional_auth
     def put(self, dataset, id):
         """Update a dataset feature
@@ -401,6 +439,7 @@ class Feature(Resource):
         Update dataset feature with ID from a GeoJSON Feature and return it as
         a GeoJSON Feature.
         """
+        app.logger.debug(f"Processing PUT (update) on /{dataset}/{id}")
         translator = Translator(app, request)
         if request.is_json:
             # parse request data (NOTE: catches invalid JSON)
@@ -431,6 +470,7 @@ class Feature(Resource):
 
         Delete dataset feature with ID.
         """
+        app.logger.debug(f"Processing DELETE (destroy) on /{dataset}/{id}")
 
         translator = Translator(app, request)
 
@@ -466,6 +506,7 @@ class CreateFeatureMultipart(Resource):
         Create new dataset feature from a GeoJSON Feature and return it as a
         GeoJSON Feature.
         """
+        app.logger.debug(f"Processing POST (create) on /{dataset}/multipart")
         translator = Translator(app, request)
         args = feature_multipart_parser.parse_args()
 
@@ -492,7 +533,7 @@ class CreateFeatureMultipart(Resource):
             get_identity(), translator, dataset, feature, files
         )
         if 'error' not in result:
-            relationValues = data_service.write_relation_values(get_identity(), result['feature']['id'], feature.get('relationValues', '{}'), request.files, translator, True)
+            relationValues = data_service.write_relation_values(get_identity(), result['feature']['id'], feature.get('relationValues', {}), request.files, translator, True)
             # Requery feature because the write_relation_values may change the feature through DB triggers
             crs = feature['crs']['properties']['name'] if feature['crs'] else None
             result = data_service.show(get_identity(), translator, dataset, result['feature']['id'], crs)
@@ -524,6 +565,7 @@ class EditFeatureMultipart(Resource):
         Update dataset feature with ID from a GeoJSON Feature and return it as
         a GeoJSON Feature.
         """
+        app.logger.debug(f"Processing PUT (update) on /{dataset}/multipart/{id}")
         translator = Translator(app, request)
         args = feature_multipart_parser.parse_args()
 
@@ -567,6 +609,7 @@ class AttachmentDownloader(Resource):
     @api.expect(get_attachment_parser)
     @optional_auth
     def get(self, dataset):
+        app.logger.debug(f"Processing GET (get_attachment) on /{dataset}/attachment")
         translator = Translator(app, request)
         args = get_attachment_parser.parse_args()
         data_service = data_service_handler()
@@ -590,6 +633,7 @@ class Relations(Resource):
     @api.marshal_with(relation_values, code=201)
     @optional_auth
     def get(self, dataset, id):
+        app.logger.debug(f"Processing GET (get_relations) on /{dataset}/{id}/relations")
         translator = Translator(app, request)
         data_service = data_service_handler()
         args = get_relations_parser.parse_args()
@@ -619,7 +663,7 @@ class Relations(Resource):
 @api.route('/keyvals')
 @api.response(404, 'Dataset or feature not found or permission error')
 class KeyValues(Resource):
-    @api.doc('get_relations')
+    @api.doc('get_keyvals')
     @api.param('tables', 'Comma separated list of keyvalue tables of the form "tablename:key_field_name:value_field_name"')
     @api.param(
         'filter', 'JSON serialized array of filter expressions, the same length as the number of specified tables: '
@@ -628,6 +672,7 @@ class KeyValues(Resource):
     @api.marshal_with(keyvals_response, code=201)
     @optional_auth
     def get(self):
+        app.logger.debug(f"Processing GET (get_keyvals) on /keyvals")
         translator = Translator(app, request)
         args = get_relations_parser.parse_args()
         filterexpr = json.loads(args.get('filter') or "[]")
@@ -649,7 +694,7 @@ class KeyValues(Resource):
                 for feature in result['feature_collection']['features']:
                     record = {"key": feature["id"] if key_field_name == "id" else feature['properties'][key_field_name], "value": str(feature['properties'][value_field_name]).strip()}
                     ret[table].append(record)
-                natsort = lambda s: [int(t) if t.isdigit() else t.lower() for t in re.split('(\d+)', s)]
+                natsort = lambda s: [int(t) if t.isdigit() else t.lower() for t in re.split(r'(\d+)', s)]
                 ret[table].sort(key=lambda record: natsort(record["value"]))
             elif 'error' in result:
                 app.logger.debug(f"Failed to query relation values for {keyval}: {result['error']}")

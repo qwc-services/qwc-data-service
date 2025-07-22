@@ -477,7 +477,6 @@ class DataService():
         )
         if permissions:
             self.logger.debug(f"Have permissions for identity {identity} dataset {dataset} with write={write}")
-            # Use factory to create appropriate provider
             dataset_features_provider = create_dataset_features_provider(
                 permissions, self.db_engine, self.logger, translator
             )
@@ -583,8 +582,9 @@ class DataService():
                         dataset_features_provider = self.dataset_features_provider(
                             identity, translator, table, False
                         )
-                        values = dataset_features_provider.keyvals(key_field_name, value_field_name)
-                        fields[field['name']]['constraints']['values'] = values
+                        if dataset_features_provider.readable():
+                            values = dataset_features_provider.keyvals(key_field_name, value_field_name)
+                            fields[field['name']]['constraints']['values'] = values
                     except Exception as e:
                         self.logger.error("Unable to resolve keyvalrel '%s': %s" % (keyvalrel, str(e)))
                         fields[field['name']]['constraints']['values'] = []

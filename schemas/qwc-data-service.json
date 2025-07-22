@@ -232,7 +232,21 @@
                       "MULTILINESTRING",
                       "MULTILINESTRINGZ",
                       "MULTIPOLYGON",
-                      "MULTIPOLYGONZ"
+                      "MULTIPOLYGONZ",
+                      "CURVE",
+                      "CURVEZ",
+                      "CIRCULARSTRING",
+                      "CIRCULARSTRINGZ",
+                      "COMPOUNDCURVE",
+                      "COMPOUNDCURVEZ",
+                      "MULTICURVE",
+                      "MULTICURVEZ",
+                      "SURFACE",
+                      "SURFACEZ",
+                      "CURVEPOLYGON",
+                      "CURVEPOLYGONZ",
+                      "MULTISURFACE",
+                      "MULTISURFACEZ"
                     ]
                   },
                   "srid": {
