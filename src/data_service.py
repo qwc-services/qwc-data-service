@@ -9,7 +9,7 @@ from sqlalchemy import text as sql_text
 from qwc_services_core.auth import get_username
 from qwc_services_core.database import DatabaseEngine
 from qwc_services_core.permissions_reader import PermissionsReader
-from dataset_features_provider import DatasetFeaturesProvider
+from dataset_features_provider_factory import create_dataset_features_provider
 from attachments_service import AttachmentsService
 from spatial_adapter import SpatialAdapter
 
@@ -461,7 +461,7 @@ class DataService():
                     ret[rel_table]["features"].append(result['feature'])
 
         return ret
-
+    
     def dataset_features_provider(self, identity, translator, dataset, write):
         """Return DatasetFeaturesProvider if available and permitted.
 
@@ -476,12 +476,13 @@ class DataService():
             dataset, identity, translator, write
         )
         if permissions:
-            self.logger.debug(f"Have permissions for dataset {dataset} with write={write}")
-            dataset_features_provider = DatasetFeaturesProvider(
+            self.logger.debug(f"Have permissions for identity {identity} dataset {dataset} with write={write}")
+            # Use factory to create appropriate provider
+            dataset_features_provider = create_dataset_features_provider(
                 permissions, self.db_engine, self.logger, translator
             )
         else:
-            self.logger.debug(f"NO permissions for dataset {dataset} with write={write}")
+            self.logger.debug(f"NO permissions for identity {identity} dataset {dataset} with write={write}")
 
         return dataset_features_provider
 
