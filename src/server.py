@@ -258,6 +258,7 @@ index_parser.add_argument('bbox')
 index_parser.add_argument('crs')
 index_parser.add_argument('filter')
 index_parser.add_argument('filter_geom')
+index_parser.add_argument('fields')
 
 feature_multipart_parser = reqparse.RequestParser(argument_class=CaseInsensitiveArgument)
 feature_multipart_parser.add_argument('feature', help='Feature', required=True, location='form')
@@ -292,6 +293,9 @@ class FeatureCollection(Resource):
         '`[["<name>", "<op>", <value>],"and|or",["<name>","<op>",<value>]]`')
     @api.param(
         'filter_geom', 'GeoJSON serialized geometry, used as intersection geometry filter')
+    @api.param(
+        'fields', 'Comma separated list of field names to return'
+    )
     @api.expect(index_parser)
     @api.marshal_with(geojson_feature_collection, skip_none=True)
     @optional_auth
@@ -308,10 +312,11 @@ class FeatureCollection(Resource):
         crs = args['crs']
         filterexpr = args['filter']
         filter_geom = args['filter_geom']
+        filter_fields = (args['fields'] or "").split(",")
 
         data_service = data_service_handler()
         result = data_service.index(
-            get_identity(), translator, dataset, bbox, crs, filterexpr, filter_geom
+            get_identity(), translator, dataset, bbox, crs, filterexpr, filter_geom, filter_fields
         )
         if 'error' not in result:
             return result['feature_collection']
@@ -646,7 +651,7 @@ class Relations(Resource):
             except:
                 continue
             result = data_service.index(
-                get_identity(), translator, table, None, crs, '[["%s", "=", "%s"]]' % (fk_field_name, id), None
+                get_identity(), translator, table, None, crs, '[["%s", "=", "%s"]]' % (fk_field_name, id), None, None
             )
             ret[table] = {
                 "fk": fk_field_name,
@@ -688,7 +693,7 @@ class KeyValues(Resource):
                 continue
             ret[table] = []
             result = data_service.index(
-                get_identity(), translator, table, None, None, json.dumps(filterexpr[idx]) if filterexpr and len(filterexpr) > idx and filterexpr[idx] else None, None
+                get_identity(), translator, table, None, None, json.dumps(filterexpr[idx]) if filterexpr and len(filterexpr) > idx and filterexpr[idx] else None, None, None
             )
             if 'feature_collection' in result:
                 for feature in result['feature_collection']['features']:

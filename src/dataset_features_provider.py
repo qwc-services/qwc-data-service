@@ -84,7 +84,7 @@ class DatasetFeaturesProvider():
         """Return whether dataset can be deleted."""
         return self.__deletable
 
-    def index(self, bbox, client_srid, filterexpr, filter_geom):
+    def index(self, bbox, client_srid, filterexpr, filter_geom, filter_fields):
         """Find features inside bounding box.
 
         :param list[float] bbox: Bounding box as [<minx>,<miny>,<maxx>,<maxy>]
@@ -93,10 +93,15 @@ class DatasetFeaturesProvider():
         :param (sql, params) filterexpr: A filter expression as a tuple
                                          (sql_expr, bind_params)
         :param str filter_geom: JSON serialized GeoJSON geometry
+        :param list[string] filter_fields: Field names to return
         """
         srid = client_srid or self.srid
 
         own_attributes, join_attributes = self.__extract_join_attributes()
+
+        if filter_fields:
+            own_attributes = [attr for attr in own_attributes if attr in filter_fields or attr == self.primary_key]
+            join_attributes = [attr for attr in join_attributes if attr in filter_fields]
 
         # build query SQL
 
@@ -146,13 +151,15 @@ class DatasetFeaturesProvider():
         if where_clauses:
             where_clause = "WHERE (" + ") AND (".join(where_clauses) + ")"
 
-        geom_sql = self.geom_column_sql(srid, with_bbox=False)
-        if self.geometry_column:
-            # select overall extent
-            geom_sql += (
-                ', ST_Extent(%s) OVER () AS _overall_bbox_' %
-                self.transform_geom_sql('"{geom}"', self.srid, srid)
-            )
+        geom_sql = ""
+        if not filter_fields or "geometry" in filter_fields:
+            geom_sql = self.geom_column_sql(srid, with_bbox=False)
+            if self.geometry_column:
+                # select overall extent
+                geom_sql += (
+                    ', ST_Extent(%s) OVER () AS _overall_bbox_' %
+                    self.transform_geom_sql('"{geom}"', self.srid, srid)
+                )
 
         sql = sql_text(("""
             SELECT {columns}%s
@@ -179,7 +186,7 @@ class DatasetFeaturesProvider():
                 join_attribute_values = self.__query_join_attributes(join_attributes, attribute_values)
                 attribute_values.update(join_attribute_values)
 
-                features.append(self.feature_from_query(attribute_values, srid))
+                features.append(self.feature_from_query(attribute_values, srid, filter_fields))
                 if '_overall_bbox_' in row:
                     overall_bbox = row['_overall_bbox_']
 
@@ -1060,7 +1067,7 @@ class DatasetFeaturesProvider():
 
         return geom_sql
 
-    def feature_from_query(self, row, client_srid):
+    def feature_from_query(self, row, client_srid, filter_fields=None):
         """Build GeoJSON Feature from query result row.
 
         :param obj row: Row result from query
@@ -1068,6 +1075,8 @@ class DatasetFeaturesProvider():
         """
         props = OrderedDict()
         for attr in self.attributes:
+            if filter_fields and not attr in filter_fields:
+                continue
             # Omit hidden fields
             if self.fields.get(attr, {}).get('constraints', {}).get('hidden', False) == True:
                 continue
@@ -1085,7 +1094,7 @@ class DatasetFeaturesProvider():
         geometry = None
         crs = None
         bbox = None
-        if self.geometry_column:
+        if self.geometry_column and (not filter_fields or "geometry" in filter_fields):
             if row['json_geom'] is not None:
                 geometry = json.loads(row['json_geom'])
             else:
