@@ -268,6 +268,11 @@ feature_multipart_parser.add_argument('g-recaptcha-response', help="Recaptcha re
 show_parser = reqparse.RequestParser(argument_class=CaseInsensitiveArgument)
 show_parser.add_argument('crs')
 
+keyvals_parser = reqparse.RequestParser(argument_class=CaseInsensitiveArgument)
+keyvals_parser.add_argument('key')
+keyvals_parser.add_argument('value')
+keyvals_parser.add_argument('filter')
+
 # attachment
 get_attachment_parser = reqparse.RequestParser(argument_class=CaseInsensitiveArgument)
 get_attachment_parser.add_argument('file', required=True)
@@ -397,6 +402,45 @@ class FeatureCollectionExtent(Resource):
         else:
             error_code = result.get('error_code') or 404
             api.abort(error_code, result['error'])
+
+
+@api.route('/<path:dataset>/keyvals')
+@api.response(404, 'Dataset or feature not found or permission error')
+class KeyValues(Resource):
+    @api.doc('dataset_keyvals')
+    @api.param('key', 'Key field name')
+    @api.param('value', 'Value field name')
+    @api.param(
+        'filter', 'JSON serialized filter expression: `[["<name>", "<op>", <value>],"and|or",["<name>","<op>",<value>]]`')
+    @api.expect(keyvals_parser)
+    @optional_auth
+    def get(self, dataset):
+        app.logger.debug(f"Processing GET (dataset_keyvals) on /{dataset}/keyvals")
+        translator = Translator(app, request)
+        args = keyvals_parser.parse_args()
+        key_field_name = args['key']
+        value_field_name = args['value']
+        filterexpr = args['filter']
+
+        data_service = data_service_handler()
+
+        natsort = lambda s: [int(t) if t.isdigit() else t.lower() for t in re.split(r'(\d+)', s)]
+
+        result = data_service.index(
+            get_identity(), translator, dataset, None, None, filterexpr, None, [key_field_name, value_field_name]
+        )
+        ret = []
+        if 'feature_collection' in result:
+            entries = {}
+            for feature in result['feature_collection']['features']:
+                key = feature["id"] if key_field_name == "id" else feature['properties'][key_field_name]
+                value = str(feature['properties'][value_field_name]).strip()
+                entries[key] = value
+            ret = [{"key": kv[0], "value": kv[1]} for kv in entries.items()]
+            ret.sort(key=lambda record: natsort(record["value"]))
+        elif 'error' in result:
+            app.logger.debug(f"Failed to query relation values for {dataset}:{key_field_name}:{value_field_name}: {result['error']}")
+        return ret
 
 
 @api.route('/<path:dataset>/<id>')
