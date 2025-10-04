@@ -686,6 +686,7 @@ class KeyValues(Resource):
 
         keyvals = args['tables'] or ""
         ret = {}
+        natsort = lambda s: [int(t) if t.isdigit() else t.lower() for t in re.split(r'(\d+)', s)]
         for (idx, keyval) in enumerate(keyvals.split(",")):
             try:
                 table, key_field_name, value_field_name = keyval.split(":")
@@ -693,13 +694,15 @@ class KeyValues(Resource):
                 continue
             ret[table] = []
             result = data_service.index(
-                get_identity(), translator, table, None, None, json.dumps(filterexpr[idx]) if filterexpr and len(filterexpr) > idx and filterexpr[idx] else None, None, None
+                get_identity(), translator, table, None, None, json.dumps(filterexpr[idx]) if filterexpr and len(filterexpr) > idx and filterexpr[idx] else None, None, [key_field_name, value_field_name]
             )
             if 'feature_collection' in result:
+                entries = {}
                 for feature in result['feature_collection']['features']:
-                    record = {"key": feature["id"] if key_field_name == "id" else feature['properties'][key_field_name], "value": str(feature['properties'][value_field_name]).strip()}
-                    ret[table].append(record)
-                natsort = lambda s: [int(t) if t.isdigit() else t.lower() for t in re.split(r'(\d+)', s)]
+                    key = feature["id"] if key_field_name == "id" else feature['properties'][key_field_name]
+                    value = str(feature['properties'][value_field_name]).strip()
+                    entries[key] = value
+                ret[table] = [{"key": kv[0], "value": kv[1]} for kv in entries.items()]
                 ret[table].sort(key=lambda record: natsort(record["value"]))
             elif 'error' in result:
                 app.logger.debug(f"Failed to query relation values for {keyval}: {result['error']}")
