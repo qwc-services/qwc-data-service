@@ -35,7 +35,7 @@ class DataService():
         self.attachments_service = AttachmentsService(tenant, logger)
         self.db_engine = DatabaseEngine()
 
-    def index(self, identity, translator, dataset, bbox, crs, filterexpr, filter_geom):
+    def index(self, identity, translator, dataset, bbox, crs, filterexpr, filter_geom, filter_fields):
         """Find dataset features inside bounding box.
 
         :param str|obj identity: User identity
@@ -46,6 +46,7 @@ class DataService():
         :param str filterexpr: JSON serialized array of filter expressions:
         [["<attr>", "<op>", "<value>"], "and|or", ["<attr>", "<op>", "<value>"]]
         :param str filter_geom: JSON serialized GeoJSON geometry
+        :param list[string] filter_fields: Field names to return
         """
         dataset_features_provider = self.dataset_features_provider(
             identity, translator, dataset, False
@@ -88,7 +89,7 @@ class DataService():
 
             try:
                 feature_collection = dataset_features_provider.index(
-                    bbox, srid, filterexpr, filter_geom
+                    bbox, srid, filterexpr, filter_geom, filter_fields
                 )
             except (DataError, ProgrammingError) as e:
                 self.logger.error(e)
