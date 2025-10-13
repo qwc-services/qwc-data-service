@@ -1,4 +1,4 @@
-FROM sourcepole/qwc-uwsgi-base:alpine-v2025.01.24
+FROM sourcepole/qwc-uwsgi-base:alpine-v2025.10.13
 
 WORKDIR /srv/qwc_service
 ADD pyproject.toml uv.lock ./
