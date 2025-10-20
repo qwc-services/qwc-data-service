@@ -586,12 +586,15 @@ class DataService():
 
         # NOTE: 'geometry' is None for datasets without geometry
         geometry = resource.get('geometry', {})
+        datasource_filter = resource.get('datasource_filter', None)
+        if datasource_filter and identity:
+            datasource_filter = datasource_filter.replace('$QWC_USERNAME$', get_username(identity))
 
         return {
             "dataset": resource['name'],
             "database_read": resource['db_url'],
             "database_write": resource.get('db_write_url', resource['db_url']),
-            "datasource_filter": resource.get('datasource_filter', None),
+            "datasource_filter": datasource_filter,
             "schema": resource['schema'],
             "table_name": resource['table_name'],
             "primary_key": resource['primary_key'],
