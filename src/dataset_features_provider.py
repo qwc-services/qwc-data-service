@@ -990,7 +990,7 @@ class DatasetFeaturesProvider():
                     if constraints.get('allowMulti', False):
                         value_set = ast.literal_eval(value)
                         for val in value_set:
-                            if val not in allowed_values:
+                            if str(val) not in allowed_values:
                                 errors.append(self.translator.tr("validation.invalid_value_for") % (attr))
                     else:
                         if str(value) not in allowed_values:
