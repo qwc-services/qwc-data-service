@@ -33,16 +33,24 @@
           "type": "string"
         },
         "allowed_attachment_extensions": {
-          "description": "Comma separated list of allowed attachment file extensions, i.e. '.png,.jpg'",
+          "description": "Comma separated list of allowed attachment file extensions, i.e. '.png,.jpg'. If empty, all extensions are allowed. Default: `` (empty).",
           "type": "string"
+        },
+        "allowed_extensions_per_dataset": {
+          "description": "Loopup of allowed attachment file extensions per dataset, values as comma separated list, i.e. '.png,.jpg'",
+          "type": "object"
+        },
+        "max_attachment_file_size": {
+          "description": "Maximum attachment file size in bytes. Default is `10485760` (10 MB).",
+          "type": "number"
+        },
+        "max_attachment_file_size_per_dataset": {
+          "description": "Lookup of maximum attachment file size in bytes per dataset.",
+          "type": "object"
         },
         "recaptcha_site_secret_key": {
           "description": "Captcha site secret key. Set to enable ReCAPTCHA verification for public users",
           "type": "string"
-        },
-        "max_attachment_file_size": {
-          "description": "Maximum attachment file size in bytes",
-          "type": "number"
         },
         "clamd_host": {
           "description": "Hostname of ClamD server listening on TCP port 3310. If set, uploaded files are checked by ClamAV",
@@ -75,14 +83,6 @@
         "geometry_default_allow_null": {
           "description": "Whether to allow null geometries by default",
           "type": "boolean"
-        },
-        "allowed_extensions_per_dataset": {
-          "description": "Loopup of allowed attachment file extensions per dataset, values as comma separated list, i.e. '.png,.jpg'",
-          "type": "object"
-        },
-        "max_attachment_file_size_per_dataset": {
-          "description": "Lookup of maximum attachment file size in bytes per dataset",
-          "type": "object"
         }
       }
     },
