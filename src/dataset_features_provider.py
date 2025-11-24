@@ -1080,9 +1080,6 @@ class DatasetFeaturesProvider():
         for attr in self.attributes:
             if filter_fields and not attr in filter_fields:
                 continue
-            # Omit hidden fields
-            if self.fields.get(attr, {}).get('constraints', {}).get('hidden', False) == True:
-                continue
             value = row[attr]
             # Ensure values are JSON serializable
             if isinstance(value, date):
