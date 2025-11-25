@@ -629,6 +629,12 @@ class EditFeatureMultipart(Resource):
             api.abort(400, translator.tr("error.feature_is_not_an_object"))
 
         files = dict([entry for entry in request.files.items() if entry[0].startswith("file:")])
+        # Set a placeholder value to make attribute validation for required upload fields pass
+        for key in request.files:
+            parts = key.split(":")
+            if parts[0] == 'file':
+                field = parts[1]
+                feature['properties'][field] = request.files[key].filename
 
         data_service = data_service_handler()
         result = data_service.update(
