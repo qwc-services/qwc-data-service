@@ -670,7 +670,7 @@ class AttachmentDownloader(Resource):
         data_service = data_service_handler()
         result = data_service.resolve_attachment(get_identity(), translator, dataset, args['file'])
         if 'error' not in result:
-            response = send_file(result['file'], as_attachment=True, download_name=os.path.basename(result['file']))
+            response = send_file(result['file'], download_name=os.path.basename(result['file']))
             response.headers['X-Content-Type-Options'] = 'nosniff'
             return response
         else:
