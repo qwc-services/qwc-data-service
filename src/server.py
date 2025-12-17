@@ -751,7 +751,8 @@ class KeyValues(Resource):
             if 'feature_collection' in result:
                 entries = {}
                 for feature in result['feature_collection']['features']:
-                    key = feature["id"] if key_field_name == "id" else feature['properties'][key_field_name]
+                    # NOTE: if key_field_name is not in feature['properties'], it is the primary key which is stored as feature['id']
+                    key = feature['properties'].get(key_field_name, feature['id'])
                     value = str(feature['properties'][value_field_name]).strip()
                     entries[key] = value
                 ret[table] = [{"key": kv[0], "value": kv[1]} for kv in entries.items()]
