@@ -179,6 +179,10 @@ geojson_feature_collection = create_model(api, 'FeatureCollection', [
                              required=True, description='Features')],
     ['crs', fields.Nested(geojson_crs, required=False, allow_null=True,
                           description='Coordinate reference system')],
+    ['numberMatched', fields.Integer(required=False, allow_null=True,
+                          description='Number of matched features')],
+    ['numberReturned', fields.Integer(required=False, allow_null=True,
+                          description='Number of returned features')],
     ['bbox', fields.Raw(required=False, allow_null=True,
                         description=(
                             'Extent of features as [minx, miny, maxx, maxy]'
@@ -259,6 +263,8 @@ index_parser.add_argument('crs')
 index_parser.add_argument('filter')
 index_parser.add_argument('filter_geom')
 index_parser.add_argument('fields')
+index_parser.add_argument('limit', type=int)
+index_parser.add_argument('offset', type=int)
 
 feature_multipart_parser = reqparse.RequestParser(argument_class=CaseInsensitiveArgument)
 feature_multipart_parser.add_argument('feature', help='Feature', required=True, location='form')
@@ -301,6 +307,12 @@ class FeatureCollection(Resource):
     @api.param(
         'fields', 'Comma separated list of field names to return'
     )
+    @api.param(
+        'limit', 'Feature count limit'
+    )
+    @api.param(
+        'offset', 'Feature count offset'
+    )
     @api.expect(index_parser)
     @api.marshal_with(geojson_feature_collection, skip_none=True)
     @optional_auth
@@ -318,10 +330,12 @@ class FeatureCollection(Resource):
         filterexpr = args['filter']
         filter_geom = args['filter_geom']
         filter_fields = [field for field in (args['fields'] or "").split(",") if field != '']
+        limit = args['limit']
+        offset = args['offset']
 
         data_service = data_service_handler()
         result = data_service.index(
-            get_identity(), translator, dataset, bbox, crs, filterexpr, filter_geom, filter_fields
+            get_identity(), translator, dataset, bbox, crs, filterexpr, filter_geom, filter_fields, limit, offset
         )
         if 'error' not in result:
             return result['feature_collection']

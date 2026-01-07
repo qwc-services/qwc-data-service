@@ -84,7 +84,7 @@ class DatasetFeaturesProvider():
         """Return whether dataset can be deleted."""
         return self.__deletable
 
-    def index(self, bbox, client_srid, filterexpr, filter_geom, filter_fields):
+    def index(self, bbox, client_srid, filterexpr, filter_geom, filter_fields, limit=None, offset=None):
         """Find features inside bounding box.
 
         :param list[float] bbox: Bounding box as [<minx>,<miny>,<maxx>,<maxy>]
@@ -94,6 +94,8 @@ class DatasetFeaturesProvider():
                                          (sql_expr, bind_params)
         :param str filter_geom: JSON serialized GeoJSON geometry
         :param list[string] filter_fields: Field names to return
+        :params number limit: Feature count limit
+        :params number offset: Feature count offset
         """
         srid = client_srid or self.srid
 
@@ -173,6 +175,10 @@ class DatasetFeaturesProvider():
         self.logger.debug(f"index query: {sql}")
         self.logger.debug(f"params: {params}")
 
+        # Subset range
+        start = offset or 0
+        end = (offset + limit) if limit else None
+
         features = []
         # connect to database (for read-only access)
         with self.db_read.connect() as conn:
@@ -180,7 +186,12 @@ class DatasetFeaturesProvider():
             result = conn.execute(sql, params).mappings()
 
             overall_bbox = None
-            for row in result:
+            for (idx, row) in enumerate(result):
+                if idx < start or (end is not None and idx >= end):
+                    # Just append dummy feature
+                    features.append({})
+                    continue
+
                 # NOTE: feature CRS removed by marshalling
                 attribute_values = dict(row)
                 join_attribute_values = self.__query_join_attributes(join_attributes, attribute_values)
@@ -201,11 +212,14 @@ class DatasetFeaturesProvider():
             if overall_bbox:
                 overall_bbox = self.parse_box2d(overall_bbox)
 
+        features_subset = features[start:end]
         return {
             'type': 'FeatureCollection',
-            'features': features,
+            'features': features_subset,
             'crs': crs,
-            'bbox': overall_bbox
+            'bbox': overall_bbox,
+            'numberMatched': len(features),
+            'numberReturned': len(features_subset)
         }
 
     def extent(self, client_srid, filterexpr, filter_geom):
