@@ -405,11 +405,11 @@ class FeatureCollectionExtent(Resource):
         filter_geom = args['filter_geom']
 
         data_service = data_service_handler()
-        result = data_service.extent(
-            get_identity(), translator, dataset, crs, filterexpr, filter_geom
+        result = data_service.index(
+            get_identity(), translator, dataset, None, crs, filterexpr, filter_geom, ["geometry"]
         )
         if 'error' not in result:
-            return result['extent']
+            return {'bbox': result['feature_collection']['bbox']}
         else:
             error_code = result.get('error_code') or 404
             api.abort(error_code, result['error'])

@@ -107,64 +107,6 @@ class DataService():
         else:
             return {'error': translator.tr("error.dataset_not_found")}
 
-    def extent(self, identity, translator, dataset, crs, filterexpr, filter_geom):
-        """Get extent of dataset features.
-
-        :param str|obj identity: User identity
-        :param object translator: Translator
-        :param str dataset: Dataset ID
-        :param str crs: Client CRS as 'EPSG:<srid>' or None
-        :param str filterexpr: JSON serialized array of filter expressions:
-        [["<attr>", "<op>", "<value>"], "and|or", ["<attr>", "<op>", "<value>"]]
-        :param str filter_geom: JSON serialized GeoJSON geometry
-        """
-        dataset_features_provider = self.dataset_features_provider(
-            identity, translator, dataset, False
-        )
-        if dataset_features_provider is not None:
-            # check read permission
-            if not dataset_features_provider.readable():
-                return {
-                    'error': translator.tr("error.dataset_not_readable"),
-                    'error_code': 405
-                }
-
-            srid = None
-            if crs is not None:
-                # parse and validate input CRS
-                srid = self.parse_crs(crs)
-                if srid is None:
-                    return {
-                        'error': translator.tr("error.invalid_crs"),
-                        'error_code': 400
-                    }
-            if filterexpr is not None:
-                # parse and validate input filter
-                filterexpr = dataset_features_provider.parse_filter(filterexpr)
-                if filterexpr[0] is None:
-                    return {
-                        'error': (
-                            translator.tr("error.invalid_filter_expression") % filterexpr[1]
-                        ),
-                        'error_code': 400
-                    }
-
-            try:
-                extent = dataset_features_provider.extent(
-                    srid, filterexpr, filter_geom
-                )
-            except (DataError, ProgrammingError) as e:
-                self.logger.error(e)
-                return {
-                    'error': (
-                        translator.tr("error.feature_query_failed")
-                    ),
-                    'error_code': 400
-                }
-            return {'extent': {'bbox': extent}}
-        else:
-            return {'error': translator.tr("error.dataset_not_found")}
-
     def show(self, identity, translator, dataset, id, crs):
         """Get a dataset feature.
 
