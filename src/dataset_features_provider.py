@@ -100,18 +100,12 @@ class DatasetFeaturesProvider():
         """
         srid = client_srid or self.srid
 
-        own_attributes, join_attributes = self.__extract_join_attributes()
-
-        if filter_fields:
-            own_attributes = [attr for attr in own_attributes if attr in filter_fields or attr == self.primary_key]
-            join_attributes = [attr for attr in join_attributes if attr in filter_fields]
+        attributes, join_query = self.__prepare_join_query(filter_fields)
 
         # build query SQL
 
-        # select id and permitted attributes
-        columns = (', ').join(
-            self.escape_column_names([self.primary_key] + own_attributes)
-        )
+        # select columns list
+        columns = (', ').join(self.escape_column_names(attributes))
 
         where_clauses = []
         params = {}
@@ -189,12 +183,13 @@ class DatasetFeaturesProvider():
 
         sql = sql_text(("""
             SELECT {columns}%s
-            FROM {table}
+            FROM {table} __J0
+            {join_query}
             {where_clause}
             {order_clause};
         """ % geom_sql).format(
             columns=columns, geom=self.geometry_column, table=self.table,
-            where_clause=where_clause, order_clause=order_clause
+            join_query=join_query, where_clause=where_clause, order_clause=order_clause
         ))
 
         self.logger.debug(f"index query: {sql}")
@@ -217,12 +212,7 @@ class DatasetFeaturesProvider():
                     features.append({})
                     continue
 
-                # NOTE: feature CRS removed by marshalling
-                attribute_values = dict(row)
-                join_attribute_values = self.__query_join_attributes(join_attributes, attribute_values)
-                attribute_values.update(join_attribute_values)
-
-                features.append(self.feature_from_query(attribute_values, srid, filter_fields))
+                features.append(self.feature_from_query(dict(row), srid, filter_fields))
                 if '_overall_bbox_' in row:
                     overall_bbox = row['_overall_bbox_']
 
@@ -287,28 +277,27 @@ class DatasetFeaturesProvider():
         """
         srid = client_srid or self.srid
 
-        own_attributes, join_attributes = self.__extract_join_attributes()
+        attributes, join_query = self.__prepare_join_query()
 
         # build query SQL
 
-        # select id and permitted attributes
-        columns = (', ').join(
-            self.escape_column_names([self.primary_key] + own_attributes)
-        )
+        # select columns list
+        columns = (', ').join(self.escape_column_names(attributes))
 
-        add_where_clause = ""
+        where_clause = ""
         if self.datasource_filter:
-            add_where_clause = "AND (" + self.datasource_filter + ")"
+            where_clause = "AND (" + self.datasource_filter + ")"
 
         geom_sql = self.geom_column_sql(srid)
         sql = sql_text(("""
             SELECT {columns}%s
-            FROM {table}
-            WHERE {pkey} = :id {add_where_clause}
+            FROM {table} __J0
+            {join_query}
+            WHERE {pkey} = :id {where_clause}
             LIMIT 1;
         """ % geom_sql).format(
             columns=columns, geom=self.geometry_column, table=self.table,
-            pkey=self.primary_key, add_where_clause=add_where_clause
+            pkey=self.primary_key, join_query=join_query, where_clause=where_clause
         ))
         params = {"id": id}
 
@@ -322,11 +311,7 @@ class DatasetFeaturesProvider():
             result = conn.execute(sql, params).mappings()
             for row in result:
                 # NOTE: result is empty if not found
-                attribute_values = dict(row)
-                join_attribute_values = self.__query_join_attributes(join_attributes, attribute_values)
-                attribute_values.update(join_attribute_values)
-
-                feature = self.feature_from_query(attribute_values, srid)
+                feature = self.feature_from_query(dict(row), srid, filter_fields)
 
         return feature
 
@@ -335,23 +320,35 @@ class DatasetFeaturesProvider():
 
         :param object feature: GeoJSON Feature
         """
+        # build query SQL
+        sql_params = self.sql_params_for_feature(feature)
+        srid = sql_params['client_srid']
+        attributes, join_query = self.__prepare_join_query()
+
+        geom_sql = self.geom_column_sql(srid, True)
+        if geom_sql:
+            attributes.extend(['_json_geom_', '_bbox_'])
+
+        # select columns list
+        columns = (', ').join(self.escape_column_names(attributes))
+
         # connect to database
         with self.db_write.begin() as conn:
-            # build query SQL
-            sql_params = self.sql_params_for_feature(feature)
-            srid = sql_params['client_srid']
-            own_attributes, join_attributes = self.__extract_join_attributes()
-
-            geom_sql = self.geom_column_sql(srid)
             sql = sql_text(("""
-                INSERT INTO {table} ({columns})
-                    VALUES ({values_sql})
-                RETURNING {return_columns}%s;
+                WITH __I AS (
+                    INSERT INTO {table} ({insert_columns})
+                        VALUES ({values_sql})
+                    RETURNING {return_columns}%s
+                ) SELECT {columns}
+                FROM __I __J0
+                {join_query}
             """ % geom_sql).format(
-                table=self.table, columns=sql_params['columns'],
+                table=self.table, insert_columns=sql_params['columns'],
                 values_sql=sql_params['values_sql'],
                 return_columns=sql_params['return_columns'],
-                geom=self.geometry_column
+                geom=self.geometry_column,
+                columns=columns,
+                join_query=join_query
             ))
             params = sql_params['bound_values']
 
@@ -363,11 +360,7 @@ class DatasetFeaturesProvider():
             feature = None
             result = conn.execute(sql, params).mappings()
             for row in result:
-                attribute_values = dict(row)
-                join_attribute_values = self.__query_join_attributes(join_attributes, attribute_values)
-                attribute_values.update(join_attribute_values)
-
-                feature = self.feature_from_query(attribute_values, srid)
+                feature = self.feature_from_query(dict(row), srid)
 
         return feature
 
@@ -377,24 +370,36 @@ class DatasetFeaturesProvider():
         :param int id: Dataset feature ID
         :param object feature: GeoJSON Feature
         """
+        # build query SQL
+        sql_params = self.sql_params_for_feature(feature)
+        srid = sql_params['client_srid']
+        attributes, join_query = self.__prepare_join_query()
+
+        geom_sql = self.geom_column_sql(srid, True)
+        if geom_sql:
+            attributes.extend(['_json_geom_', '_bbox_'])
+
+        # select columns list
+        columns = (', ').join(self.escape_column_names(attributes))
+
         # connect to database
         with self.db_write.begin() as conn:
-            # build query SQL
-            sql_params = self.sql_params_for_feature(feature)
-            srid = sql_params['client_srid']
-            own_attributes, join_attributes = self.__extract_join_attributes()
-
-            geom_sql = self.geom_column_sql(srid)
             sql = sql_text(("""
-                UPDATE {table} SET ({columns}) =
-                    ROW({values_sql})
-                WHERE {pkey} = :{pkey}
-                RETURNING {return_columns}%s;
+                WITH __U AS (
+                    UPDATE {table} SET ({update_columns}) =
+                        ROW({values_sql})
+                    WHERE {pkey} = :{pkey}
+                    RETURNING {return_columns}%s
+                ) SELECT {columns}
+                FROM __U __J0
+                {join_query}
             """ % geom_sql).format(
-                table=self.table, columns=sql_params['columns'],
+                table=self.table, update_columns=sql_params['columns'],
                 values_sql=sql_params['values_sql'], pkey=self.primary_key,
                 return_columns=sql_params['return_columns'],
-                geom=self.geometry_column
+                geom=self.geometry_column,
+                columns=columns,
+                join_query=join_query
             ))
 
             update_values = sql_params['bound_values']
@@ -409,11 +414,7 @@ class DatasetFeaturesProvider():
             result = conn.execute(sql, update_values).mappings()
             for row in result:
                 # NOTE: result is empty if not found
-                attribute_values = dict(row)
-                join_attribute_values = self.__query_join_attributes(join_attributes, attribute_values)
-                attribute_values.update(join_attribute_values)
-
-                feature = self.feature_from_query(attribute_values, srid)
+                feature = self.feature_from_query(dict(row), srid)
 
         return feature
 
@@ -423,16 +424,16 @@ class DatasetFeaturesProvider():
         :param int id: Dataset feature ID
         """
 
-        add_where_clause = ""
+        where_clause = ""
         if self.datasource_filter:
             add_where_clause = "AND (" + self.datasource_filter + ")"
 
         # build query SQL
         sql = sql_text("""
             DELETE FROM {table}
-            WHERE "{pkey}" = :id {add_where_clause}
+            WHERE "{pkey}" = :id {where_clause}
             RETURNING "{pkey}";
-        """.format(table=self.table, pkey=self.primary_key, add_where_clause=add_where_clause))
+        """.format(table=self.table, pkey=self.primary_key, where_clause=where_clause))
         params = {"id": id}
 
         self.logger.debug(f"destroy query: {sql}")
@@ -454,15 +455,15 @@ class DatasetFeaturesProvider():
         :param int id: Dataset feature ID
         """
 
-        add_where_clause = ""
+        where_clause = ""
         if self.datasource_filter:
-            add_where_clause = "AND (" + self.datasource_filter + ")"
+            where_clause = "AND (" + self.datasource_filter + ")"
 
         sql = sql_text(("""
-            SELECT EXISTS(SELECT 1 FROM {table} WHERE {pkey}=:id {add_where_clause})
+            SELECT EXISTS(SELECT 1 FROM {table} WHERE {pkey}=:id {where_clause})
         """).format(
             table=self.table, pkey=self.primary_key,
-            add_where_clause=add_where_clause
+            where_clause=where_clause
         ))
 
         # connect to database (for read-only access)
@@ -1010,7 +1011,7 @@ class DatasetFeaturesProvider():
 
     def geom_column_sql(self, srid, with_bbox=True):
         """Generate SQL fragment for GeoJSON of transformed geometry
-        as additional GeoJSON column 'json_geom' and optional Box2D '_bbox_',
+        as additional GeoJSON column '_json_geom_' and optional Box2D '_bbox_',
         or empty string if dataset has no geometry.
 
         :param str target_srid: Target SRID
@@ -1024,7 +1025,7 @@ class DatasetFeaturesProvider():
                 '"{geom}"', self.srid, srid
             )
             # add GeoJSON column
-            geom_sql = ", ST_AsGeoJSON(ST_CurveToLine(%s)) AS json_geom" \
+            geom_sql = ", ST_AsGeoJSON(ST_CurveToLine(%s)) AS _json_geom_" \
                        % transform_geom_sql
             if with_bbox:
                 # add Box2D column
@@ -1076,8 +1077,8 @@ class DatasetFeaturesProvider():
         crs = None
         bbox = None
         if self.geometry_column and (not filter_fields or "geometry" in filter_fields):
-            if row['json_geom'] is not None:
-                geometry = json.loads(row['json_geom'])
+            if row['_json_geom_'] is not None:
+                geometry = json.loads(row['_json_geom_'])
             else:
                 # geometry is NULL
                 geometry = None
@@ -1116,7 +1117,7 @@ class DatasetFeaturesProvider():
         bound_values = OrderedDict()
         attribute_columns = []
         defaulted_attribute_columns = []
-        own_attributes, join_attributes = self.__extract_join_attributes()
+        own_attributes = [attribute for attribute in self.attributes if not self.fields[attribute].get('joinfield')]
         return_columns = list(own_attributes)
         placeholdercount = 0
         defaultedProperties = feature.get('defaultedProperties', [])
@@ -1188,8 +1189,11 @@ class DatasetFeaturesProvider():
         values_sql = (', ').join(bound_columns)
 
         # return id and permitted attributes
+        if not self.primary_key in return_columns:
+            return_columns.prepend(self.primary_key)
+
         return_columns = (', ').join(
-            self.escape_column_names([self.primary_key] + return_columns)
+            self.escape_column_names(return_columns)
         )
 
         if defaulted_attribute_columns:
@@ -1204,68 +1208,33 @@ class DatasetFeaturesProvider():
             'client_srid': srid
         }
 
+    def __prepare_join_query(self, filter_fields=None):
+        """ Builds the JOIN query fragments from the dataset fields and returns the select attributes)
 
-    def __extract_join_attributes(self):
-        """Splits the query attributes into own attributes and joined attributes."""
-        own_attributes = []
-        join_attributes = []
-
-        for attribute in self.attributes:
-            field = self.fields[attribute]
-            if field.get('joinfield'):
-                join_attributes.append(attribute)
-            else:
-                own_attributes.append(attribute)
-
-        return own_attributes, join_attributes
-
-    def __query_join_attributes(self, join_attributes, own_attribute_values):
-        """Queries join attributes.
-
-        :param list join_attributes: The joined attribute names
-        :param object own_attribute_values: The own attribute values of the queried record
+        :param list filter_fields: Optional list of attributes which should be selected
         """
 
+        attributes = []
         join_queries = {}
-        join_values = {}
+        ident = 1
+        for attribute in self.attributes:
+            if filter_fields and attribute not in filter_fields:
+                continue
+            attributes.append(attribute)
 
-        for attribute in join_attributes:
-            field = self.fields[attribute]
-            joinfield = field['joinfield']
+            joinfield = self.fields[attribute].get('joinfield')
+            if joinfield and joinfield['table'] not in join_queries:
+                jointableconfig = self.jointables[joinfield['table']]
+                join_queries[joinfield['table']] = 'LEFT JOIN "{table}" {ident} ON __J0.{tagetfield} = {ident}.{joinfield}'.format(
+                    table = joinfield['table'],
+                    ident = "__J%d" % (ident),
+                    tagetfield = jointableconfig["targetField"],
+                    joinfield = jointableconfig["joinField"]
+                )
+                ident += 1
 
-            if joinfield['table'] not in join_queries:
-                join_queries[joinfield['table']] = {}
-            join_queries[joinfield['table']][field['name']] = joinfield['field']
-            join_values[field['name']] = None
+        # Ensure primary key is always returned
+        if not self.primary_key in attributes:
+            attributes.prepend(self.primary_key)
 
-        for jointable, fields in join_queries.items():
-            jointableconfig = self.jointables[jointable]
-            columns = (', ').join(self.escape_column_names(fields.values()))
-            table = '"%s"."%s"' % (jointableconfig['schema'], jointableconfig['table_name'])
-            datasource_filter = jointableconfig.get('datasource_filter', None)
-            add_where_clause = ""
-            if datasource_filter:
-                add_where_clause = "AND (" + datasource_filter + ")"
-
-            sql = sql_text(("""
-                SELECT {columns}
-                FROM {table}
-                WHERE "{field}" = :joinvalue {add_where_clause};
-            """).format(
-                columns=columns, table=table, field=jointableconfig['joinField'],
-                add_where_clause=add_where_clause
-            ))
-
-            self.logger.debug(f"joined attributes query: {sql}")
-
-            with self.db_engine.db_engine(jointableconfig["database"]).connect() as conn:
-                # execute query
-                joinvalue = own_attribute_values[jointableconfig['targetField']]
-                result = conn.execute(sql, {"joinvalue": joinvalue}).mappings()
-
-                for row in result:
-                    for fieldname, targetname in fields.items():
-                        join_values[fieldname] = row[targetname]
-                    break
-
-        return join_values
+        return attributes, "\n".join(join_queries.values())
