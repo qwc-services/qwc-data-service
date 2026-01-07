@@ -516,6 +516,9 @@ class DatasetFeaturesProvider():
         params = {}
         errors = []
 
+        if type(filterarray[0]) is not list:
+            # Parser expects first child to be an array
+            filterarray = [filterarray]
         self.__parse_filter_inner(filterarray, sql, params, errors)
 
         if errors:
