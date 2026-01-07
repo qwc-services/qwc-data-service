@@ -532,7 +532,7 @@ class DatasetFeaturesProvider():
         CONCAT_OPERATORS = ["AND", "OR"]
         OPERATORS = [
             "=", "!=", "<>", "<", ">", "<=", ">=",
-            "LIKE", "ILIKE",
+            "~", "LIKE", "ILIKE",
             "IS", "IS NOT"
         ]
         VALUE_TYPES = [int, float, str, type(None), bool]
@@ -608,6 +608,9 @@ class DatasetFeaturesProvider():
                     elif op in ["IS", "IS NOT"]:
                         errors.append("Invalid operator in %s" % entry)
                         return
+                    elif op == "~":
+                        op = "ILIKE"
+                        value = "%%%s%%" % value
 
                     # add SQL fragment for filter
                     # e.g. '"type" >= :v0'
