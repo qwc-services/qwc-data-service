@@ -528,7 +528,7 @@ class DatasetFeaturesProvider():
         else:
             return ("(%s)" % " ".join(sql), params)
 
-    def __parse_filter_inner(self, filterarray, sql, params, errors, pad = ""):
+    def __parse_filter_inner(self, filterarray, sql, params, errors):
         CONCAT_OPERATORS = ["AND", "OR"]
         OPERATORS = [
             "=", "!=", "<>", "<", ">", "<=", ">=",
@@ -557,7 +557,7 @@ class DatasetFeaturesProvider():
                 if type(entry[0]) is list:
                     # nested expression
                     sql.append("(")
-                    self.__parse_filter_inner(entry, sql, params, errors, pad + "  ")
+                    self.__parse_filter_inner(entry, sql, params, errors)
                     sql.append(")")
                 elif len(entry) != 3:
                     # filter entry must have exactly three parts
