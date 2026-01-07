@@ -574,6 +574,8 @@ class DatasetFeaturesProvider():
                     if column_name.startswith("?"):
                         ignore_if_not_exists = True
                         column_name = column_name[1:]
+                    elif column_name == "<id>":
+                        column_name = self.primary_key
 
                     if (
                         column_name != self.primary_key
