@@ -35,7 +35,7 @@ class DataService():
         self.attachments_service = AttachmentsService(tenant, logger)
         self.db_engine = DatabaseEngine()
 
-    def index(self, identity, translator, dataset, bbox, crs, filterexpr, filter_geom, filter_fields, limit = None, offset = None):
+    def index(self, identity, translator, dataset, bbox, crs, filterexpr, filter_geom, filter_fields, limit = None, offset = None, sortby = None):
         """Find dataset features inside bounding box.
 
         :param str|obj identity: User identity
@@ -49,6 +49,7 @@ class DataService():
         :param list[string] filter_fields: Field names to return
         :params number limit: Feature count limit
         :params number offset: Feature count offset
+        :params sortby string: Feature sort order by fieldnames
         """
         dataset_features_provider = self.dataset_features_provider(
             identity, translator, dataset, False
@@ -88,10 +89,9 @@ class DataService():
                         ),
                         'error_code': 400
                     }
-
             try:
                 feature_collection = dataset_features_provider.index(
-                    bbox, srid, filterexpr, filter_geom, filter_fields, limit, offset
+                    bbox, srid, filterexpr, filter_geom, filter_fields, limit, offset, sortby
                 )
             except (DataError, ProgrammingError) as e:
                 self.logger.error(e)

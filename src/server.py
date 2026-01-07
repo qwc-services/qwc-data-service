@@ -265,6 +265,7 @@ index_parser.add_argument('filter_geom')
 index_parser.add_argument('fields')
 index_parser.add_argument('limit', type=int)
 index_parser.add_argument('offset', type=int)
+index_parser.add_argument('sortby')
 
 feature_multipart_parser = reqparse.RequestParser(argument_class=CaseInsensitiveArgument)
 feature_multipart_parser.add_argument('feature', help='Feature', required=True, location='form')
@@ -304,15 +305,10 @@ class FeatureCollection(Resource):
         '`[["<name>", "<op>", <value>],"and|or",["<name>","<op>",<value>]]`')
     @api.param(
         'filter_geom', 'GeoJSON serialized geometry, used as intersection geometry filter')
-    @api.param(
-        'fields', 'Comma separated list of field names to return'
-    )
-    @api.param(
-        'limit', 'Feature count limit'
-    )
-    @api.param(
-        'offset', 'Feature count offset'
-    )
+    @api.param('fields', 'Comma separated list of field names to return')
+    @api.param('limit', 'Feature count limit')
+    @api.param('offset', 'Feature count offset')
+    @api.param('sortby', 'Feature sort order, as a comma separated list `(-)field1,(-)field2,...`')
     @api.expect(index_parser)
     @api.marshal_with(geojson_feature_collection, skip_none=True)
     @optional_auth
@@ -332,10 +328,11 @@ class FeatureCollection(Resource):
         filter_fields = [field for field in (args['fields'] or "").split(",") if field != '']
         limit = args['limit']
         offset = args['offset']
+        sortby = args['sortby']
 
         data_service = data_service_handler()
         result = data_service.index(
-            get_identity(), translator, dataset, bbox, crs, filterexpr, filter_geom, filter_fields, limit, offset
+            get_identity(), translator, dataset, bbox, crs, filterexpr, filter_geom, filter_fields, limit, offset, sortby
         )
         if 'error' not in result:
             return result['feature_collection']

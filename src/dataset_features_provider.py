@@ -84,7 +84,7 @@ class DatasetFeaturesProvider():
         """Return whether dataset can be deleted."""
         return self.__deletable
 
-    def index(self, bbox, client_srid, filterexpr, filter_geom, filter_fields, limit=None, offset=None):
+    def index(self, bbox, client_srid, filterexpr, filter_geom, filter_fields, limit=None, offset=None, sortby=None):
         """Find features inside bounding box.
 
         :param list[float] bbox: Bounding box as [<minx>,<miny>,<maxx>,<maxy>]
@@ -96,6 +96,7 @@ class DatasetFeaturesProvider():
         :param list[string] filter_fields: Field names to return
         :params number limit: Feature count limit
         :params number offset: Feature count offset
+        :params sortby string: Feature sort order by fieldnames
         """
         srid = client_srid or self.srid
 
@@ -153,6 +154,29 @@ class DatasetFeaturesProvider():
         if where_clauses:
             where_clause = "WHERE (" + ") AND (".join(where_clauses) + ")"
 
+        order_clause = ""
+        if sortby:
+            order_clause_fragments = []
+            for field in sortby.split(","):
+                order = "ASC"
+                if field.startswith("-"):
+                    order = "DESC"
+                    field = field[1:]
+                elif field.startswith("+"):
+                    field = field[1:]
+                if field == "<id>":
+                    field = self.primary_key
+
+                if (
+                    field == self.primary_key
+                    or field in self.attributes
+                ):
+                    order_clause_fragments.append('"%s" %s' % (field, order))
+                else:
+                    self.logger.debug("Omitting non-existing sort columng %s" % field)
+            if order_clause_fragments:
+                order_clause = "ORDER BY %s" % ",".join(order_clause_fragments)
+
         geom_sql = ""
         if not filter_fields or "geometry" in filter_fields:
             geom_sql = self.geom_column_sql(srid, with_bbox=False)
@@ -166,10 +190,11 @@ class DatasetFeaturesProvider():
         sql = sql_text(("""
             SELECT {columns}%s
             FROM {table}
-            {where_clause};
+            {where_clause}
+            {order_clause};
         """ % geom_sql).format(
             columns=columns, geom=self.geometry_column, table=self.table,
-            where_clause=where_clause
+            where_clause=where_clause, order_clause=order_clause
         ))
 
         self.logger.debug(f"index query: {sql}")
