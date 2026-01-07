@@ -614,6 +614,21 @@ class DatasetFeaturesProvider():
                         op = "ILIKE"
                         value = "%%%s%%" % value
 
+                    int_types = ['bigint', 'integer', 'smallint']
+                    float_types = ['double precision', 'numeric', 'real']
+                    if self.fields[column_name].get("data_type") in int_types:
+                        try:
+                            value = int(value)
+                        except:
+                            errors.append("Value for '%s' cannot be casted to an integer" % column_name)
+                            return
+                    elif self.fields[column_name].get("data_type") in float_types:
+                        try:
+                            value = float(value)
+                        except:
+                            errors.append("Value for '%s' cannot be casted to a float" % column_name)
+                            return
+
                     # add SQL fragment for filter
                     # e.g. '"type" >= :v0'
                     idx = len(params)
