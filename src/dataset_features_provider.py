@@ -269,15 +269,16 @@ class DatasetFeaturesProvider():
 
         return records
 
-    def show(self, id, client_srid):
+    def show(self, id, client_srid, filter_fields):
         """Get a feature.
 
         :param int id: Dataset feature ID
         :param int client_srid: Client SRID or None for dataset SRID
+        :param list[string] filter_fields: Field names to return
         """
         srid = client_srid or self.srid
 
-        attributes, join_query = self.__prepare_join_query()
+        attributes, join_query = self.__prepare_join_query(filter_fields)
 
         # build query SQL
 

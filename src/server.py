@@ -274,6 +274,7 @@ feature_multipart_parser.add_argument('g-recaptcha-response', help="Recaptcha re
 
 show_parser = reqparse.RequestParser(argument_class=CaseInsensitiveArgument)
 show_parser.add_argument('crs')
+show_parser.add_argument('fields')
 
 keyvals_parser = reqparse.RequestParser(argument_class=CaseInsensitiveArgument)
 keyvals_parser.add_argument('key')
@@ -462,6 +463,7 @@ class Feature(Resource):
     @api.doc('show')
     @api.response(405, 'Dataset not readable')
     @api.param('crs', 'Client coordinate reference system')
+    @api.param('fields', 'Comma separated list of field names to return')
     @api.expect(show_parser)
     @api.marshal_with(geojson_feature(True))
     @optional_auth
@@ -478,9 +480,10 @@ class Feature(Resource):
         translator = Translator(app, request)
         args = show_parser.parse_args()
         crs = args['crs']
+        filter_fields = args['fields']
 
         data_service = data_service_handler()
-        result = data_service.show(get_identity(), translator, dataset, id, crs)
+        result = data_service.show(get_identity(), translator, dataset, id, crs, filter_fields)
         if 'error' not in result:
             return result['feature']
         else:

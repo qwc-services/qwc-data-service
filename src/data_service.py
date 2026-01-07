@@ -107,7 +107,7 @@ class DataService():
         else:
             return {'error': translator.tr("error.dataset_not_found")}
 
-    def show(self, identity, translator, dataset, id, crs):
+    def show(self, identity, translator, dataset, id, crs, filter_fields=None):
         """Get a dataset feature.
 
         :param str|obj identity: User identity
@@ -115,6 +115,7 @@ class DataService():
         :param str dataset: Dataset ID
         :param int id: Dataset feature ID
         :param str crs: Client CRS as 'EPSG:<srid>' or None
+        :param list[string] filter_fields: Field names to return
         """
         dataset_features_provider = self.dataset_features_provider(
             identity, translator, dataset, False
@@ -136,7 +137,7 @@ class DataService():
                     'error_code': 405
                 }
 
-            feature = dataset_features_provider.show(id, srid)
+            feature = dataset_features_provider.show(id, srid, filter_fields)
             if feature is not None:
                 return {'feature': feature}
             else:
