@@ -1214,7 +1214,7 @@ class DatasetFeaturesProvider():
 
         # return id and permitted attributes
         if not self.primary_key in return_columns:
-            return_columns.prepend(self.primary_key)
+            return_columns.insert(0, self.primary_key)
 
         return_columns = (', ').join(
             self.escape_column_names(return_columns)
@@ -1259,6 +1259,6 @@ class DatasetFeaturesProvider():
 
         # Ensure primary key is always returned
         if not self.primary_key in attributes:
-            attributes.prepend(self.primary_key)
+            attributes.insert(0, self.primary_key)
 
         return attributes, "\n".join(join_queries.values())
