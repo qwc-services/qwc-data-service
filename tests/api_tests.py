@@ -349,6 +349,7 @@ class ApiTestCase(unittest.TestCase):
         self.assertEqual(201, status_code, "Status code is not Created")
         feature = json_data
         self.check_feature(feature)
+        input_feature['properties']['id'] = feature['properties']['id']
         self.assertEqual(input_feature['properties'], feature['properties'],
                          "Properties do not match")
         self.assertEqual(input_feature['geometry'], feature['geometry'],
@@ -389,7 +390,7 @@ class ApiTestCase(unittest.TestCase):
         feature = json_data
         self.check_feature(feature)
         self.assertEqual(1, feature['id'], "ID does not match")
-        self.assertEqual(input_feature['properties'], feature['properties'],
+        self.assertEqual(input_feature['properties'] | {"id": 1}, feature['properties'],
                          "Properties do not match")
         self.assertEqual(input_feature['geometry'], feature['geometry'],
                          "Geometry does not match")

@@ -1084,8 +1084,6 @@ class DatasetFeaturesProvider():
         for attr in self.attributes:
             if filter_fields and not attr in filter_fields:
                 continue
-            if attr == self.primary_key:
-                continue
             value = row[attr]
             # Ensure values are JSON serializable
             if isinstance(value, date):
