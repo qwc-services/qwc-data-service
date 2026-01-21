@@ -71,6 +71,8 @@
     "invalid_value_type": "Ungültiger Werttyp in %s",
     "filter.cannot_cast_int": "Wert für '%s' kann nicht in eine Ganzzahl umgewandelt werden",
     "cannot_cast_float": "Wert für '%s' kann nicht in eine Gleitkommazahl umgewandelt werden",
+    "value_not_list": "Wert für '%s' ist keine Liste",
+    "cannot_cast_list_value": "Nicht alle Listeneinträge für '%s' können in %s umgewandelt werden",
     "invalid_entry": "Ungültiger Eintrag: %s"
     }
 }

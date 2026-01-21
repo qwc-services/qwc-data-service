@@ -71,6 +71,8 @@
     "invalid_value_type": "Invalid value type in %s",
     "filter.cannot_cast_int": "Value for '%s' cannot be casted to an integer",
     "cannot_cast_float": "Value for '%s' cannot be casted to a float",
+    "value_not_list": "Value for '%s' ist not a list",
+    "cannot_cast_list_value": "Not all list values for '%s' can be casted to a %s",
     "invalid_entry": "Invalid entry: %s"
   }
 }

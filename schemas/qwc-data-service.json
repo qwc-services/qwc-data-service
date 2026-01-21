@@ -150,7 +150,12 @@
                         "time",
                         "timestamp with time zone",
                         "timestamp without time zone",
-                        "uuid"
+                        "uuid",
+                        "smallint[]",
+                        "integer[]",
+                        "bigint[]",
+                        "text[]",
+                        "numeric[]"
                       ],
                       "default": "text"
                     },

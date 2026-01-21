@@ -71,6 +71,8 @@
     "invalid_value_type": "Type de valeur invalide dans %s",
     "filter.cannot_cast_int": "La valeur pour '%s' ne peut pas être convertie en entier",
     "cannot_cast_float": "La valeur pour '%s' ne peut pas être convertie en nombre à virgule flottante",
+    "value_not_list": "La valeur pour '%s' n'est pas une liste",
+    "cannot_cast_list_value": "Toutes les valeurs de la liste pour '%s' ne peuvent pas être converties en %s",
     "invalid_entry": "Entrée invalide: %s"
     }
 }

@@ -71,6 +71,8 @@
     "invalid_value_type": "Tipo di valore non valido in %s",
     "filter.cannot_cast_int": "Il valore per '%s' non può essere convertito in un intero",
     "cannot_cast_float": "Il valore per '%s' non può essere convertito in un numero decimale",
+    "value_not_list": "Il valore per '%s' non è una lista",
+    "cannot_cast_list_value": "Non tutti i valori della lista per '%s' possono essere convertiti in %s",
     "invalid_entry": "Voce non valida: %s"
     }
 }

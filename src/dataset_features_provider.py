@@ -628,6 +628,22 @@ class DatasetFeaturesProvider():
                         except:
                             errors.append(self.translator.tr("filter.cannot_cast_float") % column_name)
                             return
+                    elif self.fields[column_name].get("data_type", "").endswith("[]"):
+                        if not isinstance(value, list):
+                            errors.append(self.translator.tr("filter.value_not_list") % column_name)
+                            return
+                        else:
+                            base_type = self.fields[column_name]["data_type"][:-2]
+                            if base_type in int_types:
+                                klass = int
+                            elif base_type in float_types:
+                                klass = float
+                            else:
+                                klass = str
+                            try:
+                                value = map(klass, value)
+                            except:
+                                errors.append(self.translator.tr("filter.cannot_cast_list_value") % (column_name, klass.__name__))
 
                     # add SQL fragment for filter
                     # e.g. '"type" >= :v0'
@@ -763,7 +779,7 @@ class DatasetFeaturesProvider():
                     # NOTE: allow any data type for fields of type json
                     if (
                         data_type not in ['json', 'jsonb']
-                        and not isinstance(value, (str, int, float, bool))
+                        and not isinstance(value, (str, int, float, bool, list))
                     ):
                         errors.append(
                             self.translator.tr("validation.invalid_type_for_prop") % attr
