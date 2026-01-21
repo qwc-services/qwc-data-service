@@ -59,5 +59,18 @@
     "invalid_value_for": "Invalid value for '%s'",
     "missing_required_value_for": "Missing required value for '%s'",
     "value_for_cannot_be_blank": "Value for '%s' can not be blank"
+  },
+  "filter": {
+    "invalid_concatenation_operator": "Invalid concatenation operator '%s'",
+    "incorrect_concat_operator_pos": "Incorrect concatenation operator position for '%s'",
+    "empty_list_expr": "Empty list in expression",
+    "incorrect_num_entries": "Incorrect number of entries in %s",
+    "incorrect_col_name": "Invalid column name in %s",
+    "col_name_not_found": "Column name not found or permission error in %s",
+    "invalid_operator": "Invalid operator in %s",
+    "invalid_value_type": "Invalid value type in %s",
+    "filter.cannot_cast_int": "Value for '%s' cannot be casted to an integer",
+    "cannot_cast_float": "Value for '%s' cannot be casted to a float",
+    "invalid_entry": "Invalid entry: %s"
   }
 }

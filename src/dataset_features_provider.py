@@ -542,17 +542,17 @@ class DatasetFeaturesProvider():
             if type(entry) is str:
                 entry = entry.upper()
                 if entry not in CONCAT_OPERATORS:
-                    errors.append("Invalid concatenation operator '%s'" % entry)
+                    errors.append(self.translator.tr("filter.invalid_concatenation_operator") % entry)
                     return
                 if i % 2 != 1 or i == len(filterarray) - 1:
                     # filter concatenation operators must be at odd-numbered
                     # positions in the array and cannot appear last
-                    errors.append("Incorrect concatenation operator position for '%s'" % entry)
+                    errors.append(self.translator.tr("filter.incorrect_concat_operator_pos") % entry)
                     return
                 sql.append(entry)
             elif type(entry) is list:
                 if len(entry) == 0:
-                    errors.append("Empty list in expression")
+                    errors.append(self.translator.tr("filter.empty_list_expr"))
                     return
                 if type(entry[0]) is list:
                     # nested expression
@@ -561,13 +561,13 @@ class DatasetFeaturesProvider():
                     sql.append(")")
                 elif len(entry) != 3:
                     # filter entry must have exactly three parts
-                    errors.append("Incorrect number of entries in %s" % entry)
+                    errors.append(self.translator.tr("filter.incorrect_num_entries") % entry)
                     return
                 else:
                     # column
                     column_name = entry[0]
                     if type(column_name) is not str:
-                        errors.append("Invalid column name in %s" % entry)
+                        errors.append(self.translator.tr("filter.incorrect_col_name") % entry)
                         return
 
                     ignore_if_not_exists = False
@@ -586,19 +586,19 @@ class DatasetFeaturesProvider():
                             continue
                         else:
                             # column not available or not permitted
-                            errors.append("Column name not found or permission error in %s" % entry)
+                            errors.append(self.translator.tr("filter.col_name_not_found") % entry)
                             return
 
                     # operator
                     op = entry[1].upper().strip()
                     if type(entry[1]) is not str or op not in OPERATORS:
-                        errors.append("Invalid operator in %s" % entry)
+                        errors.append(self.translator.tr("filter.invalid_operator") % entry)
                         return
 
                     # value
                     value = entry[2]
                     if type(value) not in VALUE_TYPES:
-                        errors.append("Invalid value type in %s" % entry)
+                        errors.append(self.translator.tr("filter.invalid_value_type") % entry)
                         return
 
                     if value is None:
@@ -608,7 +608,7 @@ class DatasetFeaturesProvider():
                         elif op == "!=":
                             op = "IS NOT"
                     elif op in ["IS", "IS NOT"]:
-                        errors.append("Invalid operator in %s" % entry)
+                        errors.append(self.translator.tr("filter.invalid_operator") % entry)
                         return
                     elif op == "~":
                         op = "ILIKE"
@@ -620,13 +620,13 @@ class DatasetFeaturesProvider():
                         try:
                             value = int(value)
                         except:
-                            errors.append("Value for '%s' cannot be casted to an integer" % column_name)
+                            errors.append(self.translator.tr("filter.cannot_cast_int") % column_name)
                             return
                     elif self.fields[column_name].get("data_type") in float_types:
                         try:
                             value = float(value)
                         except:
-                            errors.append("Value for '%s' cannot be casted to a float" % column_name)
+                            errors.append(self.translator.tr("filter.cannot_cast_float") % column_name)
                             return
 
                     # add SQL fragment for filter
@@ -637,7 +637,7 @@ class DatasetFeaturesProvider():
                     params["v%d" % idx] = value
             else:
                 # invalid entry
-                errors.append("Invalid entry: %s" % entry)
+                errors.append(self.translator.tr("filter.invalid_entry") % entry)
 
             i += 1
 

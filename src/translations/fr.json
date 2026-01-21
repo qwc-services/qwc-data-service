@@ -59,5 +59,18 @@
     "invalid_value_for": "Valeur non valide pour '%s'",
     "missing_required_value_for": "Valeur requise manquante pour '%s'",
     "value_for_cannot_be_blank": "La valeur de '%s' ne peut être vide"
-  }
+  },
+  "filter": {
+     "invalid_concatenation_operator": "Opérateur de concaténation invalide '%s'",
+    "incorrect_concat_operator_pos": "Position de l'opérateur de concaténation incorrecte pour '%s'",
+    "empty_list_expr": "Liste vide dans l'expression",
+    "incorrect_num_entries": "Nombre d'entrées incorrect dans %s",
+    "incorrect_col_name": "Nom de colonne invalide dans %s",
+    "col_name_not_found": "Nom de colonne non trouvé ou erreur d'autorisation dans %s",
+    "invalid_operator": "Opérateur invalide dans %s",
+    "invalid_value_type": "Type de valeur invalide dans %s",
+    "filter.cannot_cast_int": "La valeur pour '%s' ne peut pas être convertie en entier",
+    "cannot_cast_float": "La valeur pour '%s' ne peut pas être convertie en nombre à virgule flottante",
+    "invalid_entry": "Entrée invalide: %s"
+    }
 }
