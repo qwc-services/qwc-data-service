@@ -638,11 +638,14 @@ class DatasetFeaturesProvider():
                             except:
                                 errors.append(self.translator.tr("filter.cannot_cast_list_value") % (column_name, klass.__name__))
 
-                    if self.fields[column_name].get('joinfield'):
-                        alias = self.jointables[self.fields[column_name]['joinfield']['table']]['alias']
-                        column_name = f'{alias}."{column_name}"'
+
+                    if joinconfig := self.fields[column_name].get('joinfield'):
+                        alias = self.jointables[joinconfig['table']]['alias']
+                        field = joinconfig['field'].replace('"', '""')
+                        column_name = f'{alias}."{field}"'
                     else:
-                        column_name = f'__J0."{column_name}"'
+                        field = column_name.replace('"', '""')
+                        column_name = f'__J0."{field}"'
 
                     # add SQL fragment for filter
                     # e.g. '"type" >= :v0'
