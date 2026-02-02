@@ -100,12 +100,9 @@ class DatasetFeaturesProvider():
         """
         srid = client_srid or self.srid
 
-        attributes, join_query = self.__prepare_join_query(filter_fields)
+        columns, join_query = self.__prepare_columns_and_join_query(filter_fields)
 
         # build query SQL
-
-        # select columns list
-        columns = (', ').join(self.escape_column_names(attributes))
 
         where_clauses = []
         params = {}
@@ -278,12 +275,9 @@ class DatasetFeaturesProvider():
         """
         srid = client_srid or self.srid
 
-        attributes, join_query = self.__prepare_join_query(filter_fields)
+        columns, join_query = self.__prepare_columns_and_join_query(filter_fields)
 
         # build query SQL
-
-        # select columns list
-        columns = (', ').join(self.escape_column_names(attributes))
 
         where_clause = ""
         if self.datasource_filter:
@@ -324,14 +318,11 @@ class DatasetFeaturesProvider():
         # build query SQL
         sql_params = self.sql_params_for_feature(feature)
         srid = sql_params['client_srid']
-        attributes, join_query = self.__prepare_join_query()
+        columns, join_query = self.__prepare_columns_and_join_query()
 
         geom_sql = self.geom_column_sql(srid, True)
         if geom_sql:
-            attributes.extend(['_json_geom_', '_bbox_'])
-
-        # select columns list
-        columns = (', ').join(self.escape_column_names(attributes))
+            columns += ", _json_geom_, _bbox_"
 
         # connect to database
         with self.db_write.begin() as conn:
@@ -374,14 +365,11 @@ class DatasetFeaturesProvider():
         # build query SQL
         sql_params = self.sql_params_for_feature(feature)
         srid = sql_params['client_srid']
-        attributes, join_query = self.__prepare_join_query()
+        columns, join_query = self.__prepare_columns_and_join_query()
 
         geom_sql = self.geom_column_sql(srid, True)
         if geom_sql:
-            attributes.extend(['_json_geom_', '_bbox_'])
-
-        # select columns list
-        columns = (', ').join(self.escape_column_names(attributes))
+            columns += ", _json_geom_, _bbox_"
 
         # connect to database
         with self.db_write.begin() as conn:
@@ -1246,19 +1234,20 @@ class DatasetFeaturesProvider():
             'client_srid': srid
         }
 
-    def __prepare_join_query(self, filter_fields=None):
+    def __prepare_columns_and_join_query(self, filter_fields=None):
         """ Builds the JOIN query fragments from the dataset fields and returns the select attributes)
 
         :param list filter_fields: Optional list of attributes which should be selected
         """
 
         attributes = []
+        base_attributes = set()
         join_queries = {}
+        join_idents = {}
         ident = 1
         for attribute in self.attributes:
             if filter_fields and attribute not in filter_fields:
                 continue
-            attributes.append(attribute)
 
             joinfield = self.fields[attribute].get('joinfield')
             if joinfield and joinfield['table'] not in join_queries:
@@ -1269,10 +1258,27 @@ class DatasetFeaturesProvider():
                     tagetfield = jointableconfig["targetField"],
                     joinfield = jointableconfig["joinField"]
                 )
+                join_idents[joinfield['table']] = ident
                 ident += 1
 
-        # Ensure primary key is always returned
-        if not self.primary_key in attributes:
-            attributes.insert(0, self.primary_key)
+            if joinfield:
+                ident = join_idents[joinfield['table']]
+                attributes.append([ident, attribute])
+            else:
+                attributes.append([0, attribute])
+                base_attributes.add(attribute)
 
-        return attributes, "\n".join(join_queries.values())
+        # Ensure primary key is always returned
+        if not self.primary_key in base_attributes:
+            base_attributes.add(self.primary_key)
+            attributes.insert(0, [0, self.primary_key])
+
+        # Collect attributes prefixed with table aliases, and omit attributes from join tables which overlap with base attributes
+        columns = []
+        for joinident, attribute in attributes:
+            if joinident > 0 and attribute in base_attributes:
+                continue
+            quoted_attribute = attribute.replace('"', '""')
+            columns.append(f'__J{joinident}."{quoted_attribute}" as "{quoted_attribute}"')
+
+        return ', '.join(columns) , "\n".join(join_queries.values())
