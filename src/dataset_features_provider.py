@@ -1262,8 +1262,7 @@ class DatasetFeaturesProvider():
                 ident += 1
 
             if joinfield:
-                ident = join_idents[joinfield['table']]
-                attributes.append([ident, attribute])
+                attributes.append([join_idents[joinfield['table']], attribute])
             else:
                 attributes.append([0, attribute])
                 base_attributes.add(attribute)
