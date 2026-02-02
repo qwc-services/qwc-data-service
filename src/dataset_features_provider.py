@@ -526,7 +526,8 @@ class DatasetFeaturesProvider():
         OPERATORS = [
             "=", "!=", "<>", "<", ">", "<=", ">=",
             "~", "LIKE", "ILIKE",
-            "IS", "IS NOT"
+            "IS", "IS NOT",
+            "HAS"
         ]
         VALUE_TYPES = [int, float, str, type(None), bool]
 
@@ -621,23 +622,6 @@ class DatasetFeaturesProvider():
                         except:
                             errors.append(self.translator.tr("filter.cannot_cast_float") % column_name)
                             return
-                    elif self.fields[column_name].get("data_type", "").endswith("[]"):
-                        if not isinstance(value, list):
-                            errors.append(self.translator.tr("filter.value_not_list") % column_name)
-                            return
-                        else:
-                            base_type = self.fields[column_name]["data_type"][:-2]
-                            if base_type in int_types:
-                                klass = int
-                            elif base_type in float_types:
-                                klass = float
-                            else:
-                                klass = str
-                            try:
-                                value = map(klass, value)
-                            except:
-                                errors.append(self.translator.tr("filter.cannot_cast_list_value") % (column_name, klass.__name__))
-
 
                     if joinconfig := self.fields[column_name].get('joinfield'):
                         alias = self.jointables[joinconfig['table']]['alias']
@@ -648,9 +632,13 @@ class DatasetFeaturesProvider():
                         column_name = f'__J0."{field}"'
 
                     # add SQL fragment for filter
-                    # e.g. '"type" >= :v0'
                     idx = len(params)
-                    sql.append('%s %s :v%d' % (column_name, op, idx))
+                    if op == "HAS":
+                        # e.g. :v0 = ANY("field")
+                        sql.append(':v%d = ANY(%s)' % (idx, column_name))
+                    else:
+                        # e.g. '"field" >= :v0'
+                        sql.append('%s %s :v%d' % (column_name, op, idx))
                     # add value
                     params["v%d" % idx] = value
             else:
