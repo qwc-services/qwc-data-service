@@ -54,7 +54,12 @@ class DatasetFeaturesProvider():
         self.attributes = config['attributes']
         # field constraints
         self.fields = config.get('fields', {})
-        self.jointables = config['jointables']
+        self.jointables = {}
+        ident = 1
+        for key, value in config['jointables'].items():
+            self.jointables[key] = value | {'alias': '__J%d' % ident}
+            ident += 1
+
         # NOTE: geometry_column is None for datasets without geometry
         self.geometry_column = config['geometry_column']
         self.geometry_type = config['geometry_type']
@@ -633,10 +638,16 @@ class DatasetFeaturesProvider():
                             except:
                                 errors.append(self.translator.tr("filter.cannot_cast_list_value") % (column_name, klass.__name__))
 
+                    if self.fields[column_name].get('joinfield'):
+                        alias = self.jointables[self.fields[column_name]['joinfield']['table']]['alias']
+                        column_name = f'{alias}."{column_name}"'
+                    else:
+                        column_name = f'__J0."{column_name}"'
+
                     # add SQL fragment for filter
                     # e.g. '"type" >= :v0'
                     idx = len(params)
-                    sql.append('"%s" %s :v%d' % (column_name, op, idx))
+                    sql.append('%s %s :v%d' % (column_name, op, idx))
                     # add value
                     params["v%d" % idx] = value
             else:
@@ -1244,7 +1255,6 @@ class DatasetFeaturesProvider():
         base_attributes = set()
         join_queries = {}
         join_idents = {}
-        ident = 1
         for attribute in self.attributes:
             if filter_fields and attribute not in filter_fields:
                 continue
@@ -1254,31 +1264,29 @@ class DatasetFeaturesProvider():
                 jointableconfig = self.jointables[joinfield['table']]
                 join_queries[joinfield['table']] = 'LEFT JOIN "{table}" {ident} ON __J0.{tagetfield} = {ident}.{joinfield}'.format(
                     table = joinfield['table'],
-                    ident = "__J%d" % (ident),
+                    ident = jointableconfig['alias'],
                     tagetfield = jointableconfig["targetField"],
                     joinfield = jointableconfig["joinField"]
                 )
-                join_idents[joinfield['table']] = ident
-                ident += 1
 
             if joinfield:
-                attributes.append([join_idents[joinfield['table']], joinfield['field'], attribute])
+                attributes.append([self.jointables[joinfield['table']]['alias'], joinfield['field'], attribute])
             else:
-                attributes.append([0, attribute, attribute])
+                attributes.append(["__J0", attribute, attribute])
                 base_attributes.add(attribute)
 
         # Ensure primary key is always returned
         if not self.primary_key in base_attributes:
             base_attributes.add(self.primary_key)
-            attributes.insert(0, [0, self.primary_key, self.primary_key])
+            attributes.insert(0, ["__J0", self.primary_key, self.primary_key])
 
         # Collect attributes prefixed with table aliases, and omit attributes from join tables which overlap with base attributes
         columns = []
         for joinident, attribute, fieldname in attributes:
-            if joinident > 0 and fieldname in base_attributes:
+            if joinident != "__J0" and fieldname in base_attributes:
                 continue
             quoted_attribute = attribute.replace('"', '""')
             quoted_fieldname = fieldname.replace('"', '""')
-            columns.append(f'__J{joinident}."{quoted_attribute}" as "{quoted_fieldname}"')
+            columns.append(f'{joinident}."{quoted_attribute}" as "{quoted_fieldname}"')
 
         return ', '.join(columns) , "\n".join(join_queries.values())
