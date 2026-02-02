@@ -288,7 +288,7 @@ class DatasetFeaturesProvider():
             SELECT {columns}%s
             FROM {table} __J0
             {join_query}
-            WHERE {pkey} = :id {where_clause}
+            WHERE __J0.{pkey} = :id {where_clause}
             LIMIT 1;
         """ % geom_sql).format(
             columns=columns, geom=self.geometry_column, table=self.table,
