@@ -527,7 +527,7 @@ class DatasetFeaturesProvider():
             "=", "!=", "<>", "<", ">", "<=", ">=",
             "~", "LIKE", "ILIKE",
             "IS", "IS NOT",
-            "HAS"
+            "HAS", "HAS NOT"
         ]
         VALUE_TYPES = [int, float, str, type(None), bool]
 
@@ -636,6 +636,9 @@ class DatasetFeaturesProvider():
                     if op == "HAS":
                         # e.g. :v0 = ANY("field")
                         sql.append(':v%d = ANY(%s)' % (idx, column_name))
+                    elif op == "HAS NOT":
+                        # e.g. :v0 = ANY("field")
+                        sql.append(':v%d != ALL(%s)' % (idx, column_name))
                     else:
                         # e.g. '"field" >= :v0'
                         sql.append('%s %s :v%d' % (column_name, op, idx))
