@@ -1262,22 +1262,23 @@ class DatasetFeaturesProvider():
                 ident += 1
 
             if joinfield:
-                attributes.append([join_idents[joinfield['table']], attribute])
+                attributes.append([join_idents[joinfield['table']], joinfield['field'], attribute])
             else:
-                attributes.append([0, attribute])
+                attributes.append([0, attribute, attribute])
                 base_attributes.add(attribute)
 
         # Ensure primary key is always returned
         if not self.primary_key in base_attributes:
             base_attributes.add(self.primary_key)
-            attributes.insert(0, [0, self.primary_key])
+            attributes.insert(0, [0, self.primary_key, self.primary_key])
 
         # Collect attributes prefixed with table aliases, and omit attributes from join tables which overlap with base attributes
         columns = []
-        for joinident, attribute in attributes:
-            if joinident > 0 and attribute in base_attributes:
+        for joinident, attribute, fieldname in attributes:
+            if joinident > 0 and fieldname in base_attributes:
                 continue
             quoted_attribute = attribute.replace('"', '""')
-            columns.append(f'__J{joinident}."{quoted_attribute}" as "{quoted_attribute}"')
+            quoted_fieldname = fieldname.replace('"', '""')
+            columns.append(f'__J{joinident}."{quoted_attribute}" as "{quoted_fieldname}"')
 
         return ', '.join(columns) , "\n".join(join_queries.values())
