@@ -69,7 +69,7 @@
     "col_name_not_found": "Column name not found or permission error in %s",
     "invalid_operator": "Invalid operator in %s",
     "invalid_value_type": "Invalid value type in %s",
-    "filter.cannot_cast_int": "Value for '%s' cannot be casted to an integer",
+    "cannot_cast_int": "Value for '%s' cannot be casted to an integer",
     "cannot_cast_float": "Value for '%s' cannot be casted to a float",
     "invalid_entry": "Invalid entry: %s"
   }

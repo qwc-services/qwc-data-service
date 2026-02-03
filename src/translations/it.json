@@ -69,7 +69,7 @@
     "col_name_not_found": "Nome colonna non trovato o errore di permessi in %s",
     "invalid_operator": "Operatore non valido in %s",
     "invalid_value_type": "Tipo di valore non valido in %s",
-    "filter.cannot_cast_int": "Il valore per '%s' non può essere convertito in un intero",
+    "cannot_cast_int": "Il valore per '%s' non può essere convertito in un intero",
     "cannot_cast_float": "Il valore per '%s' non può essere convertito in un numero decimale",
     "invalid_entry": "Voce non valida: %s"
     }
