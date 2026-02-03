@@ -544,6 +544,8 @@ class DatasetFeaturesProvider():
                     errors.append(self.translator.tr("filter.incorrect_concat_operator_pos") % entry)
                     return
                 sql.append(entry)
+            elif type(entry) is bool:
+                sql.append(str(entry).upper())
             elif type(entry) is list:
                 if len(entry) == 0:
                     errors.append(self.translator.tr("filter.empty_list_expr"))
