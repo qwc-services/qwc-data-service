@@ -45,6 +45,17 @@ e.g. `$CONFIG_PATH/default/*.json`. The default tenant name is `default`.
 * [JSON schema](schemas/qwc-data-service.json)
 * [Example `dataConfig.json`](https://github.com/qwc-services/qwc-docker/blob/master/volumes/config/default/dataConfig.json)
 
+### Environment variables
+
+Config options in the config file can be overridden by equivalent uppercase environment variables.
+
+In addition, the following environment variables are supported:
+
+| Name                     | Default       | Description                                                                               |
+|--------------------------|---------------|-------------------------------------------------------------------------------------------|
+| `ERROR_DETAILS_LOG_ONLY` | `False`       | Whether to omit detailed errors in API responses, and write these only to the service log.|
+
+
 ### Permissions
 
 * [JSON schema](https://github.com/qwc-services/qwc-services-core/blob/master/schemas/qwc-services-permissions.json)
@@ -98,22 +109,34 @@ Example:
 }
 ```
 
-Usage
------
+Run locally
+-----------
 
-Set the `CONFIG_PATH` environment variable to the path containing the service config and permission files when starting this service (default: `config`).
+Install dependencies and run:
 
-Base URL:
+    # Setup venv
+    uv venv .venv
 
-    http://localhost:5012/
+    export CONFIG_PATH=<CONFIG_PATH>
+    uv run src/server.py
 
-Service API:
+To use configs from a `qwc-docker` setup, set `CONFIG_PATH=<...>/qwc-docker/volumes/config`.
 
-    http://localhost:5012/api/
+Set `FLASK_DEBUG=1` for additional debug output.
 
-Sample requests:
+Set `FLASK_RUN_PORT=<port>` to change the default port (default: `5000`).
 
-    curl 'http://localhost:5012/qwc_demo.edit_points/'
+API documentation:
+
+    http://localhost:$FLASK_RUN_PORT/api/
+
+Docker usage
+------------
+
+The Docker image is published on [Dockerhub](https://hub.docker.com/r/sourcepole/qwc-data-service).
+
+See sample [docker-compose.yml](https://github.com/qwc-services/qwc-docker/blob/master/docker-compose-example.yml) of [qwc-docker](https://github.com/qwc-services/qwc-docker).
+
 
 General Information for all operations
 --------------------------------------
@@ -135,7 +158,7 @@ For operations like updating or deleting features, records are identified by
 a feature `id`. This `id` refers to the primary key of the database
 table and is usually kept constant over time.
 
-## Filter expressions
+### Filter expressions
 
 Query operations support passing filter expressions to narrow down the results.
 This expression is a serialized JSON array of the format:
@@ -157,46 +180,25 @@ This expression is a serialized JSON array of the format:
 
   For string operations, the SQL wildcard character `%` can be used.
 
-### Filter examples
+*Examples:*
 
 * Find all features in the dataset with a number field smaller 10 and a matching name field:
   `[["name","LIKE","example%"],"and",["number","<",10]]`
 * Find all features in the dataset with a last change before 1st of January 2020 or having `NULL` as lastchange value:
   `[["lastchange","<","2020-01-01T12:00:00"],"or",["lastchange","IS",null]]`
 
-Docker usage
-------------
-
-See sample [docker-compose.yml](https://github.com/qwc-services/qwc-docker/blob/master/docker-compose-example.yml) of [qwc-docker](https://github.com/qwc-services/qwc-docker).
-
-
-Development
------------
-
-Install dependencies and run service:
-
-    uv run src/server.py
-
-With config path:
-
-    CONFIG_PATH=/PATH/TO/CONFIGS/ uv run src/server.py
-
 
 Testing
 -------
 
-Run all tests:
-
+    # Run all tests
     python test.py
 
-Run single test module:
-
+    # Run single test module
     python -m unittest tests.feature_validation_tests
 
-Run single test case:
-
+    # Run single test case
     python -m unittest tests.feature_validation_tests.FeatureValidationTestCase
 
-Run single test method:
-
+    # Run single test method
     python -m unittest tests.feature_validation_tests.FeatureValidationTestCase.test_field_constraints
