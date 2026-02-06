@@ -791,4 +791,4 @@ def healthz():
 # local webserver
 if __name__ == '__main__':
     print("Starting Data service...")
-    app.run(host='localhost', port=5012, debug=True)
+    app.run(host='localhost', port=os.environ.get("FLASK_RUN_PORT", 5000), debug=True)
