@@ -612,7 +612,9 @@ class DatasetFeaturesProvider():
 
                     int_types = ['bigint', 'integer', 'smallint']
                     float_types = ['double precision', 'numeric', 'real']
-                    if self.fields[column_name].get("data_type") in int_types:
+                    if value is None:
+                        pass
+                    elif self.fields[column_name].get("data_type") in int_types:
                         try:
                             value = int(value)
                         except:
