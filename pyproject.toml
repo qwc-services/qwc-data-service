@@ -1,6 +1,6 @@
 [project]
 name = "qwc-data-service"
-version = "v2026.02.17"
+version = "v2026.02.18"
 description = "QWC Data Service"
 readme = "README.md"
 requires-python = ">=3.10"
