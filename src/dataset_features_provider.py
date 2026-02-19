@@ -1260,8 +1260,9 @@ class DatasetFeaturesProvider():
             joinfield = self.fields[attribute].get('joinfield')
             if joinfield and joinfield['table'] not in join_queries:
                 jointableconfig = self.jointables[joinfield['table']]
-                join_queries[joinfield['table']] = 'LEFT JOIN "{table}" {ident} ON __J0.{tagetfield} = {ident}.{joinfield}'.format(
-                    table = joinfield['table'],
+                join_queries[joinfield['table']] = 'LEFT JOIN "{schema}"."{table}" {ident} ON __J0.{tagetfield} = {ident}.{joinfield}'.format(
+                    schema = jointableconfig['schema'],
+                    table = jointableconfig['table_name'],
                     ident = jointableconfig['alias'],
                     tagetfield = jointableconfig["targetField"],
                     joinfield = jointableconfig["joinField"]
