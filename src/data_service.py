@@ -503,6 +503,9 @@ class DataService():
                 # no CRUD action permitted
                 return {}
 
+        # NOTE: primary-key is always permitted
+        permitted_attributes.add(resource['primary_key'])
+
         # filter by permissions
         attributes = [
             field['name'] for field in resource['fields']
