@@ -460,7 +460,7 @@ class DataService():
             readable = True
             updatable = False
             deletable = False
-            permitted_attributes = list(map(lambda field: field["name"], resource['fields']))
+            permitted_attributes = set(map(lambda field: field["name"], resource['fields']))
 
         else:
             resource_permissions = self.permissions_handler.resource_permissions(
