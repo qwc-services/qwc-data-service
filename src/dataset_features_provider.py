@@ -112,43 +112,51 @@ class DatasetFeaturesProvider():
         where_clauses = []
         params = {}
 
+        geom_sql = ""
+        if self.geometry_column:
+            geom_column = f'__J0."{self.geometry_column}"'
+
+            if not filter_fields or "geometry" in filter_fields:
+                geom_sql = self.geom_column_sql(geom_column, srid, with_bbox=False)
+                # select overall extent
+                geom_sql += (
+                    ', ST_Extent(%s) OVER () AS _overall_bbox_' %
+                    self.transform_geom_sql(geom_column, self.srid, srid)
+                )
+
+            if bbox is not None:
+                # bbox filter
+                bbox_geom_sql = self.transform_geom_sql("""
+                    ST_SetSRID(
+                        'BOX3D(:minx :miny, :maxx :maxy)'::box3d,
+                        {bbox_srid}
+                    )
+                """.format(bbox_srid=srid), srid, self.srid)
+                where_clauses.append("""
+                    ST_Intersects(%s, %s)
+                """ % (geom_column, bbox_geom_sql))
+                params.update({
+                    "minx": bbox[0],
+                    "miny": bbox[1],
+                    "maxx": bbox[2],
+                    "maxy": bbox[3]
+                })
+
+            if filter_geom is not None:
+                where_clauses.append('ST_Intersects(%s, ST_GeomFromGeoJSON(:filter_geom))' % geom_column)
+                params.update({"filter_geom": filter_geom})
+
         if self.datasource_filter:
             where_clauses.append(self.datasource_filter)
-
-        if self.geometry_column and bbox is not None:
-            # bbox filter
-            bbox_geom_sql = self.transform_geom_sql("""
-                ST_SetSRID(
-                    'BOX3D(:minx :miny, :maxx :maxy)'::box3d,
-                    {bbox_srid}
-                )
-            """, srid, self.srid)
-            where_clauses.append(("""
-                ST_Intersects("{geom}",
-                    %s
-                )
-            """ % bbox_geom_sql).format(
-                geom=self.geometry_column, bbox_srid=srid,
-                srid=self.srid
-            ))
-            params.update({
-                "minx": bbox[0],
-                "miny": bbox[1],
-                "maxx": bbox[2],
-                "maxy": bbox[3]
-            })
 
         if filterexpr is not None and filterexpr[0]:
             where_clauses.append(filterexpr[0])
             params.update(filterexpr[1])
 
-        if filter_geom is not None:
-            where_clauses.append("ST_Intersects(%s, ST_GeomFromGeoJSON(:filter_geom))" % self.geometry_column)
-            params.update({"filter_geom": filter_geom})
-
         where_clause = ""
         if where_clauses:
             where_clause = "WHERE (" + ") AND (".join(where_clauses) + ")"
+
 
         order_clause = ""
         if sortby:
@@ -173,16 +181,6 @@ class DatasetFeaturesProvider():
             if order_clause_fragments:
                 order_clause = "ORDER BY %s" % ",".join(order_clause_fragments)
 
-        geom_sql = ""
-        if not filter_fields or "geometry" in filter_fields:
-            geom_sql = self.geom_column_sql(srid, with_bbox=False)
-            if self.geometry_column:
-                # select overall extent
-                geom_sql += (
-                    ', ST_Extent(%s) OVER () AS _overall_bbox_' %
-                    self.transform_geom_sql('"{geom}"', self.srid, srid)
-                )
-
         sql = sql_text(("""
             SELECT {columns}%s
             FROM {table} __J0
@@ -190,8 +188,8 @@ class DatasetFeaturesProvider():
             {where_clause}
             {order_clause};
         """ % geom_sql).format(
-            columns=columns, geom=self.geometry_column, table=self.table,
-            join_query=join_query, where_clause=where_clause, order_clause=order_clause
+            columns=columns, table=self.table, join_query=join_query,
+            where_clause=where_clause, order_clause=order_clause
         ))
 
         self.logger.debug(f"index query: {sql}")
@@ -288,7 +286,10 @@ class DatasetFeaturesProvider():
         if self.datasource_filter:
             where_clause = "AND (" + self.datasource_filter + ")"
 
-        geom_sql = self.geom_column_sql(srid)
+        geom_sql = ""
+        if self.geometry_column:
+            geom_sql = self.geom_column_sql(f'__J0."{self.geometry_column}"', srid)
+
         sql = sql_text(("""
             SELECT {columns}%s
             FROM {table} __J0
@@ -296,8 +297,8 @@ class DatasetFeaturesProvider():
             WHERE __J0.{pkey} = :id {where_clause}
             LIMIT 1;
         """ % geom_sql).format(
-            columns=columns, geom=self.geometry_column, table=self.table,
-            pkey=self.primary_key, join_query=join_query, where_clause=where_clause
+            columns=columns, table=self.table, pkey=self.primary_key,
+            join_query=join_query, where_clause=where_clause
         ))
         params = {"id": id}
 
@@ -325,8 +326,9 @@ class DatasetFeaturesProvider():
         srid = sql_params['client_srid']
         columns, join_query = self.__prepare_columns_and_join_query()
 
-        geom_sql = self.geom_column_sql(srid, True)
-        if geom_sql:
+        geom_sql = ""
+        if self.geometry_column:
+            geom_sql = self.geom_column_sql(f'"{self.geometry_column}"', srid, True)
             columns += ", _json_geom_, _bbox_"
 
         # connect to database
@@ -343,7 +345,6 @@ class DatasetFeaturesProvider():
                 table=self.table, insert_columns=sql_params['columns'],
                 values_sql=sql_params['values_sql'],
                 return_columns=sql_params['return_columns'],
-                geom=self.geometry_column,
                 columns=columns,
                 join_query=join_query
             ))
@@ -372,8 +373,9 @@ class DatasetFeaturesProvider():
         srid = sql_params['client_srid']
         columns, join_query = self.__prepare_columns_and_join_query()
 
-        geom_sql = self.geom_column_sql(srid, True)
-        if geom_sql:
+        geom_sql = ""
+        if self.geometry_column:
+            geom_sql = self.geom_column_sql(f'"{self.geometry_column}"', srid, True)
             columns += ", _json_geom_, _bbox_"
 
         # connect to database
@@ -391,7 +393,6 @@ class DatasetFeaturesProvider():
                 table=self.table, update_columns=sql_params['columns'],
                 values_sql=sql_params['values_sql'], pkey=self.primary_key,
                 return_columns=sql_params['return_columns'],
-                geom=self.geometry_column,
                 columns=columns,
                 join_query=join_query
             ))
@@ -1046,27 +1047,24 @@ class DatasetFeaturesProvider():
             '"%s"' % column for column in columns
         ]
 
-    def geom_column_sql(self, srid, with_bbox=True):
+    def geom_column_sql(self, geom_column, srid, with_bbox=True):
         """Generate SQL fragment for GeoJSON of transformed geometry
-        as additional GeoJSON column '_json_geom_' and optional Box2D '_bbox_',
-        or empty string if dataset has no geometry.
+        as additional GeoJSON column '_json_geom_' and optional Box2D '_bbox_'.
 
+        :param str geom_column: The geometry column
         :param str target_srid: Target SRID
         :param bool with_bbox: Whether to add bounding boxes for each feature
                                (default: True)
         """
-        geom_sql = ""
-
-        if self.geometry_column:
-            transform_geom_sql = self.transform_geom_sql(
-                '"{geom}"', self.srid, srid
-            )
-            # add GeoJSON column
-            geom_sql = ", ST_AsGeoJSON(ST_CurveToLine(%s)) AS _json_geom_" \
-                       % transform_geom_sql
-            if with_bbox:
-                # add Box2D column
-                geom_sql += ", Box2D(%s) AS _bbox_" % transform_geom_sql
+        transform_geom_sql = self.transform_geom_sql(
+            geom_column, self.srid, srid
+        )
+        # add GeoJSON column
+        geom_sql = ", ST_AsGeoJSON(ST_CurveToLine(%s)) AS _json_geom_" \
+                    % transform_geom_sql
+        if with_bbox:
+            # add Box2D column
+            geom_sql += ", Box2D(%s) AS _bbox_" % transform_geom_sql
 
         return geom_sql
 
@@ -1179,27 +1177,23 @@ class DatasetFeaturesProvider():
 
         placeholder_names = list(bound_values.keys())
 
-        # columns for permitted attributes
-        columns = (', ').join(self.escape_column_names(attribute_columns))
-
         srid = None
         if self.geometry_column:
             if 'geometry' in feature:
                 if feature['geometry'] is not None:
                     # get geometry value as GeoJSON string
-                    bound_values[self.geometry_column] = json.dumps(
+                    bound_values["__geom"] = json.dumps(
                         feature['geometry']
                     )
                 else:
                     # geometry is NULL
-                    bound_values[self.geometry_column] = None
+                    bound_values["__geom"] = None
 
                 # columns for permitted attributes and geometry
-                columns = (', ').join(
-                    self.escape_column_names(
-                        attribute_columns + [self.geometry_column]
-                    )
-                )
+                attribute_columns.append(self.geometry_column)
+
+            # columns for permitted attributes
+            columns = (', ').join(self.escape_column_names(attribute_columns))
 
             # get client SRID from GeoJSON CRS
             if 'crs' not in feature:
@@ -1220,9 +1214,9 @@ class DatasetFeaturesProvider():
         if self.geometry_column and 'geometry' in feature:
             # build geometry from GeoJSON, transformed to dataset CRS
             geometry_value = self.transform_geom_sql(
-                "ST_SetSRID(ST_GeomFromGeoJSON(:{geom}), {srid})", srid,
+                "ST_SetSRID(ST_GeomFromGeoJSON(:__geom), {srid})", srid,
                 self.srid
-            ).format(geom=self.geometry_column, srid=srid)
+            ).format(srid=srid)
             bound_columns += [geometry_value]
         values_sql = (', ').join(bound_columns)
 
