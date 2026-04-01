@@ -368,7 +368,7 @@ class DatasetFeaturesProvider():
         :param object feature: GeoJSON Feature
         """
         # build query SQL
-        sql_params = self.sql_params_for_feature(feature)
+        sql_params = self.sql_params_for_feature(feature, True)
         srid = sql_params['client_srid']
         columns, join_query = self.__prepare_columns_and_join_query()
 
@@ -1141,11 +1141,12 @@ class DatasetFeaturesProvider():
             'bbox': bbox
         }
 
-    def sql_params_for_feature(self, feature):
+    def sql_params_for_feature(self, feature, is_update = False):
         """Build SQL fragments and values for feature INSERT or UPDATE and
         get client SRID from GeoJSON CRS.
 
         :param object feature: GeoJSON Feature
+        :param bool is_update: Whether params for an UPDATE should be gathered
         """
 
         # get permitted attribute values
@@ -1159,6 +1160,8 @@ class DatasetFeaturesProvider():
 
         for attr in self.attributes:
             if attr in feature['properties']:
+                if is_update and attr == self.primary_key:
+                    continue
                 if attr in defaultedProperties:
                     defaulted_attribute_columns.append(attr)
                     continue
