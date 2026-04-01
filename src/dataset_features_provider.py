@@ -89,6 +89,16 @@ class DatasetFeaturesProvider():
         """Return whether dataset can be deleted."""
         return self.__deletable
 
+    def __apply_table_alias(self, sql):
+        """Replace the table defined by schema and name with the alias __J0 in a SQL string.
+
+        :param str sql: SQL string
+        """
+        if not sql:
+            return sql
+
+        return sql.replace(self.table + ".", "__J0.")
+
     def index(self, bbox, client_srid, filterexpr, filter_geom, filter_fields, limit=None, offset=None, sortby=None):
         """Find features inside bounding box.
 
@@ -113,8 +123,7 @@ class DatasetFeaturesProvider():
         params = {}
 
         if self.datasource_filter:
-            where_clauses.append(self.datasource_filter)
-
+            where_clauses.append(self.__apply_table_alias(self.datasource_filter))
         if self.geometry_column and bbox is not None:
             # bbox filter
             bbox_geom_sql = self.transform_geom_sql("""
@@ -286,7 +295,7 @@ class DatasetFeaturesProvider():
 
         where_clause = ""
         if self.datasource_filter:
-            where_clause = "AND (" + self.datasource_filter + ")"
+            where_clause = "AND (" + self.__apply_table_alias(self.datasource_filter) + ")"
 
         geom_sql = self.geom_column_sql(srid)
         sql = sql_text(("""
