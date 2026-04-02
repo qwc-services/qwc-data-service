@@ -147,7 +147,7 @@ class DatasetFeaturesProvider():
                 params.update({"filter_geom": filter_geom})
 
         if self.datasource_filter:
-            where_clauses.append(self.datasource_filter)
+            where_clauses.append(self.datasource_filter.replace(self.table + ".", "__J0."))
 
         if filterexpr is not None and filterexpr[0]:
             where_clauses.append(filterexpr[0])
@@ -284,7 +284,7 @@ class DatasetFeaturesProvider():
 
         where_clause = ""
         if self.datasource_filter:
-            where_clause = "AND (" + self.datasource_filter + ")"
+            where_clause = "AND (" + self.datasource_filter.replace(self.table + ".", "__J0.") + ")"
 
         geom_sql = ""
         if self.geometry_column:
