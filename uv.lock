@@ -462,7 +462,7 @@ wheels = [
 
 [[package]]
 name = "qwc-data-service"
-version = "2026.4.2"
+version = "2026.4.11"
 source = { virtual = "." }
 dependencies = [
     { name = "clamd" },
