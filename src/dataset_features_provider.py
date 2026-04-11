@@ -1192,9 +1192,6 @@ class DatasetFeaturesProvider():
                 # columns for permitted attributes and geometry
                 attribute_columns.append(self.geometry_column)
 
-            # columns for permitted attributes
-            columns = (', ').join(self.escape_column_names(attribute_columns))
-
             # get client SRID from GeoJSON CRS
             if 'crs' not in feature:
                 srid = self.srid
@@ -1205,6 +1202,9 @@ class DatasetFeaturesProvider():
                     srid = 4326
                 else:
                     srid = int(srid)
+
+        # columns for permitted attributes
+        columns = (', ').join(self.escape_column_names(attribute_columns))
 
         # use bound parameters for attribute values and geometry
         # e.g. ['name'] + 'geom'
