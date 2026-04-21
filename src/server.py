@@ -599,11 +599,13 @@ class CreateFeatureMultipart(Resource):
             relationValues = data_service.write_relation_values(get_identity(), result['feature']['id'], feature.get('relationValues', {}), request.files, translator, True)
             # Requery feature because the write_relation_values may change the feature through DB triggers
             crs = feature['crs']['properties']['name'] if feature.get('crs') else None
-            result = data_service.show(get_identity(), translator, dataset, result['feature']['id'], crs)
-            if 'error' not in result:
-                feature = result['feature']
-                feature['relationValues'] = relationValues
-                return feature, 201
+            show_result = data_service.show(get_identity(), translator, dataset, result['feature']['id'], crs)
+            # NOTE: in a corner case of a dataset with a datasource filter expression, it may be that the new feature is excluded
+            # by the filter depending on the set attribute values. In this case, show will return an error (feature not found).
+            # In this case, just return the feature returned by create instead
+            feature = show_result['feature'] if 'error' not in show_result else result['feature']
+            feature['relationValues'] = relationValues
+            return feature, 201
 
         error_code = result.get('error_code') or 404
         error_details = result.get('error_details') or {}
@@ -658,11 +660,13 @@ class EditFeatureMultipart(Resource):
             relationValues = data_service.write_relation_values(get_identity(), result['feature']['id'], feature.get('relationValues', {}), request.files, translator)
             # Requery feature because the write_relation_values may change the feature through DB triggers
             crs = feature['crs']['properties']['name'] if feature.get('crs') else None
-            result = data_service.show(get_identity(), translator, dataset, id, crs)
-            if 'error' not in result:
-                feature = result['feature']
-                feature['relationValues'] = relationValues
-                return feature
+            show_result = data_service.show(get_identity(), translator, dataset, id, crs)
+            # NOTE: in a corner case of a dataset with a datasource filter expression, it may be that the new feature is excluded
+            # by the filter depending on the set attribute values. In this case, show will return an error (feature not found).
+            # In this case, just return the feature returned by update instead
+            feature = show_result['feature'] if 'error' not in show_result else result['feature']
+            feature['relationValues'] = relationValues
+            return feature
 
         error_code = result.get('error_code') or 404
         error_details = result.get('error_details') or {}
