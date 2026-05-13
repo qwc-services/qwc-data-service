@@ -1012,7 +1012,7 @@ class DatasetFeaturesProvider():
         :param list(str) columns: Column names
         """
         return [
-            '"%s"' % column for column in columns
+            '"%s"' % column.replace('"', '""') for column in columns
         ]
 
     def geom_column_sql(self, srid, with_bbox=True):
