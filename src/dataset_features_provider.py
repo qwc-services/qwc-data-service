@@ -441,13 +441,11 @@ class DatasetFeaturesProvider():
         self.logger.debug(f"params: {params}")
 
         # connect to database
+        success = False
         with self.db_write.begin() as conn:
             # execute query
-            success = False
             result = conn.execute(sql, params)
-            if result.one_or_none():
-                # NOTE: result is empty if not found
-                success = True
+            success = result.rowcount == 1
 
         return success
 
