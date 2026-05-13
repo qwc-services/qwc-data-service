@@ -445,7 +445,8 @@ class DataService():
                 elif rel_feature_status == "changed":
                     result = self.update(identity, translator, rel_table, rel_feature["id"], rel_feature, files)
                 elif rel_feature_status.startswith("deleted"):
-                    result = self.destroy(identity, translator, rel_table, rel_feature["id"], '"%s" = :fk' % fk_field.replace('"', '""'), {"fk": fk})
+                    self.destroy(identity, translator, rel_table, rel_feature["id"], '"%s" = :fk' % fk_field.replace('"', '""'), {"fk": fk})
+                    result = {}
                 else:
                     continue
                 if "error" in result:
