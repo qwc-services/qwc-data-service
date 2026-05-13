@@ -413,23 +413,29 @@ class DatasetFeaturesProvider():
 
         return feature
 
-    def destroy(self, id):
+    def destroy(self, id, extra_where_clause=None, extra_where_params=None):
         """Delete a feature.
 
         :param int id: Dataset feature ID
+        :param str extra_where_clause: Extra where clause
+        :param dict extra_where_params: Extra params used in the where clause
         """
+
+        params = {"id": id}
 
         where_clause = ""
         if self.datasource_filter:
-            add_where_clause = "AND (" + self.datasource_filter + ")"
+            add_where_clause = " AND (" + self.datasource_filter + ")"
+        if extra_where_clause:
+            where_clause += " AND " + extra_where_clause
+            params.update(extra_where_params)
 
         # build query SQL
         sql = sql_text("""
             DELETE FROM {table}
-            WHERE "{pkey}" = :id {where_clause}
+            WHERE "{pkey}" = :id{where_clause}
             RETURNING "{pkey}";
         """.format(table=self.table, pkey=self.primary_key, where_clause=where_clause))
-        params = {"id": id}
 
         self.logger.debug(f"destroy query: {sql}")
         self.logger.debug(f"params: {params}")

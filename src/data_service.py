@@ -287,13 +287,15 @@ class DataService():
         else:
             return {'error': translator.tr("error.feature_not_found")}
 
-    def destroy(self, identity, translator, dataset, id):
+    def destroy(self, identity, translator, dataset, id, extra_where_clause=None, extra_where_params=None):
         """Delete a dataset feature.
 
         :param str|obj identity: User identity
         :param object translator: Translator
         :param str dataset: Dataset ID
         :param int id: Dataset feature ID
+        :param str extra_where_clause: Extra where clause
+        :param dict extra_where_params: Extra params used in the where clause
         """
         dataset_features_provider = self.dataset_features_provider(
             identity, translator, dataset, False
@@ -310,7 +312,7 @@ class DataService():
 
         show_result = self.show(identity, translator, dataset, id, None)
 
-        if not dataset_features_provider.destroy(id):
+        if not dataset_features_provider.destroy(id, extra_where_clause, extra_where_params):
             return {'error': translator.tr("error.feature_not_found")}
 
         # cleanup attachments
@@ -391,7 +393,7 @@ class DataService():
                 elif rel_feature_status == "changed":
                     result = self.update(identity, translator, rel_table, rel_feature["id"], rel_feature, files)
                 elif rel_feature_status.startswith("deleted"):
-                    result = self.destroy(identity, translator, rel_table, rel_feature["id"])
+                    result = self.destroy(identity, translator, rel_table, rel_feature["id"], '"%s" = :fk' % fk_field.replace('"', '""'), {"fk": fk})
                 else:
                     continue
                 if "error" in result:
