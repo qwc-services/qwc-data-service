@@ -345,7 +345,6 @@ class FeatureCollection(Resource):
     @api.response(405, 'Dataset not creatable')
     @api.response(422, 'Feature validation failed', feature_validation_response)
     @api.expect(geojson_feature_request)
-    @api.marshal_with(geojson_feature(True), code=201)
     @optional_auth
     def post(self, dataset):
         """Create a new dataset feature
@@ -373,10 +372,11 @@ class FeatureCollection(Resource):
                             error_details = result.get('error_details') or {}
                             api.abort(error_code, result['error'], **error_details)
                         results.append(result['feature'])
-                    return {
+                    app.logger.debug(f"full results /{results}/")
+                    return marshal({
                         'type': 'FeatureCollection',
                         'features': results
-                    }, 201
+                    }, geojson_feature_collection), 201
                 else:
                     # Single feature
                     feature = payload
