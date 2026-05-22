@@ -370,9 +370,9 @@ class FeatureCollection(Resource):
                         if 'error' in result:
                             error_code = result.get('error_code') or 404
                             error_details = result.get('error_details') or {}
+                            error_details['created_features'] = results
                             api.abort(error_code, result['error'], **error_details)
                         results.append(result['feature'])
-                    app.logger.debug(f"full results /{results}/")
                     return marshal({
                         'type': 'FeatureCollection',
                         'features': results
