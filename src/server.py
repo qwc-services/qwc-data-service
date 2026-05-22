@@ -358,18 +358,36 @@ class FeatureCollection(Resource):
 
         if request.is_json:
             # parse request data (NOTE: catches invalid JSON)
-            feature = api.payload
-            if isinstance(feature, dict):
+            payload = api.payload
+            if isinstance(payload, dict):
                 data_service = data_service_handler()
-
-                result = data_service.create(
-                    get_identity(), translator, dataset, feature)
-                if 'error' not in result:
-                    return result['feature'], 201
+                if payload.get('type') == 'FeatureCollection':
+                    # Feature collection
+                    features = payload.get('features', [])
+                    results = []
+                    for feature in features:
+                        result = data_service.create(
+                            get_identity(), translator, dataset, feature)
+                        if 'error' in result:
+                            error_code = result.get('error_code') or 404
+                            error_details = result.get('error_details') or {}
+                            api.abort(error_code, result['error'], **error_details)
+                        results.append(result['feature'])
+                    return {
+                        'type': 'FeatureCollection',
+                        'features': results
+                    }, 201
                 else:
-                    error_code = result.get('error_code') or 404
-                    error_details = result.get('error_details') or {}
-                    api.abort(error_code, result['error'], **error_details)
+                    # Single feature
+                    feature = payload
+                    result = data_service.create(
+                        get_identity(), translator, dataset, feature)
+                    if 'error' not in result:
+                        return result['feature'], 201
+                    else:
+                        error_code = result.get('error_code') or 404
+                        error_details = result.get('error_details') or {}
+                        api.abort(error_code, result['error'], **error_details)
             else:
                 api.abort(400, translator.tr("error.json_is_not_an_object"))
         else:
