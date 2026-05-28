@@ -32,6 +32,7 @@
   },
   "validation": {
     "geojson_must_be_feature": "GeoJSON deve essere di tipo Feature",
+    "geojson_must_be_featurecollection": "GeoJSON deve essere di tipo FeatureCollection",
     "missing_geojson_geom": "Geometria GeoJSON mancante",
     "geom_not_null": "La geometria non può essere NULL",
     "invalid_geojson_geom": "Geometria GeoJSON non valida",

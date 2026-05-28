@@ -551,6 +551,50 @@ class Feature(Resource):
             error_code = result.get('error_code') or 404
             api.abort(error_code, result['error'])
 
+@api.route('/<path:dataset>/featurecollection')
+@api.response(400, 'Bad request')
+@api.response(404, 'Dataset not found or permission error')
+@api.param('dataset', 'Dataset ID')
+class CreateFeatureCollection(Resource):
+    @api.doc('create')
+    @api.response(405, 'Dataset not creatable')
+    @api.response(422, 'Feature validation failed', feature_validation_response)
+    @api.expect(geojson_feature_request)
+    @api.marshal_with(geojson_feature_collection, code=201)
+    @optional_auth
+    def post(self, dataset):
+        """Create new dataset features
+
+        Create new dataset features from a GeoJSON FeatureCollection and return it as a
+        GeoJSON FeatureCollection.
+        """
+        app.logger.debug(f"Processing POST (create) on /{dataset}/featurecollection")
+        translator = Translator(app, request)
+
+        if not request.is_json:
+            api.abort(400, translator.tr("error.request_data_is_not_json"))
+        payload = api.payload
+        if not isinstance(payload, dict):
+            api.abort(400, translator.tr("error.json_is_not_an_object"))
+        if not payload.get('type') == 'FeatureCollection':
+            api.abort(400, translator.tr("error.geojson_must_be_featurecollection"))
+        data_service = data_service_handler()
+        features = payload.get('features', [])
+        created_features = []
+        for feature in features:
+            result = data_service.create(
+                get_identity(), translator, dataset, feature)
+            if 'error' in result:
+                error_code = result.get('error_code') or 404
+                error_details = result.get('error_details') or {}
+                error_details['created_features'] = created_features
+                api.abort(error_code, result['error'], **error_details)
+            created_features.append(result['feature'])
+        return {
+            'type': 'FeatureCollection',
+            'features': created_features
+        } ,201
+
 
 @api.route('/<path:dataset>/multipart')
 @api.response(400, 'Bad request')
