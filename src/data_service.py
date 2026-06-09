@@ -339,10 +339,10 @@ class DataService():
 
         return dataset_features_provider.exists(id)
 
-    def write_relation_values(self, identity, fk, relationValues, uploadfiles, translator, force_fk=False):
+    def write_relation_values(self, identity, parent_feature, relationValues, uploadfiles, translator, force_fk=False):
         """ Write relation values.
         :param object identity: User identity
-        :param int fk: Dataset foreign key ID
+        :param object parent_feature: Parent feature
         :param object relationValues: Relation values
         :param object uploadfiles: Upload files
         :param object translator: Translator
@@ -352,8 +352,11 @@ class DataService():
         haserrors = False
         for (rel_table, rel_data) in relationValues.items():
             fk_field = rel_data.get("fk", None)
+            pk_field = rel_data.get("pk", None)
+            fk = parent_feature["properties"][pk_field] if pk_field else parent_feature["id"]
             ret[rel_table] = {
                 "fk": fk_field,
+                "pk": pk_field,
                 "features": []
             }
             tbl_prefix = rel_table + "__"
@@ -365,6 +368,7 @@ class DataService():
                     rel_feature_status = rel_feature_status or "changed"
 
                 if str(rel_feature['properties'].get(fk_field, None)) != str(fk):
+                    self.logger.debug(f"FK validation failed: relFeature['properties']['{fk_field}'] = {rel_feature['properties'].get(fk_field, None)} != {fk}")
                     rel_feature["error"] = translator.tr("error.fk_validation_failed")
                     ret[rel_table]["features"].append(rel_feature)
                     haserrors = True

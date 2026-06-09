@@ -199,6 +199,7 @@ relation_feature = api.inherit('Relation Feature', geojson_feature(True), {
 
 relation_table_features = create_model(api, 'Relation table features', [
     ['fk', fields.String(required=True, description='Foreign key field name')],
+    ['pk', fields.String(required=True, description='Parent key field name')],
     ['features', fields.List(fields.Nested(relation_feature), required=True, description='Relation features')],
     ['error', fields.Raw(required=False, description='Error details')]
 ])
@@ -640,7 +641,7 @@ class CreateFeatureMultipart(Resource):
             get_identity(), translator, dataset, feature, files
         )
         if 'error' not in result:
-            relationValues = data_service.write_relation_values(get_identity(), result['feature']['id'], feature.get('relationValues', {}), request.files, translator, True)
+            relationValues = data_service.write_relation_values(get_identity(), result['feature'], feature.get('relationValues', {}), request.files, translator, True)
             # Requery feature because the write_relation_values may change the feature through DB triggers
             crs = feature['crs']['properties']['name'] if feature.get('crs') else None
             show_result = data_service.show(get_identity(), translator, dataset, result['feature']['id'], crs)
@@ -701,7 +702,7 @@ class EditFeatureMultipart(Resource):
             get_identity(), translator, dataset, id, feature, files
         )
         if 'error' not in result:
-            relationValues = data_service.write_relation_values(get_identity(), result['feature']['id'], feature.get('relationValues', {}), request.files, translator)
+            relationValues = data_service.write_relation_values(get_identity(), result['feature'], feature.get('relationValues', {}), request.files, translator)
             # Requery feature because the write_relation_values may change the feature through DB triggers
             crs = feature['crs']['properties']['name'] if feature.get('crs') else None
             show_result = data_service.show(get_identity(), translator, dataset, id, crs)
@@ -745,14 +746,15 @@ class AttachmentDownloader(Resource):
 @api.response(404, 'Dataset or feature not found or permission error')
 @api.param('dataset', 'Dataset ID')
 @api.param('id', 'Feature ID')
-class Relations(Resource):
-    @api.doc('get_relations')
+class DatasetRelations(Resource):
+    @api.doc('get_dataset_relations')
     @api.param('tables', 'Comma separated list of relation tables of the form "tablename:fk_field_name"')
+    @api.param('crs', 'The map CRS for the returned geometries')
     @api.expect(get_relations_parser)
     @api.marshal_with(relation_values, code=201)
     @optional_auth
     def get(self, dataset, id):
-        app.logger.debug(f"Processing GET (get_relations) on /{dataset}/{id}/relations")
+        app.logger.debug(f"Processing GET (get_dataset_relations) on /{dataset}/{id}/relations")
         translator = Translator(app, request)
         data_service = data_service_handler()
         args = get_relations_parser.parse_args()
@@ -774,6 +776,49 @@ class Relations(Resource):
             }
             if sortcol:
                 ret[table]['features'].sort(key=lambda f: f["properties"][sortcol])
+            else:
+                ret[table]['features'].sort(key=lambda f: f["id"])
+        return ret
+
+
+@api.route('/relations')
+class Relations(Resource):
+    @api.doc('get_relations')
+    @api.param('tables', 'JSON-Serialized list of the form `[{"table": "<table>", "fk_field": "<fk_field_name>", "fk_val": "<fk_val>", "sort_col": "<sort_col>", "pk_field": "<pk_field>"}]`')
+    @api.expect(get_relations_parser)
+    @api.marshal_with(relation_values, code=201)
+    @optional_auth
+    def get(self):
+        app.logger.debug("Processing GET (get_relations)")
+        translator = Translator(app, request)
+        data_service = data_service_handler()
+        args = get_relations_parser.parse_args()
+        try:
+            relations = json.loads(args['tables'] or [])
+        except:
+            api.abort(400, translator.tr("error.malformed_request"))
+        crs = args['crs'] or None
+        ret = {}
+        for relation in relations:
+            table = relation.get("table")
+            fk_field = relation.get("fkField")
+            pk_field = relation.get("pkField")
+            fk_val = relation.get("fkVal")
+            sort_col = relation.get("sortCol")
+            if not table or not fk_field or not fk_val:
+                app.logger.debug("Skipping incomplete relation entry '%s'" % relation)
+                continue
+            result = data_service.index(
+                get_identity(), translator, table, None, crs, '[["%s", "=", "%s"]]' % (fk_field, fk_val), None, None
+            )
+            ret[table] = {
+                "fk": fk_field,
+                "pk": pk_field,
+                "features": result['feature_collection']['features'] if 'feature_collection' in result else [],
+                "error": result.get('error')
+            }
+            if sort_col and sort_col in f["properties"]:
+                ret[table]['features'].sort(key=lambda f: f["properties"][sort_col])
             else:
                 ret[table]['features'].sort(key=lambda f: f["id"])
         return ret
