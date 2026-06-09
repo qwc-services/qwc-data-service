@@ -825,7 +825,6 @@ class Relations(Resource):
 
 
 @api.route('/keyvals')
-@api.response(404, 'Dataset or feature not found or permission error')
 class KeyValues(Resource):
     @api.doc('get_keyvals')
     @api.param('tables', 'Comma separated list of keyvalue tables of the form "tablename:key_field_name:value_field_name"')
