@@ -1028,6 +1028,7 @@ class DatasetFeaturesProvider():
                 constraints.get('hidden', False) and not feature['properties'].get(attr, None)
             ):
                 if attr in feature['properties']:
+                    self.logger.debug(f"Removing read-only property '{attr}' from feature")
                     # remove read-only property from feature
                     feature['properties'].pop(attr, None)
             elif constraints.get('required', False):
