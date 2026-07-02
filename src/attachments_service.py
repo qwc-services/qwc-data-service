@@ -72,12 +72,12 @@ class AttachmentsService():
         if dataset in self.max_file_size_per_dataset:
             if size > self.max_file_size_per_dataset[dataset]:
                 self.logger.info(
-                    "File too large: %s: %d" % (file.filename, size))
+                    "File too large: %s: %d (maximum for dataset %s: %d)" % (file.filename, size, dataset, self.max_file_size_per_dataset[dataset]))
                 return (False, translator.tr("error.file_too_large"))
         # Global service configuration:
         elif size > self.max_file_size:
             self.logger.info(
-                "File too large: %s: %d" % (file.filename, size))
+                "File too large: %s: %d (maximum: %d) " % (file.filename, size, self.max_file_size))
             return (False, translator.tr("error.file_too_large"))
 
 
