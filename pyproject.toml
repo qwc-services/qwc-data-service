@@ -13,7 +13,7 @@ dependencies = [
     "requests~=2.33.0",
     "SQLAlchemy~=2.0.29",
     "clamd~=1.0.2",
-    "qwc-services-core~=1.5.0"
+    "qwc-services-core~=1.6.0"
 ]
 
 [dependency-groups]

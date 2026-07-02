@@ -5,11 +5,11 @@ import re
 import requests
 
 from flask import Flask, Request as RequestBase, request, jsonify, send_file
-from flask_restx import Api, Resource, fields, reqparse, marshal
+from flask_restx import Resource, fields, reqparse, marshal
 from werkzeug.exceptions import BadRequest
 from werkzeug.datastructures import FileStorage
 
-from qwc_services_core.api import create_model, CaseInsensitiveArgument
+from qwc_services_core.api import Api, create_model, CaseInsensitiveArgument
 from qwc_services_core.auth import auth_manager, optional_auth, get_identity
 from qwc_services_core.runtime_config import RuntimeConfig
 from qwc_services_core.tenant_handler import (
