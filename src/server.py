@@ -407,19 +407,9 @@ class FeatureCollectionExtent(Resource):
         Return the extend of the features matching any specified filter as a
         `[xmin,ymin,xmax,ymax]` array.
         """
-        app.logger.debug(f"Processing GET (index) on /{dataset}/extent")
-        translator = Translator(app, request)
-        args = index_parser.parse_args()
-        crs = args['crs']
-        filterexpr = args['filter']
-        filter_geom = args['filter_geom']
-
-        data_service = data_service_handler()
-        result = data_service.index(
-            get_identity(), translator, dataset, None, crs, filterexpr, filter_geom, ["geometry"]
-        )
+        result = FeatureCollection(api).get(dataset)
         if 'error' not in result:
-            return {'bbox': result['feature_collection']['bbox']}
+            return {'bbox': result['bbox']}
         else:
             error_code = result.get('error_code') or 404
             api.abort(error_code, result['error'])
