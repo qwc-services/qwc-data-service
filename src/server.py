@@ -116,14 +116,8 @@ class KeepEmptyDict(fields.Nested):
             return {}
         return super().output(key, obj, **kwargs)
 
-# Api models
-extent_response = create_model(api, 'BBOX', [
-    ['bbox', fields.Raw(required=True, allow_null=True,
-                        description=(
-                            'Extent of feature as [minx, miny, maxx, maxy]'
-                        ),
-                        example=[950598.0, 6003950.0, 950758.0, 6004010.0])]
-])
+
+### Api models
 
 geojson_crs_properties = create_model(api, 'CRS Properties', [
     ['name', fields.String(required=True, description='OGC CRS URN',
@@ -149,15 +143,13 @@ geojson_feature = lambda with_bbox_and_crs: create_model(api, 'Feature', [
     ['type', fields.String(required=True, description='Feature',
                            example='Feature')],
     ['id', FeatureId(required=True, description='Feature ID',
-                          example=123)],
+                     example=123)],
     ['geometry', fields.Nested(geojson_geometry, required=False,
                                allow_null=True,
                                description='Feature geometry')],
     ['properties', fields.Raw(required=True,
-                                     description='Feature properties',
-                                     example={'name': 'Example', 'type': 2,
-                                              'num': 4}
-                                     )]
+                              description='Feature properties',
+                              example={'name': 'Example', 'type': 2, 'num': 4})]
 ] + ([
     ['crs', fields.Nested(geojson_crs, required=False, allow_null=True,
                           description='Coordinate reference system')],
@@ -168,7 +160,7 @@ geojson_feature = lambda with_bbox_and_crs: create_model(api, 'Feature', [
                         example=[950598.0, 6003950.0, 950758.0, 6004010.0])]
 ] if with_bbox_and_crs else []))
 
-geojson_feature_request = api.inherit('Relation Feature', geojson_feature(True), {
+geojson_feature_request = api.inherit('Feature', geojson_feature(True), {
     'defaultedProperties': fields.List(fields.String, required=False)
 })
 
@@ -180,9 +172,9 @@ geojson_feature_collection = create_model(api, 'FeatureCollection', [
     ['crs', fields.Nested(geojson_crs, required=False, allow_null=True,
                           description='Coordinate reference system')],
     ['numberMatched', fields.Integer(required=False, allow_null=True,
-                          description='Number of matched features')],
+                                     description='Number of matched features')],
     ['numberReturned', fields.Integer(required=False, allow_null=True,
-                          description='Number of returned features')],
+                                      description='Number of returned features')],
     ['bbox', fields.Raw(required=False, allow_null=True,
                         description=(
                             'Extent of features as [minx, miny, maxx, maxy]'
@@ -197,24 +189,24 @@ relation_feature = api.inherit('Relation Feature', geojson_feature(True), {
     'error_details': fields.Raw(required=False, description='Commit error details properties')
 })
 
-relation_table_features = create_model(api, 'Relation table features', [
+relation_table_features = create_model(api, 'Relation features', [
     ['fk', fields.String(required=True, description='Foreign key field name')],
     ['pk', fields.String(required=True, description='Parent key field name')],
     ['features', fields.List(fields.Nested(relation_feature), required=True, description='Relation features')],
     ['error', fields.Raw(required=False, description='Error details')]
 ])
 
-relation_values = create_model(api, 'Relation values', [
-    ['*', fields.Wildcard(fields.Nested(relation_table_features, required=False, description='Relation table features'))]
+relation_values = create_model(api, 'Relations features', [
+    ['*', fields.Wildcard(fields.Nested(relation_table_features, required=False, description='Relations features'))]
 ])
 
 geojson_feature_with_relvals = api.inherit('Feature with relation values', geojson_feature(True), {
     'relationValues': KeepEmptyDict(relation_values,
-                                     required=False,
-                                     description='Relation table entry')
+                                    required=False,
+                                    description='Relation table entry')
 })
 
-# keyvals response
+# Keyvals
 keyval_records = create_model(api, 'Keyval table record', [
     ['key', fields.Raw(required=True, description='Key')],
     ['value', fields.String(required=True, description='Value')]
@@ -222,22 +214,29 @@ keyval_records = create_model(api, 'Keyval table record', [
 
 keyvals_table_entry = create_model(api, 'Keyvals table entry', [
     ['*',  fields.Wildcard(fields.List(fields.Nested(keyval_records),
-                      required=False, description='Keyval records'))]
+                           required=False, description='Keyval records'))]
 ])
 
 keyvals_response = create_model(api, 'Keyval relation values', [
     ['keyvalues', fields.Nested(keyvals_table_entry,
-                                     required=True,
-                                     description='Keyval table entry')]
+                                required=True,
+                                description='Keyval table entry')]
 ])
 
-# message response
+# Extent
+extent_response = create_model(api, 'BBOX', [
+    ['bbox', fields.List(fields.Float, required=True, allow_null=True,
+                         description="Extent of feature as [minx, miny, maxx, maxy]",
+                         example=[950598.0, 6003950.0, 950758.0, 6004010.0])]
+])
+
+# Message response
 message_response = create_model(api, 'Message', [
     ['message', fields.String(required=True, description='Response message',
                               example='Dataset feature deleted')]
 ])
 
-# feature validation error response
+# Feature validation error response
 geometry_error = create_model(api, 'Geometry error', [
     ['reason', fields.String(required=True, description='Description',
                              example='Self-intersection')],
@@ -257,7 +256,8 @@ feature_validation_response = create_model(api, 'Feature validation error', [
 ])
 
 
-# request parser
+### Request parsers
+
 index_parser = reqparse.RequestParser(argument_class=CaseInsensitiveArgument)
 index_parser.add_argument('bbox')
 index_parser.add_argument('crs')
@@ -268,31 +268,34 @@ index_parser.add_argument('limit', type=int)
 index_parser.add_argument('offset', type=int)
 index_parser.add_argument('sortby')
 
-feature_multipart_parser = reqparse.RequestParser(argument_class=CaseInsensitiveArgument)
-feature_multipart_parser.add_argument('feature', help='Feature', required=True, location='form')
-feature_multipart_parser.add_argument('file_document', help='File attachments', type=FileStorage, location='files')
-feature_multipart_parser.add_argument('g-recaptcha-response', help="Recaptcha response", location='form')
-
 show_parser = reqparse.RequestParser(argument_class=CaseInsensitiveArgument)
 show_parser.add_argument('crs')
 show_parser.add_argument('fields')
 
-keyvals_parser = reqparse.RequestParser(argument_class=CaseInsensitiveArgument)
-keyvals_parser.add_argument('key')
-keyvals_parser.add_argument('value')
-keyvals_parser.add_argument('filter')
+feature_multipart_parser = reqparse.RequestParser(argument_class=CaseInsensitiveArgument)
+feature_multipart_parser.add_argument('feature', help='The GeoJSON serialized feature', required=True, location='form')
+feature_multipart_parser.add_argument('file_document', help='File attachments', type=FileStorage, location='files')
+feature_multipart_parser.add_argument('g-recaptcha-response', help="Recaptcha response", location='form')
 
-# attachment
 get_attachment_parser = reqparse.RequestParser(argument_class=CaseInsensitiveArgument)
 get_attachment_parser.add_argument('file', required=True)
 
-# Relations
 get_relations_parser = reqparse.RequestParser(argument_class=CaseInsensitiveArgument)
 get_relations_parser.add_argument('tables', required=True)
 get_relations_parser.add_argument('crs')
-get_relations_parser.add_argument('filter')
 
-# routes
+keyvals_parser = reqparse.RequestParser(argument_class=CaseInsensitiveArgument)
+keyvals_parser.add_argument('tables', required=True)
+keyvals_parser.add_argument('filter')
+
+dataset_keyvals_parser = reqparse.RequestParser(argument_class=CaseInsensitiveArgument)
+dataset_keyvals_parser.add_argument('key', required=True)
+dataset_keyvals_parser.add_argument('value', required=True)
+dataset_keyvals_parser.add_argument('filter', required=True)
+
+
+### Routes
+
 @api.route('/<path:dataset>/')
 @api.response(400, 'Bad request')
 @api.response(404, 'Dataset not found or permission error')
@@ -382,22 +385,27 @@ class FeatureCollection(Resource):
 @api.response(404, 'Dataset not found or permission error')
 @api.param('dataset', 'Dataset ID')
 class FeatureCollectionExtent(Resource):
-    @api.doc('index')
+    @api.doc('extent')
     @api.response(405, 'Dataset not readable')
+    @api.param('bbox', 'Bounding box as `<minx>,<miny>,<maxx>,<maxy>`')
     @api.param('crs', 'Client coordinate reference system, e.g. `EPSG:3857`')
     @api.param(
         'filter', 'JSON serialized array of filter expressions: '
         '`[["<name>", "<op>", <value>],"and|or",["<name>","<op>",<value>]]`')
     @api.param(
         'filter_geom', 'GeoJSON serialized geometry, used as intersection geometry filter')
+    @api.param('fields', 'Comma separated list of field names to return')
+    @api.param('limit', 'Feature count limit')
+    @api.param('offset', 'Feature count offset')
+    @api.param('sortby', 'Feature sort order, as a comma separated list `(-)field1,(-)field2,...`')
     @api.expect(index_parser)
     @api.marshal_with(extent_response)
     @optional_auth
     def get(self, dataset):
-        """Get dataset features
+        """Get extent of dataset features
 
         Return the extend of the features matching any specified filter as a
-        [xmin,ymin,xmax,ymax] array.
+        `[xmin,ymin,xmax,ymax]` array.
         """
         app.logger.debug(f"Processing GET (index) on /{dataset}/extent")
         translator = Translator(app, request)
@@ -415,45 +423,6 @@ class FeatureCollectionExtent(Resource):
         else:
             error_code = result.get('error_code') or 404
             api.abort(error_code, result['error'])
-
-
-@api.route('/<path:dataset>/keyvals')
-@api.response(404, 'Dataset or feature not found or permission error')
-class KeyValues(Resource):
-    @api.doc('dataset_keyvals')
-    @api.param('key', 'Key field name')
-    @api.param('value', 'Value field name')
-    @api.param(
-        'filter', 'JSON serialized filter expression: `[["<name>", "<op>", <value>],"and|or",["<name>","<op>",<value>]]`')
-    @api.expect(keyvals_parser)
-    @optional_auth
-    def get(self, dataset):
-        app.logger.debug(f"Processing GET (dataset_keyvals) on /{dataset}/keyvals")
-        translator = Translator(app, request)
-        args = keyvals_parser.parse_args()
-        key_field_name = args['key']
-        value_field_name = args['value']
-        filterexpr = args['filter']
-
-        data_service = data_service_handler()
-
-        natsort = lambda s: [int(t) if t.isdigit() else t.lower() for t in re.split(r'(\d+)', s)]
-
-        result = data_service.index(
-            get_identity(), translator, dataset, None, None, filterexpr, None, [key_field_name, value_field_name]
-        )
-        ret = []
-        if 'feature_collection' in result:
-            entries = {}
-            for feature in result['feature_collection']['features']:
-                key = feature["id"] if key_field_name == "id" else feature['properties'][key_field_name]
-                value = str(feature['properties'][value_field_name]).strip()
-                entries[key] = value
-            ret = [{"key": kv[0], "value": kv[1]} for kv in entries.items()]
-            ret.sort(key=lambda record: natsort(record["value"]))
-        elif 'error' in result:
-            app.logger.debug(f"Failed to query relation values for {dataset}:{key_field_name}:{value_field_name}: {result['error']}")
-        return ret
 
 
 @api.route('/<path:dataset>/<id>')
@@ -552,12 +521,13 @@ class Feature(Resource):
             error_code = result.get('error_code') or 404
             api.abort(error_code, result['error'])
 
+
 @api.route('/<path:dataset>/featurecollection')
 @api.response(400, 'Bad request')
 @api.response(404, 'Dataset not found or permission error')
 @api.param('dataset', 'Dataset ID')
 class CreateFeatureCollection(Resource):
-    @api.doc('create')
+    @api.doc('create_collection')
     @api.response(405, 'Dataset not creatable')
     @api.response(422, 'Feature validation failed', feature_validation_response)
     @api.expect(geojson_feature_request)
@@ -602,7 +572,7 @@ class CreateFeatureCollection(Resource):
 @api.response(404, 'Dataset not found or permission error')
 @api.param('dataset', 'Dataset ID')
 class CreateFeatureMultipart(Resource):
-    @api.doc('create')
+    @api.doc('create_multipart')
     @api.response(405, 'Dataset not creatable')
     @api.response(422, 'Feature validation failed', feature_validation_response)
     @api.expect(feature_multipart_parser)
@@ -662,7 +632,7 @@ class CreateFeatureMultipart(Resource):
 @api.param('dataset', 'Dataset ID')
 @api.param('id', 'Feature ID')
 class EditFeatureMultipart(Resource):
-    @api.doc('update')
+    @api.doc('edit_multipart')
     @api.response(400, 'Bad request')
     @api.response(405, 'Dataset not updatable')
     @api.response(422, 'Feature validation failed', feature_validation_response)
@@ -723,10 +693,11 @@ class EditFeatureMultipart(Resource):
 @api.param('dataset', 'Dataset ID')
 class AttachmentDownloader(Resource):
     @api.doc('get_attachment')
-    @api.param('file', 'The file to download')
+    @api.param('file', 'The attachment path of the file to download')
     @api.expect(get_attachment_parser)
     @optional_auth
     def get(self, dataset):
+        """ Download an attachment """
         app.logger.debug(f"Processing GET (get_attachment) on /{dataset}/attachment")
         translator = Translator(app, request)
         args = get_attachment_parser.parse_args()
@@ -742,53 +713,16 @@ class AttachmentDownloader(Resource):
             api.abort(error_code, result['error'], **error_details)
 
 
-@api.route('/<path:dataset>/<id>/relations')
-@api.response(404, 'Dataset or feature not found or permission error')
-@api.param('dataset', 'Dataset ID')
-@api.param('id', 'Feature ID')
-class DatasetRelations(Resource):
-    @api.doc('get_dataset_relations')
-    @api.param('tables', 'Comma separated list of relation tables of the form "tablename:fk_field_name"')
-    @api.param('crs', 'The map CRS for the returned geometries')
-    @api.expect(get_relations_parser)
-    @api.marshal_with(relation_values, code=201)
-    @optional_auth
-    def get(self, dataset, id):
-        app.logger.debug(f"Processing GET (get_dataset_relations) on /{dataset}/{id}/relations")
-        translator = Translator(app, request)
-        data_service = data_service_handler()
-        args = get_relations_parser.parse_args()
-        relations = args['tables'] or ""
-        crs = args['crs'] or None
-        ret = {}
-        for relation in relations.split(","):
-            try:
-                table, fk_field_name, sortcol = (relation + ":").split(":")[0:3]
-            except:
-                continue
-            result = data_service.index(
-                get_identity(), translator, table, None, crs, '[["%s", "=", "%s"]]' % (fk_field_name, id), None, None
-            )
-            ret[table] = {
-                "fk": fk_field_name,
-                "features": result['feature_collection']['features'] if 'feature_collection' in result else [],
-                "error": result.get('error')
-            }
-            if sortcol:
-                ret[table]['features'].sort(key=lambda f: f["properties"][sortcol])
-            else:
-                ret[table]['features'].sort(key=lambda f: f["id"])
-        return ret
-
-
 @api.route('/relations')
 class Relations(Resource):
     @api.doc('get_relations')
     @api.param('tables', 'JSON-Serialized list of the form `[{"table": "<table>", "fk_field": "<fk_field_name>", "fk_val": "<fk_val>", "sort_col": "<sort_col>", "pk_field": "<pk_field>"}]`')
+    @api.param('crs', 'The map CRS for the returned geometries')
     @api.expect(get_relations_parser)
     @api.marshal_with(relation_values, code=201)
     @optional_auth
     def get(self):
+        """ Query relation values """
         app.logger.debug("Processing GET (get_relations)")
         translator = Translator(app, request)
         data_service = data_service_handler()
@@ -824,20 +758,61 @@ class Relations(Resource):
         return ret
 
 
+@api.route('/<path:dataset>/<id>/relations')
+@api.response(404, 'Dataset or feature not found or permission error')
+@api.param('dataset', 'Dataset ID')
+@api.param('id', 'Feature ID')
+class DatasetRelations(Resource):
+    @api.doc('get_dataset_relations')
+    @api.param('tables', 'Comma separated list of relation tables of the form `tablename:fk_field_name`')
+    @api.param('crs', 'The map CRS for the returned geometries')
+    @api.expect(get_relations_parser)
+    @api.marshal_with(relation_values, code=201)
+    @optional_auth
+    def get(self, dataset, id):
+        """ Query relation values (legacy) """
+        app.logger.debug(f"Processing GET (get_dataset_relations) on /{dataset}/{id}/relations")
+        translator = Translator(app, request)
+        data_service = data_service_handler()
+        args = get_relations_parser.parse_args()
+        relations = args['tables'] or ""
+        crs = args['crs'] or None
+        ret = {}
+        for relation in relations.split(","):
+            try:
+                table, fk_field_name, sortcol = (relation + ":").split(":")[0:3]
+            except:
+                continue
+            result = data_service.index(
+                get_identity(), translator, table, None, crs, '[["%s", "=", "%s"]]' % (fk_field_name, id), None, None
+            )
+            ret[table] = {
+                "fk": fk_field_name,
+                "features": result['feature_collection']['features'] if 'feature_collection' in result else [],
+                "error": result.get('error')
+            }
+            if sortcol:
+                ret[table]['features'].sort(key=lambda f: f["properties"][sortcol])
+            else:
+                ret[table]['features'].sort(key=lambda f: f["id"])
+        return ret
+
+
 @api.route('/keyvals')
 class KeyValues(Resource):
     @api.doc('get_keyvals')
-    @api.param('tables', 'Comma separated list of keyvalue tables of the form "tablename:key_field_name:value_field_name"')
+    @api.param('tables', 'Comma separated list of keyvalue tables of the form `tablename:key_field_name:value_field_name`')
     @api.param(
-        'filter', 'JSON serialized array of filter expressions, the same length as the number of specified tables: '
+        'filter', 'JSON serialized array of filter expressions, the same length as the number of specified tables:'
         '`[[["<name>", "<op>", <value>],"and|or",["<name>","<op>",<value>]], ...]`')
-    @api.expect(get_relations_parser)
+    @api.expect(keyvals_parser)
     @api.marshal_with(keyvals_response, code=201)
     @optional_auth
     def get(self):
+        """ Query key-value pairs of multiple datasets. """
         app.logger.debug(f"Processing GET (get_keyvals) on /keyvals")
         translator = Translator(app, request)
-        args = get_relations_parser.parse_args()
+        args = keyvals_parser.parse_args()
         filterexpr = json.loads(args.get('filter') or "[]")
 
         data_service = data_service_handler()
@@ -866,6 +841,46 @@ class KeyValues(Resource):
             elif 'error' in result:
                 app.logger.debug(f"Failed to query relation values for {keyval}: {result['error']}")
         return {"keyvalues": ret}
+
+
+@api.route('/<path:dataset>/keyvals')
+@api.response(404, 'Dataset or feature not found or permission error')
+class DatasetKeyValues(Resource):
+    @api.doc('dataset_keyvals')
+    @api.param('key', 'Key field name')
+    @api.param('value', 'Value field name')
+    @api.param(
+        'filter', 'JSON serialized filter expression: `[["<name>", "<op>", <value>],"and|or",["<name>","<op>",<value>]]`')
+    @api.expect(dataset_keyvals_parser)
+    @optional_auth
+    def get(self, dataset):
+        """ Query key-value pairs of a dataset. """
+        app.logger.debug(f"Processing GET (dataset_keyvals) on /{dataset}/keyvals")
+        translator = Translator(app, request)
+        args = dataset_keyvals_parser.parse_args()
+        key_field_name = args['key']
+        value_field_name = args['value']
+        filterexpr = args['filter']
+
+        data_service = data_service_handler()
+
+        natsort = lambda s: [int(t) if t.isdigit() else t.lower() for t in re.split(r'(\d+)', s)]
+
+        result = data_service.index(
+            get_identity(), translator, dataset, None, None, filterexpr, None, [key_field_name, value_field_name]
+        )
+        ret = []
+        if 'feature_collection' in result:
+            entries = {}
+            for feature in result['feature_collection']['features']:
+                key = feature["id"] if key_field_name == "id" else feature['properties'][key_field_name]
+                value = str(feature['properties'][value_field_name]).strip()
+                entries[key] = value
+            ret = [{"key": kv[0], "value": kv[1]} for kv in entries.items()]
+            ret.sort(key=lambda record: natsort(record["value"]))
+        elif 'error' in result:
+            app.logger.debug(f"Failed to query relation values for {dataset}:{key_field_name}:{value_field_name}: {result['error']}")
+        return ret
 
 
 """ readyness probe endpoint """
