@@ -291,7 +291,7 @@ keyvals_parser.add_argument('filter')
 dataset_keyvals_parser = reqparse.RequestParser(argument_class=CaseInsensitiveArgument)
 dataset_keyvals_parser.add_argument('key', required=True)
 dataset_keyvals_parser.add_argument('value', required=True)
-dataset_keyvals_parser.add_argument('filter', required=True)
+dataset_keyvals_parser.add_argument('filter', required=False)
 
 
 ### Routes
