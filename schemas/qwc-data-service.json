@@ -113,6 +113,9 @@
               "schema": {
                 "type": "string"
               },
+              "datasource_filter": {
+                "type": "string"
+              },
               "table_name": {
                 "type": "string"
               },
