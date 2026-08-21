@@ -158,7 +158,7 @@ class DatasetFeaturesProvider():
             where_clause = "WHERE (" + ") AND (".join(where_clauses) + ")"
 
 
-        order_clause = ""
+        order_clause = 'ORDER BY "%s"' % self.primary_key
         if sortby:
             order_clause_fragments = []
             for field in sortby.split(","):
