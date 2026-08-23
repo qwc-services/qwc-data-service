@@ -541,7 +541,7 @@ wheels = [
 
 [[package]]
 name = "qwc-data-service"
-version = "2026.8.21"
+version = "2026.8.22"
 source = { virtual = "." }
 dependencies = [
     { name = "clamd" },
@@ -578,11 +578,11 @@ dev = [{ name = "python-dotenv", specifier = ">=1.0.1" }]
 
 [[package]]
 name = "qwc-services-core"
-version = "1.7.0"
+version = "1.7.1"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/14/8b/9d375032431e90c2547417ea89304e0d0d84e73523b7236826a93885eb93/qwc_services_core-1.7.0.tar.gz", hash = "sha256:fd0a01940643466967f7e555b6ffbe4a06974b2f188e8105db03709dd592182a", size = 18476, upload-time = "2026-08-20T14:47:41.783Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/5f/bb/7f91a2d547343ecd47dc35faf8fabf1be17ec8d442b00615494ade5a0350/qwc_services_core-1.7.1.tar.gz", hash = "sha256:a356220f7c1eaca80a64cfa837a3cdd41d99d6ee1fe3e3a69511b182687db7f0", size = 18470, upload-time = "2026-08-23T18:27:46.901Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/c0/9f/a77b4f1652df3e69b5362f4fce5c698e8704e1d5cf4d0126cf6258df43c1/qwc_services_core-1.7.0-py3-none-any.whl", hash = "sha256:e2a8dc68cdeb329ef76525100e3434787c504414b4c836976053d44fb42934e1", size = 18976, upload-time = "2026-08-20T14:47:40.732Z" },
+    { url = "https://files.pythonhosted.org/packages/25/65/03a57ff4395fc4225d80e29a7dcb7b923dc0be633b07286a1af7ad716c38/qwc_services_core-1.7.1-py3-none-any.whl", hash = "sha256:c01b0d25770e6f34006a56b70784eaeef4d724f2d77252b2ac4b213c6f97a364", size = 18981, upload-time = "2026-08-23T18:27:46.033Z" },
 ]
 
 [[package]]

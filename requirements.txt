@@ -387,9 +387,9 @@ pyjwt==2.13.0 \
     --hash=sha256:41571c89ca91598c79e8ef18a2d07367d4810fbbd6f637794879baf1b7703423 \
     --hash=sha256:66adcc2aff09b3f1bbd95fc1e1577df8ac8723c978552fd43304c8a290ac5728
     # via flask-jwt-extended
-qwc-services-core==1.7.0 \
-    --hash=sha256:e2a8dc68cdeb329ef76525100e3434787c504414b4c836976053d44fb42934e1 \
-    --hash=sha256:fd0a01940643466967f7e555b6ffbe4a06974b2f188e8105db03709dd592182a
+qwc-services-core==1.7.1 \
+    --hash=sha256:a356220f7c1eaca80a64cfa837a3cdd41d99d6ee1fe3e3a69511b182687db7f0 \
+    --hash=sha256:c01b0d25770e6f34006a56b70784eaeef4d724f2d77252b2ac4b213c6f97a364
     # via qwc-data-service
 referencing==0.37.0 \
     --hash=sha256:381329a9f99628c9069361716891d34ad94af76e461dcb0335825aecc7692231 \
