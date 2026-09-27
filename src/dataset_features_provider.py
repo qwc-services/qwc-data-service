@@ -72,6 +72,7 @@ class DatasetFeaturesProvider():
         self.__readable = config.get('readable', True)
         self.__updatable = config.get('updatable', self.writable)
         self.__deletable = config.get('deletable', self.writable)
+        self.__geomreadonly = config.get('geomreadonly', False)
 
     def creatable(self):
         """Return whether dataset can be created."""
@@ -1184,7 +1185,7 @@ class DatasetFeaturesProvider():
 
         srid = None
         if self.geometry_column:
-            if 'geometry' in feature:
+            if 'geometry' in feature and not self.__geomreadonly:
                 if feature['geometry'] is not None:
                     # get geometry value as GeoJSON string
                     bound_values["__geom"] = json.dumps(
@@ -1216,7 +1217,7 @@ class DatasetFeaturesProvider():
         #     ==>
         #      ":name, ST_SetSRID(ST_GeomFromGeoJSON(:geom), 2056)"
         bound_columns = [":%s" % placeholder_name for placeholder_name in placeholder_names]
-        if self.geometry_column and 'geometry' in feature:
+        if self.geometry_column and 'geometry' in feature and not self.__geomreadonly:
             # build geometry from GeoJSON, transformed to dataset CRS
             geometry_value = self.transform_geom_sql(
                 "ST_SetSRID(ST_GeomFromGeoJSON(:__geom), {srid})", srid,

@@ -464,6 +464,7 @@ class DataService():
             readable = True
             updatable = False
             deletable = False
+            geomreadonly = True
             permitted_attributes = set(map(lambda field: field["name"], resource['fields']))
 
         else:
@@ -481,6 +482,7 @@ class DataService():
             readable = False
             updatable = False
             deletable = False
+            geomreadonly = True
 
             for permission in resource_permissions:
                 # collect permitted attributes
@@ -492,6 +494,7 @@ class DataService():
                 readable |= permission.get('readable', False)
                 updatable |= permission.get('updatable', False)
                 deletable |= permission.get('deletable', False)
+                geomreadonly &= permission.get('geomreadonly', False)
 
             # make writable consistent with CRUD actions
             writable |= creatable and readable and updatable and deletable
@@ -563,6 +566,7 @@ class DataService():
             "readable": readable,
             "updatable": updatable,
             "deletable": deletable,
+            "geomreadonly": geomreadonly,
             "jointables": resource.get('jointables', {})
         }
 
