@@ -349,7 +349,6 @@ class DataService():
         :param bool force_fk: Force writing foreign key (i.e. if parent feature is newly created)
         """
         ret = {}
-        haserrors = False
         for (rel_table, rel_data) in relationValues.items():
             fk_field = rel_data.get("fk", None)
             pk_field = rel_data.get("pk", None)
@@ -371,7 +370,6 @@ class DataService():
                     self.logger.debug(f"FK validation failed: relFeature['properties']['{fk_field}'] = {rel_feature['properties'].get(fk_field, None)} != {fk}")
                     rel_feature["error"] = translator.tr("error.fk_validation_failed")
                     ret[rel_table]["features"].append(rel_feature)
-                    haserrors = True
                     continue
 
                 # Get record files
@@ -405,7 +403,6 @@ class DataService():
                     rel_feature["error"] = result["error"]
                     rel_feature["error_details"] = result.get('error_details') or {}
                     ret[rel_table]["features"].append(rel_feature)
-                    haserrors = True
                 elif "feature" in result:
                     ret[rel_table]["features"].append(result['feature'])
 
