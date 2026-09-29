@@ -533,7 +533,7 @@ class DatasetFeaturesProvider():
             "=", "!=", "<>", "<", ">", "<=", ">=",
             "~", "LIKE", "ILIKE",
             "IS", "IS NOT",
-            "HAS", "HAS NOT"
+            "HAS", "HAS NOT", "IN"
         ]
         VALUE_TYPES = [int, float, str, type(None), bool]
 
@@ -599,7 +599,11 @@ class DatasetFeaturesProvider():
 
                     # value
                     value = entry[2]
-                    if type(value) not in VALUE_TYPES:
+                    if op == "IN":
+                        if not isinstance(value, list):
+                            errors.append(self.translator.tr("filter.invalid_value_type") % entry)
+                            return
+                    elif type(value) not in VALUE_TYPES:
                         errors.append(self.translator.tr("filter.invalid_value_type") % entry)
                         return
 
@@ -622,13 +626,19 @@ class DatasetFeaturesProvider():
                         pass
                     elif self.fields[column_name].get("data_type") in int_types:
                         try:
-                            value = int(value)
+                            if isinstance(value, list):
+                                value = list(map(int, value))
+                            else:
+                                value = int(value)
                         except:
                             errors.append(self.translator.tr("filter.cannot_cast_int") % column_name)
                             return
                     elif self.fields[column_name].get("data_type") in float_types:
                         try:
-                            value = float(value)
+                            if isinstance(value, list):
+                                value = list(map(float, value))
+                            else:
+                                value = float(value)
                         except:
                             errors.append(self.translator.tr("filter.cannot_cast_float") % column_name)
                             return
@@ -647,8 +657,11 @@ class DatasetFeaturesProvider():
                         # e.g. :v0 = ANY("field")
                         sql.append(':v%d = ANY(%s)' % (idx, column_name))
                     elif op == "HAS NOT":
-                        # e.g. :v0 = ANY("field")
+                        # e.g. :v0 != ALL("field")
                         sql.append(':v%d != ALL(%s)' % (idx, column_name))
+                    elif op == "IN":
+                        # e.g. "field" = ANY(:v0)
+                        sql.append('%s = ANY(:v%d)' % (column_name, idx))
                     else:
                         # e.g. '"field" >= :v0'
                         sql.append('%s %s :v%d' % (column_name, op, idx))
