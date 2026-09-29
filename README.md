@@ -168,13 +168,13 @@ This expression is a serialized JSON array of the format:
 * `name` is the attribute column name. If `name` begins with `?`, the filter is only applied if the column name exists.
 * `op` can be one of
 
-      "=", "!=", "<>", "<", ">", "<=", ">=", "~", "LIKE", "ILIKE", "IS", "IS NOT", "HAS"
+        "=", "!=", "<>", "<", ">", "<=", ">=", "~", "LIKE", "ILIKE", "IS", "IS NOT", "HAS", "HAS NOT"
 
-  The operators are applied on the original database types.
+    The operators are applied on the original database types.
 
-  The operator `~` is a shorthand for `ILIKE`, the `HAS` and `HAS NOT` operators is used to check if an array field contains / does not contain a value.
+    The operator `~` is a shorthand for `ILIKE`, the `HAS` and `HAS NOT` operators is used to check if an array field contains / does not contain a value.
 
-  If value is `null`, the operator should be `IS` or `IS NOT`.
+    If value is `null`, the operator should be `IS` or `IS NOT`.
 
 * `value` can be of type `string`, `int`, `float` or `null`.
 
