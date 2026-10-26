@@ -1,9 +1,9 @@
 import ast
-from collections import OrderedDict
 import re
-from json.decoder import JSONDecodeError
+from collections import OrderedDict
 from datetime import date
 from decimal import Decimal
+from json.decoder import JSONDecodeError
 from uuid import UUID
 
 from flask import json
@@ -11,7 +11,7 @@ from sqlalchemy.exc import DataError, InternalError, ProgrammingError
 from sqlalchemy.sql import text as sql_text
 
 
-class DatasetFeaturesProvider():
+class DatasetFeaturesProvider:
     """DatasetFeaturesProvider class
 
     Access database to read and write features of a dataset.
@@ -48,7 +48,7 @@ class DatasetFeaturesProvider():
         # assign values from service config
         self.schema = config['schema']
         self.table_name = config['table_name']
-        self.table = '"%s"."%s"' % (self.schema, self.table_name)
+        self.table = f'"{self.schema}"."{self.table_name}"'
         self.primary_key = config['primary_key']
         # permitted attributes only
         self.attributes = config['attributes']
@@ -57,7 +57,7 @@ class DatasetFeaturesProvider():
         self.jointables = {}
         ident = 1
         for key, value in config['jointables'].items():
-            self.jointables[key] = value | {'alias': '__J%d' % ident}
+            self.jointables[key] = value | {'alias': f'__J{ident}'}
             ident += 1
 
         # NOTE: geometry_column is None for datasets without geometry
@@ -121,21 +121,15 @@ class DatasetFeaturesProvider():
                 geom_sql = self.geom_column_sql(geom_column, srid, with_bbox=False)
                 # select overall extent
                 geom_sql += (
-                    ', ST_Extent(%s) OVER () AS _overall_bbox_' %
-                    self.transform_geom_sql(geom_column, self.srid, srid)
+                    f', ST_Extent({self.transform_geom_sql(geom_column, self.srid, srid)}) OVER () AS _overall_bbox_'
                 )
 
             if bbox is not None:
                 # bbox filter
-                bbox_geom_sql = self.transform_geom_sql("""
-                    ST_SetSRID(
-                        'BOX3D(:minx :miny, :maxx :maxy)'::box3d,
-                        {bbox_srid}
-                    )
-                """.format(bbox_srid=srid), srid, self.srid)
-                where_clauses.append("""
-                    ST_Intersects(%s, %s)
-                """ % (geom_column, bbox_geom_sql))
+                bbox_geom_sql = self.transform_geom_sql(
+                    f"ST_SetSRID('BOX3D(:minx :miny, :maxx :maxy)'::box3d, {srid})", srid, self.srid
+                )
+                where_clauses.append(f"ST_Intersects({geom_column}, {bbox_geom_sql})")
                 params.update({
                     "minx": bbox[0],
                     "miny": bbox[1],
@@ -144,7 +138,7 @@ class DatasetFeaturesProvider():
                 })
 
             if filter_geom is not None:
-                where_clauses.append('ST_Intersects(%s, ST_GeomFromGeoJSON(:filter_geom))' % geom_column)
+                where_clauses.append(f'ST_Intersects({geom_column}, ST_GeomFromGeoJSON(:filter_geom))')
                 params.update({"filter_geom": filter_geom})
 
         if self.datasource_filter:
@@ -159,7 +153,7 @@ class DatasetFeaturesProvider():
             where_clause = "WHERE (" + ") AND (".join(where_clauses) + ")"
 
 
-        order_clause = 'ORDER BY "%s"' % self.primary_key
+        order_clause = f'ORDER BY "{self.primary_key}"'
         if sortby:
             order_clause_fragments = []
             for field in sortby.split(","):
@@ -176,22 +170,13 @@ class DatasetFeaturesProvider():
                     field == self.primary_key
                     or field in self.attributes
                 ):
-                    order_clause_fragments.append('"%s" %s' % (field, order))
+                    order_clause_fragments.append(f'"{field}" {order}')
                 else:
-                    self.logger.debug("Omitting non-existing sort columng %s" % field)
+                    self.logger.debug(f"Omitting non-existing sort columng {field}")
             if order_clause_fragments:
-                order_clause = "ORDER BY %s" % ",".join(order_clause_fragments)
+                order_clause = f'ORDER BY {",".join(order_clause_fragments)}'
 
-        sql = sql_text(("""
-            SELECT {columns}%s
-            FROM {table} __J0
-            {join_query}
-            {where_clause}
-            {order_clause};
-        """ % geom_sql).format(
-            columns=columns, table=self.table, join_query=join_query,
-            where_clause=where_clause, order_clause=order_clause
-        ))
+        sql = sql_text(f"SELECT {columns}{geom_sql} FROM {self.table} __J0 {join_query} {where_clause} {order_clause};")
 
         self.logger.debug(f"index query: {sql}")
         self.logger.debug(f"params: {params}")
@@ -222,7 +207,7 @@ class DatasetFeaturesProvider():
             crs = {
                 'type': 'name',
                 'properties': {
-                    'name': 'urn:ogc:def:crs:EPSG::%s' % srid
+                    'name': f'urn:ogc:def:crs:EPSG::{srid}'
                 }
             }
             if overall_bbox:
@@ -252,21 +237,14 @@ class DatasetFeaturesProvider():
         columns = (', ').join(
             self.escape_column_names([key, value])
         )
-        sql = sql_text(("""
-            SELECT {columns}
-            FROM {table}
-            {where_clause};
-        """).format(
-            columns=columns, table=self.table, where_clause=where_clause
-        ))
+        sql = sql_text(f"SELECT {columns} FROM {self.table} {where_clause};")
         self.logger.debug(f"keyvals query: {sql}")
 
         records = []
         # connect to database (for read-only access)
         with self.db_read.connect() as conn:
             result = conn.execute(sql).mappings()
-            for row in result:
-                records.append({'value': row[key], 'label': row[value]})
+            records = [{'value': row[key], 'label': row[value]} for row in result]
 
         return records
 
@@ -291,16 +269,11 @@ class DatasetFeaturesProvider():
         if self.geometry_column:
             geom_sql = self.geom_column_sql(f'__J0."{self.geometry_column}"', srid)
 
-        sql = sql_text(("""
-            SELECT {columns}%s
-            FROM {table} __J0
-            {join_query}
-            WHERE __J0.{pkey} = :id {where_clause}
+        sql = sql_text(f"""
+            SELECT {columns}{geom_sql} FROM {self.table} __J0 {join_query}
+            WHERE __J0.{self.primary_key} = :id {where_clause}
             LIMIT 1;
-        """ % geom_sql).format(
-            columns=columns, table=self.table, pkey=self.primary_key,
-            join_query=join_query, where_clause=where_clause
-        ))
+        """)
         params = {"id": id}
 
         self.logger.debug(f"show query: {sql}")
@@ -334,21 +307,15 @@ class DatasetFeaturesProvider():
 
         # connect to database
         with self.db_write.begin() as conn:
-            sql = sql_text(("""
+            sql = sql_text(f"""
                 WITH __I AS (
-                    INSERT INTO {table} ({insert_columns})
-                        VALUES ({values_sql})
-                    RETURNING {return_columns}%s
+                    INSERT INTO {self.table} ({sql_params['columns']})
+                        VALUES ({sql_params['values_sql']})
+                    RETURNING {sql_params['return_columns']}{geom_sql}
                 ) SELECT {columns}
                 FROM __I __J0
                 {join_query}
-            """ % geom_sql).format(
-                table=self.table, insert_columns=sql_params['columns'],
-                values_sql=sql_params['values_sql'],
-                return_columns=sql_params['return_columns'],
-                columns=columns,
-                join_query=join_query
-            ))
+            """)
             params = sql_params['bound_values']
 
             self.logger.debug(f"create query: {sql}")
@@ -381,22 +348,15 @@ class DatasetFeaturesProvider():
 
         # connect to database
         with self.db_write.begin() as conn:
-            sql = sql_text(("""
+            sql = sql_text(f"""
                 WITH __U AS (
-                    UPDATE {table} SET ({update_columns}) =
-                        ROW({values_sql})
-                    WHERE {pkey} = :{pkey}
-                    RETURNING {return_columns}%s
+                    UPDATE {self.table} SET ({sql_params['columns']}) = ROW({sql_params['values_sql']})
+                    WHERE {self.primary_key} = :{self.primary_key}
+                    RETURNING {sql_params['return_columns']}{geom_sql}
                 ) SELECT {columns}
                 FROM __U __J0
                 {join_query}
-            """ % geom_sql).format(
-                table=self.table, update_columns=sql_params['columns'],
-                values_sql=sql_params['values_sql'], pkey=self.primary_key,
-                return_columns=sql_params['return_columns'],
-                columns=columns,
-                join_query=join_query
-            ))
+            """)
 
             update_values = sql_params['bound_values']
             update_values[self.primary_key] = id
@@ -426,17 +386,17 @@ class DatasetFeaturesProvider():
 
         where_clause = ""
         if self.datasource_filter:
-            add_where_clause = " AND (" + self.datasource_filter + ")"
+            where_clause += " AND (" + self.datasource_filter + ")"
         if extra_where_clause:
             where_clause += " AND " + extra_where_clause
             params.update(extra_where_params)
 
         # build query SQL
-        sql = sql_text("""
-            DELETE FROM {table}
-            WHERE "{pkey}" = :id{where_clause}
-            RETURNING "{pkey}";
-        """.format(table=self.table, pkey=self.primary_key, where_clause=where_clause))
+        sql = sql_text(f"""
+            DELETE FROM {self.table}
+            WHERE "{self.primary_key}" = :id{where_clause}
+            RETURNING "{self.primary_key}";
+        """)
 
         self.logger.debug(f"destroy query: {sql}")
         self.logger.debug(f"params: {params}")
@@ -459,12 +419,9 @@ class DatasetFeaturesProvider():
         if self.datasource_filter:
             where_clause = "AND (" + self.datasource_filter + ")"
 
-        sql = sql_text(("""
-            SELECT EXISTS(SELECT 1 FROM {table} WHERE {pkey}=:id {where_clause})
-        """).format(
-            table=self.table, pkey=self.primary_key,
-            where_clause=where_clause
-        ))
+        sql = sql_text(f"""
+            SELECT EXISTS(SELECT 1 FROM {self.table} WHERE {self.primary_key}=:id {where_clause})
+        """)
 
         # connect to database (for read-only access)
         with self.db_read.connect() as conn:
@@ -506,7 +463,7 @@ class DatasetFeaturesProvider():
             return (None, "Empty expression")
         try:
             filterarray = json.loads(filterexpr)
-        except JSONDecodeError as e:
+        except JSONDecodeError:
             return (None, "Invalid JSON")
         if type(filterarray) is not list:
             return (None, "Not an array")
@@ -525,7 +482,7 @@ class DatasetFeaturesProvider():
         if not sql:
             return ("", [])
         else:
-            return ("(%s)" % " ".join(sql), params)
+            return (f'({" ".join(sql)})', params)
 
     def __parse_filter_inner(self, filterarray, sql, params, errors):
         CONCAT_OPERATORS = ["AND", "OR"]
@@ -618,7 +575,7 @@ class DatasetFeaturesProvider():
                         return
                     elif op == "~":
                         op = "ILIKE"
-                        value = "%%%s%%" % value
+                        value = f"%{value}%"
 
                     int_types = ['bigint', 'integer', 'smallint']
                     float_types = ['double precision', 'numeric', 'real']
@@ -626,20 +583,14 @@ class DatasetFeaturesProvider():
                         pass
                     elif self.fields[column_name].get("data_type") in int_types:
                         try:
-                            if isinstance(value, list):
-                                value = list(map(int, value))
-                            else:
-                                value = int(value)
-                        except:
+                            value = list(map(int, value)) if isinstance(value, list) else int(value)
+                        except Exception:
                             errors.append(self.translator.tr("filter.cannot_cast_int") % column_name)
                             return
                     elif self.fields[column_name].get("data_type") in float_types:
                         try:
-                            if isinstance(value, list):
-                                value = list(map(float, value))
-                            else:
-                                value = float(value)
-                        except:
+                            value = list(map(float, value)) if isinstance(value, list) else float(value)
+                        except Exception:
                             errors.append(self.translator.tr("filter.cannot_cast_float") % column_name)
                             return
 
@@ -655,18 +606,18 @@ class DatasetFeaturesProvider():
                     idx = len(params)
                     if op == "HAS":
                         # e.g. :v0 = ANY("field")
-                        sql.append(':v%d = ANY(%s)' % (idx, column_name))
+                        sql.append(f':v{idx} = ANY({column_name})')
                     elif op == "HAS NOT":
                         # e.g. :v0 != ALL("field")
-                        sql.append(':v%d != ALL(%s)' % (idx, column_name))
+                        sql.append(f':v{idx} != ALL({column_name})')
                     elif op == "IN":
                         # e.g. "field" = ANY(:v0)
-                        sql.append('%s = ANY(:v%d)' % (column_name, idx))
+                        sql.append(f'{column_name} = ANY(:v{idx})')
                     else:
                         # e.g. '"field" >= :v0'
-                        sql.append('%s %s :v%d' % (column_name, op, idx))
+                        sql.append(f'{column_name} {op} :v{idx}')
                     # add value
-                    params["v%d" % idx] = value
+                    params[f"v{idx}"] = value
             else:
                 # invalid entry
                 errors.append(self.translator.tr("filter.invalid_entry") % entry)
@@ -676,7 +627,7 @@ class DatasetFeaturesProvider():
         if not sql:
             return ("", [])
         else:
-            return ("(%s)" % " ".join(sql), params)
+            return (f'({" ".join(sql)})', params)
 
     def parse_box2d(self, box2d):
         """Parse Box2D string and return bounding box
@@ -892,16 +843,13 @@ class DatasetFeaturesProvider():
                         if i > 0 and vertices[i-1] == v:
                             errors.append({
                                 'reason': self.translator.tr("validation.duplicate_point"),
-                                'location': 'POINT(%s)' % v
+                                'location': f'POINT({v})'
                             })
 
-            if not errors:
-                # validate geometry type
-                if (self.geometry_type != 'Geometry' and
-                geom_type != self.geometry_type):
+            # validate geometry type
+            if not errors and (self.geometry_type != 'Geometry' and geom_type != self.geometry_type):
                     errors.append({
-                        'reason': self.translator.tr("validation.invalid_geom_type") %
-                                (geom_type, self.geometry_type)
+                        'reason': self.translator.tr("validation.invalid_geom_type") % (geom_type, self.geometry_type)
                     })
 
         return errors
@@ -933,14 +881,14 @@ class DatasetFeaturesProvider():
                 value = None
 
                 # query the correct type name for user-defined columns
-                if data_type == 'USER-DEFINED': 
-                    sql =  sql_text(("""
-                    SELECT udt_schema::text ||'.'|| udt_name::text as defined_type
-                    FROM information_schema.columns
-                    WHERE table_schema = '{schema}' AND column_name = '{column}' and table_name = '{table}'
-                    GROUP BY defined_type
-                    LIMIT 1;
-                    """).format(schema = self.schema, table = self.table_name, column = attr))
+                if data_type == 'USER-DEFINED':
+                    sql =  sql_text(f"""
+                        SELECT udt_schema::text ||'.'|| udt_name::text as defined_type
+                        FROM information_schema.columns
+                        WHERE table_schema = '{self.schema}' AND column_name = '{attr}' and table_name = '{self.table_name}'
+                        GROUP BY defined_type
+                        LIMIT 1;
+                    """)
                     result = conn.execute(sql).mappings()
                     for row in result:
                         data_type = row['defined_type']
@@ -948,10 +896,7 @@ class DatasetFeaturesProvider():
                 if data_type == 'numeric' and \
                     constraints.get('numeric_precision', None) and \
                     constraints.get('numeric_scale', None):
-                    data_type = 'numeric(%d,%d)' % (
-                        constraints['numeric_precision'],
-                        constraints['numeric_scale']
-                    )
+                    data_type = f"numeric({constraints['numeric_precision']}, {constraints['numeric_scale']})"
                 elif data_type == 'bigint':
                     # parse bigint constraints from string
                     if 'min' in constraints:
@@ -972,12 +917,12 @@ class DatasetFeaturesProvider():
                 conn.execute(sql_text("SAVEPOINT before_validation"))
                 try:
                     # try to parse value on DB
-                    sql = sql_text("SELECT (:value):: %s AS value;" % data_type)
+                    sql = sql_text(f"SELECT (:value):: {data_type} AS value;")
                     result = conn.execute(sql, {"value": input_value}).mappings()
                     for row in result:
                         value = row['value']
                     conn.execute(sql_text("RELEASE SAVEPOINT before_validation"))
-                except (DataError, ProgrammingError) as e:
+                except (DataError, ProgrammingError):
                     conn.execute(sql_text("ROLLBACK TO SAVEPOINT before_validation"))
                     # NOTE: current transaction is aborted
                     errors.append(self.translator.tr("validation.invalid_value") %
@@ -1026,10 +971,11 @@ class DatasetFeaturesProvider():
                     if constraints.get('allowMulti', False):
                         try:
                             value_set = ast.literal_eval(value)
-                            for val in value_set:
-                                if str(val) not in allowed_values:
-                                    errors.append(self.translator.tr("validation.invalid_value_for") % (attr))
-                        except:
+                            errors.extend([
+                                self.translator.tr("validation.invalid_value_for") % (attr)
+                                for val in value_set if str(val) not in allowed_values
+                            ])
+                        except Exception:
                             errors.append(self.translator.tr("validation.invalid_value_for") % (attr))
                     else:
                         if str(value) not in allowed_values:
@@ -1047,9 +993,7 @@ class DatasetFeaturesProvider():
                     feature['properties'].pop(attr, None)
             elif constraints.get('required', False):
                 # check if required value is present and not blank
-                if attr not in feature['properties']:
-                    errors.append(self.translator.tr("validation.missing_required_value_for") % (attr))
-                elif feature['properties'][attr] is None:
+                if attr not in feature['properties'] or feature['properties'][attr] is None:
                     errors.append(self.translator.tr("validation.missing_required_value_for") % (attr))
                 elif feature['properties'][attr] == "":
                     errors.append(self.translator.tr("validation.value_for_cannot_be_blank") % (attr))
@@ -1063,7 +1007,7 @@ class DatasetFeaturesProvider():
         :param list(str) columns: Column names
         """
         return [
-            '"%s"' % column.replace('"', '""') for column in columns
+            '"{}"'.format(column.replace('"', '""')) for column in columns
         ]
 
     def geom_column_sql(self, geom_column, srid, with_bbox=True):
@@ -1079,11 +1023,10 @@ class DatasetFeaturesProvider():
             geom_column, self.srid, srid
         )
         # add GeoJSON column
-        geom_sql = ", ST_AsGeoJSON(ST_CurveToLine(%s)) AS _json_geom_" \
-                    % transform_geom_sql
+        geom_sql = f", ST_AsGeoJSON(ST_CurveToLine({transform_geom_sql})) AS _json_geom_"
         if with_bbox:
             # add Box2D column
-            geom_sql += ", Box2D(%s) AS _bbox_" % transform_geom_sql
+            geom_sql += f", Box2D({transform_geom_sql}) AS _bbox_"
 
         return geom_sql
 
@@ -1100,7 +1043,7 @@ class DatasetFeaturesProvider():
             pass
         else:
             # transform to target SRID
-            geom_sql = "ST_Transform(%s, %s)" % (geom_sql, target_srid)
+            geom_sql = f"ST_Transform({geom_sql}, {target_srid})"
 
         return geom_sql
 
@@ -1112,7 +1055,7 @@ class DatasetFeaturesProvider():
         """
         props = OrderedDict()
         for attr in self.attributes:
-            if filter_fields and not attr in filter_fields:
+            if filter_fields and attr not in filter_fields:
                 continue
             value = row[attr]
             # Ensure values are JSON serializable
@@ -1129,16 +1072,12 @@ class DatasetFeaturesProvider():
         crs = None
         bbox = None
         if self.geometry_column and (not filter_fields or "geometry" in filter_fields):
-            if row['_json_geom_'] is not None:
-                geometry = json.loads(row['_json_geom_'])
-            else:
-                # geometry is NULL
-                geometry = None
+            geometry = json.loads(row['_json_geom_']) if row['_json_geom_'] is not None else None
             srid = client_srid or self.srid
             crs = {
                 'type': 'name',
                 'properties': {
-                    'name': 'urn:ogc:def:crs:EPSG::%d' % srid
+                    'name': f'urn:ogc:def:crs:EPSG::{srid}'
                 }
             }
             if '_bbox_' in row:
@@ -1184,7 +1123,7 @@ class DatasetFeaturesProvider():
                     continue
                 data_type = self.fields.get(attr, {}).get('data_type')
                 attribute_columns.append(attr)
-                placeholder_name = "__val%d" % placeholdercount
+                placeholder_name = f"__val{placeholdercount}"
                 placeholdercount += 1
                 if data_type in ['json', 'jsonb']:
                     # convert values for fields of type json to string
@@ -1216,11 +1155,8 @@ class DatasetFeaturesProvider():
                 srid = self.srid
             else:
                 srid = feature['crs']['properties']['name'].split(':')[-1]
-                if srid == 'CRS84':
-                    # use EPSG:4326 for 'urn:ogc:def:crs:OGC:1.3:CRS84'
-                    srid = 4326
-                else:
-                    srid = int(srid)
+                # NOTE: use EPSG:4326 for 'urn:ogc:def:crs:OGC:1.3:CRS84'
+                srid = 4326 if srid == 'CRS84' else int(srid)
 
         # columns for permitted attributes
         columns = (', ').join(self.escape_column_names(attribute_columns))
@@ -1229,7 +1165,7 @@ class DatasetFeaturesProvider():
         # e.g. ['name'] + 'geom'
         #     ==>
         #      ":name, ST_SetSRID(ST_GeomFromGeoJSON(:geom), 2056)"
-        bound_columns = [":%s" % placeholder_name for placeholder_name in placeholder_names]
+        bound_columns = [f":{placeholder_name}" for placeholder_name in placeholder_names]
         if self.geometry_column and 'geometry' in feature and not self.__geomreadonly:
             # build geometry from GeoJSON, transformed to dataset CRS
             geometry_value = self.transform_geom_sql(
@@ -1240,7 +1176,7 @@ class DatasetFeaturesProvider():
         values_sql = (', ').join(bound_columns)
 
         # return id and permitted attributes
-        if not self.primary_key in return_columns:
+        if self.primary_key not in return_columns:
             return_columns.insert(0, self.primary_key)
 
         return_columns = (', ').join(
@@ -1249,7 +1185,7 @@ class DatasetFeaturesProvider():
 
         if defaulted_attribute_columns:
             columns += ', ' + ', '.join(self.escape_column_names(defaulted_attribute_columns))
-            values_sql += ', ' + ', '.join(map(lambda x: "default", defaulted_attribute_columns))
+            values_sql += ', ' + ', '.join("default" for x in defaulted_attribute_columns)
 
         return {
             'columns': columns,
@@ -1268,7 +1204,6 @@ class DatasetFeaturesProvider():
         attributes = []
         base_attributes = set()
         join_queries = {}
-        join_idents = {}
         for attribute in self.attributes:
             if filter_fields and attribute not in filter_fields:
                 continue
@@ -1276,12 +1211,14 @@ class DatasetFeaturesProvider():
             joinfield = self.fields[attribute].get('joinfield')
             if joinfield and joinfield['table'] not in join_queries:
                 jointableconfig = self.jointables[joinfield['table']]
-                join_queries[joinfield['table']] = 'LEFT JOIN "{schema}"."{table}" {ident} ON __J0."{tagetfield}" = {ident}."{joinfield}"'.format(
-                    schema = jointableconfig['schema'],
-                    table = jointableconfig['table_name'],
-                    ident = jointableconfig['alias'],
-                    tagetfield = jointableconfig["targetField"],
-                    joinfield = jointableconfig["joinField"]
+                join_queries[joinfield['table']] = """
+                    LEFT JOIN "{schema}"."{table}" {ident} ON __J0."{tagetfield}" = {ident}."{joinfield}"
+                """.format(
+                    schema=jointableconfig['schema'],
+                    table=jointableconfig['table_name'],
+                    ident=jointableconfig['alias'],
+                    tagetfield=jointableconfig["targetField"],
+                    joinfield=jointableconfig["joinField"]
                 )
 
             if joinfield:
@@ -1291,11 +1228,11 @@ class DatasetFeaturesProvider():
                 base_attributes.add(attribute)
 
         # Ensure primary key is always returned
-        if not self.primary_key in base_attributes:
+        if self.primary_key not in base_attributes:
             base_attributes.add(self.primary_key)
             attributes.insert(0, ["__J0", self.primary_key, self.primary_key])
 
-        # Collect attributes prefixed with table aliases, and omit attributes from join tables which overlap with base attributes
+        # Collect attributes prefixed with table aliases and omit attributes from join tables which overlap with base attributes
         columns = []
         for joinident, attribute, fieldname in attributes:
             if joinident != "__J0" and fieldname in base_attributes:

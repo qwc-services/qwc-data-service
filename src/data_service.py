@@ -1,21 +1,19 @@
-import os
 import datetime
-from collections import OrderedDict
-
-from sqlalchemy.exc import (DataError, IntegrityError,
-                            InternalError, ProgrammingError)
+import os
 
 from qwc_services_core.auth import get_username
 from qwc_services_core.database import DatabaseEngine
 from qwc_services_core.permissions_reader import PermissionsReader
-from dataset_features_provider import DatasetFeaturesProvider
+from sqlalchemy.exc import DataError, IntegrityError, InternalError, ProgrammingError
+
 from attachments_service import AttachmentsService
+from dataset_features_provider import DatasetFeaturesProvider
 
 ERROR_DETAILS_LOG_ONLY = os.environ.get(
     'ERROR_DETAILS_LOG_ONLY', 'False').lower() == 'true'
 
 
-class DataService():
+class DataService:
     """DataService class
 
     Manage reading and writing of dataset features.
@@ -35,7 +33,10 @@ class DataService():
         self.attachments_service = AttachmentsService(tenant, logger)
         self.db_engine = DatabaseEngine()
 
-    def index(self, identity, translator, dataset, bbox, crs, filterexpr, filter_geom, filter_fields, limit = None, offset = None, sortby = None):
+    def index(
+        self, identity, translator, dataset, bbox, crs, filterexpr, filter_geom, filter_fields,
+        limit = None, offset = None, sortby = None
+    ):
         """Find dataset features inside bounding box.
 
         :param str|obj identity: User identity
@@ -145,7 +146,7 @@ class DataService():
         else:
             return {'error': translator.tr("error.dataset_not_found")}
 
-    def create(self, identity, translator, dataset, feature, files={}):
+    def create(self, identity, translator, dataset, feature, files=None):
         """Create a new dataset feature.
 
         :param str|obj identity: User identity
@@ -154,6 +155,7 @@ class DataService():
         :param object feature: GeoJSON Feature
         :param object files: Upload files
         """
+        files = files or {}
 
         dataset_features_provider = self.dataset_features_provider(
             identity, translator, dataset, True
@@ -208,7 +210,7 @@ class DataService():
             }
         return {'feature': feature}
 
-    def update(self, identity, translator, dataset, id, feature, files={}):
+    def update(self, identity, translator, dataset, id, feature, files=None):
         """Update a dataset feature.
 
         :param str|obj identity: User identity
@@ -218,6 +220,7 @@ class DataService():
         :param object feature: GeoJSON Feature
         :param object files: Upload files
         """
+        files = files or {}
 
         dataset_features_provider = self.dataset_features_provider(
             identity, translator, dataset, True
@@ -274,7 +277,7 @@ class DataService():
             elif isinstance(e, InternalError):
                 reason += ": " + e.orig.diag.message_primary
             for slug in saved_attachments.values():
-                attachments.remove_attachment(dataset, slug)
+                self.attachments_service.remove_attachment(dataset, slug)
             return {
                 'error': translator.tr("error.feature_commit_failed"),
                 'error_details': {
@@ -316,7 +319,7 @@ class DataService():
             return {'error': translator.tr("error.feature_not_found")}
 
         # cleanup attachments
-        for key, value in show_result.get('feature', {}).get('properties', {}).items():
+        for value in show_result.get('feature', {}).get('properties', {}).values():
             if isinstance(value, str) and value.startswith("attachment://"):
                 self.attachments_service.remove_attachment(dataset, value[13:])
 
@@ -332,9 +335,8 @@ class DataService():
         dataset_features_provider = self.dataset_features_provider(
             identity, translator, dataset, False
         )
-        if dataset_features_provider is not None:
-            # check update permission
-            if not dataset_features_provider.updatable():
+        # check update permission
+        if dataset_features_provider is None or not dataset_features_provider.updatable():
                 return False
 
         return dataset_features_provider.exists(id)
@@ -358,7 +360,6 @@ class DataService():
                 "pk": pk_field,
                 "features": []
             }
-            tbl_prefix = rel_table + "__"
             for (record_idx, rel_feature) in enumerate(rel_data.get("features", [])):
                 rel_feature_status = rel_feature.get("__status__", "") or ""
                 # Set foreign key for new records
@@ -366,8 +367,9 @@ class DataService():
                     rel_feature['properties'][fk_field] = fk
                     rel_feature_status = rel_feature_status or "changed"
 
-                if str(rel_feature['properties'].get(fk_field, None)) != str(fk):
-                    self.logger.debug(f"FK validation failed: relFeature['properties']['{fk_field}'] = {rel_feature['properties'].get(fk_field, None)} != {fk}")
+                cur_fk = rel_feature['properties'].get(fk_field, None)
+                if str(cur_fk) != str(fk):
+                    self.logger.debug(f"FK validation failed: relFeature['properties']['{fk_field}'] = {cur_fk} != {fk}")
                     rel_feature["error"] = translator.tr("error.fk_validation_failed")
                     ret[rel_table]["features"].append(rel_feature)
                     continue
@@ -395,7 +397,11 @@ class DataService():
                 elif rel_feature_status == "changed":
                     result = self.update(identity, translator, rel_table, rel_feature["id"], rel_feature, files)
                 elif rel_feature_status.startswith("deleted"):
-                    self.destroy(identity, translator, rel_table, rel_feature["id"], '"%s" = :fk' % fk_field.replace('"', '""'), {"fk": fk})
+                    self.destroy(
+                        identity, translator, rel_table, rel_feature["id"],
+                        '"{}" = :fk'.format(fk_field.replace('"', '""')),
+                        {"fk": fk}
+                    )
                     result = {}
                 else:
                     continue
@@ -465,7 +471,7 @@ class DataService():
             updatable = False
             deletable = False
             geomreadonly = True
-            permitted_attributes = set(map(lambda field: field["name"], resource['fields']))
+            permitted_attributes = {field["name"] for field in resource['fields']}
 
         else:
             resource_permissions = self.permissions_handler.resource_permissions(
@@ -538,7 +544,7 @@ class DataService():
                             values = dataset_features_provider.keyvals(key_field_name, value_field_name)
                             fields[field['name']]['constraints']['values'] = values
                     except Exception as e:
-                        self.logger.error("Unable to resolve keyvalrel '%s': %s" % (keyvalrel, str(e)))
+                        self.logger.error(f"Unable to resolve keyvalrel '{keyvalrel}': {e!s}")
                         fields[field['name']]['constraints']['values'] = []
 
         # NOTE: 'geometry' is None for datasets without geometry
@@ -581,7 +587,9 @@ class DataService():
         for key in files:
             filedata = files[key]
             field = key[5:] # remove file: prefix
-            attachment_valid, message = self.attachments_service.validate_attachment(translator, filedata, dataset_features_provider.fields[field], dataset)
+            attachment_valid, message = self.attachments_service.validate_attachment(
+                translator, filedata, dataset_features_provider.fields[field], dataset
+            )
             if not attachment_valid:
                 attachment_errors.append(translator.tr("error.attachment_validation_failed") % key + ": " + message)
         if attachment_errors:
@@ -688,10 +696,7 @@ class DataService():
 
     def error_response(self, error, details):
         self.logger.error("%s: %s", error, details)
-        if ERROR_DETAILS_LOG_ONLY:
-            error_details = 'see log for details'
-        else:
-            error_details = details
+        error_details = 'see log for details' if ERROR_DETAILS_LOG_ONLY else details
         return {
             'error': error,
             'error_details': error_details,
@@ -705,7 +710,7 @@ class DataService():
         """
         srid = None
         if crs.startswith('EPSG:'):
-            try:
+            try:  # noqa: SIM105
                 # extract SRID
                 srid = int(crs.split(':')[1])
             except ValueError:
@@ -717,7 +722,7 @@ class DataService():
                 # use EPSG:4326 for 'urn:ogc:def:crs:OGC:1.3:CRS84'
                 srid = 4326
             else:
-                try:
+                try:  # noqa: SIM105
                     srid = int(srid)
                 except ValueError:
                     # conversion failed

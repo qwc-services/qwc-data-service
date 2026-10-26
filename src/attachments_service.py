@@ -2,12 +2,13 @@ import os
 import random
 import string
 
-from werkzeug.utils import secure_filename
 from qwc_services_core.runtime_config import RuntimeConfig
+from werkzeug.utils import secure_filename
+
 from clamav import scan_file
 
 
-class AttachmentsService():
+class AttachmentsService:
     """AttachmentsService class
 
     Store attachment files for dataset features.
@@ -62,7 +63,7 @@ class AttachmentsService():
             size = file.tell()
             file.seek(0)
         except Exception as e:
-            self.logger.error("Could not validate attachment: %s" % e)
+            self.logger.error(f"Could not validate attachment: {e}")
             return False
 
         # Check file size:
@@ -70,14 +71,15 @@ class AttachmentsService():
         # - Otherwise, check against global limit
         # Dataset configuration:
         if dataset in self.max_file_size_per_dataset:
-            if size > self.max_file_size_per_dataset[dataset]:
+            max_dataset_file_size = self.max_file_size_per_dataset[dataset]
+            if size > max_dataset_file_size:
                 self.logger.info(
-                    "File too large: %s: %d (maximum for dataset %s: %d)" % (file.filename, size, dataset, self.max_file_size_per_dataset[dataset]))
+                    f"File too large: {file.filename}: {size} (maximum for dataset {dataset}: {max_dataset_file_size})"
+                )
                 return (False, translator.tr("error.file_too_large"))
         # Global service configuration:
         elif size > self.max_file_size:
-            self.logger.info(
-                "File too large: %s: %d (maximum: %d) " % (file.filename, size, self.max_file_size))
+            self.logger.info("File too large: {file.filename}: {size} (maximum: {self.max_file_size})")
             return (False, translator.tr("error.file_too_large"))
 
 
@@ -94,28 +96,23 @@ class AttachmentsService():
         fileextensions = fieldconfig.get('fileextensions', [])
         if fileextensions:
             if ext not in fileextensions:
-                self.logger.info(
-                    "Forbidden file extension: %s: %s" % (file.filename, ext))
+                self.logger.info(f"Forbidden file extension: {file.filename}: {ext}")
                 return (False, translator.tr("error.forbidden_file_extension"))
         # Dataset configuration:
         elif dataset in self.allowed_extensions_per_dataset:
             if ext not in self.allowed_extensions_per_dataset[dataset]:
-                self.logger.info(
-                    "Forbidden file extension: %s: %s" % (file.filename, ext))
+                self.logger.info(f"Forbidden file extension: {file.filename}: {ext}")
                 return (False, translator.tr("error.forbidden_file_extension"))
         # Global service configuration:
-        elif self.allowed_extensions:
-            if ext not in self.allowed_extensions:
-                self.logger.info(
-                    "Forbidden file extension: %s: %s" % (file.filename, ext))
+        elif self.allowed_extensions and ext not in self.allowed_extensions:
+                self.logger.info(f"Forbidden file extension: {file.filename}: {ext}")
                 return (False, translator.tr("error.forbidden_file_extension"))
 
         # ClamAV virus check
         if self.clamav:
             result = scan_file(self.clamav, file)
             if result:
-                self.logger.warn(
-                    "ClamAV check failed for %s: %s" % (file.filename, result))
+                self.logger.warn(f"ClamAV check failed for {file.filename}: {result}")
                 return (False, translator.tr("error.forbidden_file_content"))
 
         return (True, None)
@@ -147,11 +144,11 @@ class AttachmentsService():
 
             # save attachment file
             file.save(target_path)
-            self.logger.info("Saved attachment: %s" % slug)
+            self.logger.info(f"Saved attachment: {slug}")
 
             return slug
         except Exception as e:
-            self.logger.error("Could not save attachment: %s" % e)
+            self.logger.error(f"Could not save attachment: {e}")
             return None
 
     def remove_attachment(self, dataset, slug):
@@ -166,14 +163,14 @@ class AttachmentsService():
         )
         try:
             os.remove(os.path.join(target_dir, slug))
-            self.logger.info("Removed attachment: %s" % slug)
-        except:
-            self.logger.error("Could not remove attachment: %s" % slug)
+            self.logger.info(f"Removed attachment: {slug}")
+        except Exception:
+            self.logger.error(f"Could not remove attachment: {slug}")
             return False
 
-        try:
+        try:  # noqa: SIM105
             os.rmdir(os.path.join(target_dir, os.path.dirname(slug)))
-        except:
+        except Exception:
             # Ignore if directory cannot be removed, is possibly non-empty
             pass
         return True

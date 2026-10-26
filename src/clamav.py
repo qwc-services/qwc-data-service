@@ -19,7 +19,7 @@ def scan_file(clamd_host, file):
     #
     try:
         result = scanner.instream(file)
-    except IOError:
+    except OSError:
         # Ping the server if it fails than the server is down
         scanner.ping()
         # Server is up. This means that the file is too big.

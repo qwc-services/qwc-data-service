@@ -20,3 +20,25 @@ dependencies = [
 dev = [
     "python-dotenv>=1.0.1",
 ]
+
+[tool.ruff]
+line-length = 128
+
+[tool.ruff.lint]
+select = [
+    "E",      # pycodestyle errors
+    "F",      # Pyflakes
+    "W",      # pycodestyle warnings
+    "I",      # Import sorting
+    "UP",     # Modern Python syntax
+    "B",      # Likely bugs and pitfalls
+    "SIM",    # Simplification
+    "C4",     # Comprehension improvements
+    "PIE",    # Miscellaneous code quality
+    "RUF",    # Ruff-specific rules
+    "PERF",   # Performance pitfalls
+]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"

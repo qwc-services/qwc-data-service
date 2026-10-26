@@ -1,20 +1,19 @@
-from collections import OrderedDict
 import json
 import os
 import re
+
 import requests
-
-from flask import Flask, Request as RequestBase, request, jsonify, send_file
-from flask_restx import Resource, fields, reqparse, marshal
-from werkzeug.exceptions import BadRequest
-from werkzeug.datastructures import FileStorage
-
-from qwc_services_core.api import Api, create_model, CaseInsensitiveArgument
-from qwc_services_core.auth import auth_manager, optional_auth, get_identity
+from flask import Flask, jsonify, request, send_file
+from flask import Request as RequestBase
+from flask_restx import Resource, fields, reqparse
+from qwc_services_core.api import Api, CaseInsensitiveArgument, create_model
+from qwc_services_core.auth import auth_manager, get_identity, optional_auth
 from qwc_services_core.runtime_config import RuntimeConfig
-from qwc_services_core.tenant_handler import (
-    TenantHandler, TenantPrefixMiddleware, TenantSessionInterface)
+from qwc_services_core.tenant_handler import TenantHandler, TenantPrefixMiddleware, TenantSessionInterface
 from qwc_services_core.translator import Translator
+from werkzeug.datastructures import FileStorage
+from werkzeug.exceptions import BadRequest
+
 from data_service import DataService
 
 
@@ -22,7 +21,7 @@ class Request(RequestBase):
     """Custom Flask Request subclass"""
     def on_json_loading_failed(self, e):
         """Always return detailed JSON decode error, not only in debug mode"""
-        raise BadRequest('Failed to decode JSON object: {0}'.format(e))
+        raise BadRequest(f'Failed to decode JSON object: {e}')
 
 
 # Flask application
@@ -33,7 +32,7 @@ app.request_class = Request
 api = Api(app, version='1.0', title='Data service API',
           description="""API for QWC Data service.""",
           default_label='Data edit operations', doc='/api/'
-          )
+)
 # Omit X-Fields header in docs
 app.config['RESTPLUS_MASK_SWAGGER'] = False
 # disable verbose 404 error message
@@ -86,10 +85,7 @@ def verify_captcha(identity, captcha_response):
 
     if response.status_code != requests.codes.ok:
         # handle server error
-        app.logger.error(
-            "Could not verify captcha response token:\n\n%s" %
-            response.text
-        )
+        app.logger.error(f"Could not verify captcha response token:\n\n{response.text}")
         return False
 
     # check response
@@ -98,7 +94,7 @@ def verify_captcha(identity, captcha_response):
         app.logger.info("Captcha verified")
         return True
     else:
-        app.logger.warning("Captcha verification failed: %s" % res)
+        app.logger.warning(f"Captcha verification failed: {res}")
 
     return False
 
@@ -139,7 +135,8 @@ geojson_geometry = create_model(api, 'Geometry', [
 ])
 
 # Feature
-geojson_feature = lambda with_bbox_and_crs: create_model(api, 'Feature', [
+def geojson_feature(with_bbox_and_crs):
+    return create_model(api, 'Feature', [
     ['type', fields.String(required=True, description='Feature',
                            example='Feature')],
     ['id', FeatureId(required=True, description='Feature ID',
@@ -537,7 +534,7 @@ class CreateFeatureCollection(Resource):
         payload = api.payload
         if not isinstance(payload, dict):
             api.abort(400, translator.tr("error.json_is_not_an_object"))
-        if not payload.get('type') == 'FeatureCollection':
+        if payload.get('type') != 'FeatureCollection':
             api.abort(400, translator.tr("error.geojson_must_be_featurecollection"))
         data_service = data_service_handler()
         features = payload.get('features', [])
@@ -583,7 +580,7 @@ class CreateFeatureMultipart(Resource):
 
         try:
             feature = json.loads(args['feature'])
-        except:
+        except Exception:
             feature = None
         if not isinstance(feature, dict):
             api.abort(400, translator.tr("error.feature_is_not_an_object"))
@@ -601,12 +598,14 @@ class CreateFeatureMultipart(Resource):
             get_identity(), translator, dataset, feature, files
         )
         if 'error' not in result:
-            relationValues = data_service.write_relation_values(get_identity(), result['feature'], feature.get('relationValues', {}), request.files, translator, True)
+            relationValues = data_service.write_relation_values(
+                get_identity(), result['feature'], feature.get('relationValues', {}), request.files, translator, True
+            )
             # Requery feature because the write_relation_values may change the feature through DB triggers
             crs = feature['crs']['properties']['name'] if feature.get('crs') else None
             show_result = data_service.show(get_identity(), translator, dataset, result['feature']['id'], crs)
-            # NOTE: in a corner case of a dataset with a datasource filter expression, it may be that the new feature is excluded
-            # by the filter depending on the set attribute values. In this case, show will return an error (feature not found).
+            # NOTE: in a corner case of a dataset with a datasource filter expression, it may be that the new feature is
+            # excluded by the filter depending on the set attribute values, and "show" will return an error (feature not found).
             # In this case, just return the feature returned by create instead
             feature = show_result['feature'] if 'error' not in show_result else result['feature']
             feature['relationValues'] = relationValues
@@ -644,7 +643,7 @@ class EditFeatureMultipart(Resource):
 
         try:
             feature = json.loads(args['feature'])
-        except:
+        except Exception:
             feature = None
         if not isinstance(feature, dict):
             api.abort(400, translator.tr("error.feature_is_not_an_object"))
@@ -662,12 +661,14 @@ class EditFeatureMultipart(Resource):
             get_identity(), translator, dataset, id, feature, files
         )
         if 'error' not in result:
-            relationValues = data_service.write_relation_values(get_identity(), result['feature'], feature.get('relationValues', {}), request.files, translator)
+            relationValues = data_service.write_relation_values(
+                get_identity(), result['feature'], feature.get('relationValues', {}), request.files, translator
+            )
             # Requery feature because the write_relation_values may change the feature through DB triggers
             crs = feature['crs']['properties']['name'] if feature.get('crs') else None
             show_result = data_service.show(get_identity(), translator, dataset, id, crs)
-            # NOTE: in a corner case of a dataset with a datasource filter expression, it may be that the new feature is excluded
-            # by the filter depending on the set attribute values. In this case, show will return an error (feature not found).
+            # NOTE: in a corner case of a dataset with a datasource filter expression, it may be that the new feature is
+            # excluded by the filter depending on the set attribute values, and "show" will return an error (feature not found).
             # In this case, just return the feature returned by update instead
             feature = show_result['feature'] if 'error' not in show_result else result['feature']
             feature['relationValues'] = relationValues
@@ -706,7 +707,7 @@ class AttachmentDownloader(Resource):
 @api.route('/relations')
 class Relations(Resource):
     @api.doc('get_relations')
-    @api.param('tables', 'JSON-Serialized list of the form `[{"table": "<table>", "fk_field": "<fk_field_name>", "fk_val": "<fk_val>", "sort_col": "<sort_col>", "pk_field": "<pk_field>"}]`')
+    @api.param('tables', 'JSON-Serialized list of the form `[{"table": "<table>", "fk_field": "<fk_field_name>", "fk_val": "<fk_val>", "sort_col": "<sort_col>", "pk_field": "<pk_field>"}]`')  # noqa: E501
     @api.param('crs', 'The map CRS for the returned geometries')
     @api.expect(get_relations_parser)
     @api.marshal_with(relation_values, code=201)
@@ -719,7 +720,7 @@ class Relations(Resource):
         args = get_relations_parser.parse_args()
         try:
             relations = json.loads(args['tables'] or [])
-        except:
+        except Exception:
             api.abort(400, translator.tr("error.malformed_request"))
         crs = args['crs'] or None
         ret = {}
@@ -730,10 +731,10 @@ class Relations(Resource):
             fk_val = relation.get("fkVal")
             sort_col = relation.get("sortCol")
             if not table or not fk_field or not fk_val:
-                app.logger.debug("Skipping incomplete relation entry '%s'" % relation)
+                app.logger.debug(f"Skipping incomplete relation entry '{relation}'")
                 continue
             result = data_service.index(
-                get_identity(), translator, table, None, crs, '[["%s", "=", "%s"]]' % (fk_field, fk_val), None, None
+                get_identity(), translator, table, None, crs, f'[["{fk_field}", "=", "{fk_val}"]]', None, None
             )
             ret[table] = {
                 "fk": fk_field,
@@ -741,10 +742,8 @@ class Relations(Resource):
                 "features": result['feature_collection']['features'] if 'feature_collection' in result else [],
                 "error": result.get('error')
             }
-            if sort_col and sort_col in f["properties"]:
-                ret[table]['features'].sort(key=lambda f: f["properties"][sort_col])
-            else:
-                ret[table]['features'].sort(key=lambda f: f["id"])
+            if sort_col:
+                ret[table]['features'].sort(key=lambda f: f["properties"].get(sort_col, f["id"]))
         return ret
 
 
@@ -771,10 +770,10 @@ class DatasetRelations(Resource):
         for relation in relations.split(","):
             try:
                 table, fk_field_name, sortcol = (relation + ":").split(":")[0:3]
-            except:
+            except Exception:
                 continue
             result = data_service.index(
-                get_identity(), translator, table, None, crs, '[["%s", "=", "%s"]]' % (fk_field_name, id), None, None
+                get_identity(), translator, table, None, crs, f'[["{fk_field_name}", "=", "{id}"]]', None, None
             )
             ret[table] = {
                 "fk": fk_field_name,
@@ -800,7 +799,7 @@ class KeyValues(Resource):
     @optional_auth
     def get(self):
         """ Query key-value pairs of multiple datasets. """
-        app.logger.debug(f"Processing GET (get_keyvals) on /keyvals")
+        app.logger.debug("Processing GET (get_keyvals) on /keyvals")
         translator = Translator(app, request)
         args = keyvals_parser.parse_args()
         filterexpr = json.loads(args.get('filter') or "[]")
@@ -809,20 +808,22 @@ class KeyValues(Resource):
 
         keyvals = args['tables'] or ""
         ret = {}
-        natsort = lambda s: [int(t) if t.isdigit() else t.lower() for t in re.split(r'(\d+)', s)]
+        def natsort(s):
+            return [int(t) if t.isdigit() else t.lower() for t in re.split(r'(\d+)', s)]
         for (idx, keyval) in enumerate(keyvals.split(",")):
             try:
                 table, key_field_name, value_field_name = keyval.split(":")
-            except:
+            except Exception:
                 continue
             ret[table] = []
+            kv_filter = json.dumps(filterexpr[idx]) if filterexpr and len(filterexpr) > idx and filterexpr[idx] else None
             result = data_service.index(
-                get_identity(), translator, table, None, None, json.dumps(filterexpr[idx]) if filterexpr and len(filterexpr) > idx and filterexpr[idx] else None, None, [key_field_name, value_field_name]
+                get_identity(), translator, table, None, None, kv_filter, None, [key_field_name, value_field_name]
             )
             if 'feature_collection' in result:
                 entries = {}
                 for feature in result['feature_collection']['features']:
-                    # NOTE: if key_field_name is not in feature['properties'], it is the primary key which is stored as feature['id']
+                    # NOTE: if key_field_name is not in feature.properties, it is the primary key which is stored as feature.id
                     key = feature['properties'].get(key_field_name, feature['id'])
                     value = str(feature['properties'][value_field_name]).strip()
                     entries[key] = value
@@ -854,7 +855,8 @@ class DatasetKeyValues(Resource):
 
         data_service = data_service_handler()
 
-        natsort = lambda s: [int(t) if t.isdigit() else t.lower() for t in re.split(r'(\d+)', s)]
+        def natsort(s):
+            return [int(t) if t.isdigit() else t.lower() for t in re.split(r'(\d+)', s)]
 
         result = data_service.index(
             get_identity(), translator, dataset, None, None, filterexpr, None, [key_field_name, value_field_name]
@@ -869,7 +871,9 @@ class DatasetKeyValues(Resource):
             ret = [{"key": kv[0], "value": kv[1]} for kv in entries.items()]
             ret.sort(key=lambda record: natsort(record["value"]))
         elif 'error' in result:
-            app.logger.debug(f"Failed to query relation values for {dataset}:{key_field_name}:{value_field_name}: {result['error']}")
+            app.logger.debug(
+                f"Failed to query relation values for {dataset}:{key_field_name}:{value_field_name}: {result['error']}"
+            )
         return ret
 
 
