@@ -197,7 +197,7 @@ class DatasetFeaturesProvider():
 
         # Subset range
         start = offset or 0
-        end = (offset + limit) if limit else None
+        end = (start + limit) if limit else None
 
         features = []
         # connect to database (for read-only access)
