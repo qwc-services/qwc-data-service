@@ -566,6 +566,7 @@ class DataService:
             "geometry_column": geometry.get('geometry_column'),
             "geometry_type": geometry.get('geometry_type'),
             "srid": geometry.get('srid'),
+            "max_feature_limit": self.config.get('max_feature_limit', None),
             "allow_null_geometry": geometry.get('allow_null', self.config.get('geometry_default_allow_null', False)),
             "writable": writable,
             "creatable": creatable,

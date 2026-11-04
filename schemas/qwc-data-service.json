@@ -72,6 +72,10 @@
           "description": "Lookup of maximum attachment file size in bytes per dataset.",
           "type": "object"
         },
+        "max_feature_limit": {
+          "description": "The maximum number of features to return when querying a dataset, unless the `limit` query parameter sets a lower limit. Default is `null` (no limit)`.",
+          "type": "number"
+        },
         "recaptcha_site_secret_key": {
           "description": "Captcha site secret key. Set to enable ReCAPTCHA verification for public users",
           "type": "string"

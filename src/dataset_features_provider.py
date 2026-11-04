@@ -65,6 +65,7 @@ class DatasetFeaturesProvider:
         self.geometry_type = config['geometry_type']
         self.srid = config['srid']
         self.allow_null_geometry = config['allow_null_geometry']
+        self.max_feature_limit = config['max_feature_limit']
         # write permission
         self.writable = config['writable']
         # CRUD permissions
@@ -180,6 +181,9 @@ class DatasetFeaturesProvider:
 
         self.logger.debug(f"index query: {sql}")
         self.logger.debug(f"params: {params}")
+
+        if self.max_feature_limit is not None:
+            limit = min(self.max_feature_limit, limit) if limit is not None else self.max_feature_limit
 
         # Subset range
         start = offset or 0

@@ -46,6 +46,7 @@ class FeatureValidationTestCase(unittest.TestCase):
             'geometry_type': 'POINT',
             'srid': 3857,
             'allow_null_geometry': False,
+            'max_feature_limit': None,
             'attributes': [
                 'field'
             ],
