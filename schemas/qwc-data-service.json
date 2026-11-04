@@ -20,6 +20,14 @@
       "title": "Config options",
       "type": "object",
       "properties": {
+        "allowed_attachment_extensions": {
+          "description": "Comma separated list of allowed attachment file extensions, i.e. '.png,.jpg'. If empty, all extensions are allowed. Default: `` (empty).",
+          "type": "string"
+        },
+        "allowed_extensions_per_dataset": {
+          "description": "Loopup of allowed attachment file extensions per dataset, values as comma separated list, i.e. '.png,.jpg'",
+          "type": "object"
+        },
         "attachments_base_dir": {
           "description": "Base dir where attachments are stored",
           "type": "string"
@@ -32,13 +40,29 @@
           "description": "The path pattern to use when saving attachments to disk. You can use {random}, {filename}, {ext} and {<field>}, where field refers to the value of the field <field> of the committed feature. Default is '{random}/{filename}'",
           "type": "string"
         },
-        "allowed_attachment_extensions": {
-          "description": "Comma separated list of allowed attachment file extensions, i.e. '.png,.jpg'. If empty, all extensions are allowed. Default: `` (empty).",
+        "create_user_field": {
+          "description": "If specified, the username of the user who created a record with be logged to the <create_user_field> field of the record.",
           "type": "string"
         },
-        "allowed_extensions_per_dataset": {
-          "description": "Loopup of allowed attachment file extensions per dataset, values as comma separated list, i.e. '.png,.jpg'",
-          "type": "object"
+        "create_timestamp_field": {
+          "description": "If specified, the timestamp of the creation of the record will be logged to the <create_timestamp_field> field of the record.",
+          "type": "string"
+        },
+        "clamd_host": {
+          "description": "Hostname of ClamD server listening on TCP port 3310. If set, uploaded files are checked by ClamAV",
+          "type": "string"
+        },
+        "edit_timestamp_field": {
+          "description": "If specified, the timestamp of the last mutation to a record will be logged to the <edit_timestamp_field> field of the record.",
+          "type": "string"
+        },
+        "edit_user_field": {
+          "description": "If specified, the username of the last user who performed a mutation to a record with be logged to the <edit_user_field> field of the record.",
+          "type": "string"
+        },
+        "geometry_default_allow_null": {
+          "description": "Whether to allow null geometries by default",
+          "type": "boolean"
         },
         "max_attachment_file_size": {
           "description": "Maximum attachment file size in bytes. Default is `10485760` (10 MB).",
@@ -52,39 +76,16 @@
           "description": "Captcha site secret key. Set to enable ReCAPTCHA verification for public users",
           "type": "string"
         },
-        "clamd_host": {
-          "description": "Hostname of ClamD server listening on TCP port 3310. If set, uploaded files are checked by ClamAV",
-          "type": "string"
-        },
         "upload_user_field_suffix": {
           "description": "Field suffix where to log the username who last changed an upload field, i.e. <fieldname>__<suffix> for the field <fieldname>. If empty, username is not logged.",
-          "type": "string"
-        },
-        "create_timestamp_field": {
-          "description": "If specified, the timestamp of the creation of the record will be logged to the <create_timestamp_field> field of the record.",
-          "type": "string"
-        },
-        "edit_timestamp_field": {
-          "description": "If specified, the timestamp of the last mutation to a record will be logged to the <edit_timestamp_field> field of the record.",
           "type": "string"
         },
         "write_utc_timestamps": {
           "description": "Whether to write the create/edit timestamps in UTC, as opposed to local time. Default: `false`",
           "type": "boolean"
-        },
-        "create_user_field": {
-          "description": "If specified, the username of the user who created a record with be logged to the <create_user_field> field of the record.",
-          "type": "string"
-        },
-        "edit_user_field": {
-          "description": "If specified, the username of the last user who performed a mutation to a record with be logged to the <edit_user_field> field of the record.",
-          "type": "string"
-        },
-        "geometry_default_allow_null": {
-          "description": "Whether to allow null geometries by default",
-          "type": "boolean"
         }
-      }
+      },
+      "additionalProperties": false
     },
     "resources": {
       "title": "Resources",
