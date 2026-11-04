@@ -1,0 +1,73 @@
+name: Scheduled publishing of qwc service docker image
+
+on:
+  schedule:
+    - cron: "23 23 * * THU" # every Thursday on 23:23 UTC
+
+  workflow_dispatch:
+
+jobs:
+
+  test:
+    uses: ./.github/workflows/test.yml
+
+  branches:
+    runs-on: ubuntu-latest
+    outputs:
+      branches: ${{ steps.branches.outputs.branches }}
+
+    steps:
+      - uses: actions/checkout@master
+        with:
+          fetch-depth: 0
+
+      - id: branches
+        run: |
+          curr_year=$(date +%Y)
+          prev_year=$((curr_year - 1))
+          branches=$(\
+            git for-each-ref --format='%(refname:lstrip=3)' refs/remotes/origin | \
+            grep -Eo "^(main|master|${curr_year}-lts|${prev_year}-lts)$" | \
+            jq -R -s -c 'split("\n")[:-1]'\
+          )
+          echo "Found branches $branches"
+          echo "branches=$branches" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: [test, branches]
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        branch: ${{ fromJson(needs.branches.outputs.branches) }}
+
+    steps:
+      - uses: actions/checkout@master
+        with:
+          ref: ${{ matrix.branch }}
+
+      - name: Get version tags
+        id: get_tag
+        run: |
+          branch_suffix=""
+          if [[ "${{ matrix.branch }}" != "main" ]] && [[ "${{ matrix.branch }}" != "master" ]]; then
+            branch_suffix="-${{ matrix.branch }}"
+          fi
+          echo "tag=latest${branch_suffix}" >>$GITHUB_OUTPUT
+
+      - name: Print tags
+        run: |
+          echo "Commit: $(git rev-parse HEAD)"
+          echo "Tag: ${{ steps.get_tag.outputs.tag }}"
+
+      - name: Build and publish docker image
+        uses: elgohr/Publish-Docker-Github-Action@v5
+        env:
+          BASE_TAG: ${{ steps.get_tag.outputs.tag }}
+          UPDATE_DEPS: ${{ startsWith(steps.get_tag.outputs.tag, 'latest') }}
+        with:
+          name: sourcepole/${{ github.event.repository.name }}
+          username: ${{ secrets.DOCKER_HUB_USER }}
+          password: ${{ secrets.DOCKER_HUB_PASSWORD }}
+          tags: "${{ steps.get_tag.outputs.tag }}"
+          buildargs: BASE_TAG,UPDATE_DEPS
